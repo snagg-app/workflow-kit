@@ -25,8 +25,9 @@ whose `git reset --hard` aborted with `could not reset submodule index` and left
   human merged. One exception, decided by the maintainer
   ([#244](https://github.com/vaultdex/workflow-kit/issues/244)): the Renovate bot merges
   its own dependency PRs of this kit once their CI is green. It binds the bot, never an agent.
-- Agents document the acceptance of a spec (an issue with the label `spec`, `"specLabel"` in the project file) in a comment on the spec;
-  once all its sub-issues are closed they set it to Human review; after a human review with open points it goes back to Backlog.
+- Agents leave specs (label `spec`, `"specLabel"` in the project file) untouched: only a human-invoked `spec-review`
+  or a human changes their status, in any direction. Agents never invoke the skill or reproduce its review as a status-changing audit.
+  Specs stay in Backlog; that skill alone hands one to Human review after a complete review that created or linked no sub-issue.
   Closing it and the status Done stay with a human; `board.mjs` refuses Done and never closes a spec.
 - Never force-push, rewrite shared history, reset, stash or discard work you don't
   own, or bypass branch protection, required checks or spending limits. One exception:

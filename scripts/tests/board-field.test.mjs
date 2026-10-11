@@ -126,3 +126,87 @@ test('a field write succeeds when the Project already added the issue itself, an
 test('field refuses an unknown flag before any write', t => {
   fixture(t).refusesUnknownFlag('field', '1', 'Size', 'M');
 });
+
+test('spec status changes require the human-invoked skill and refuse open or unreadable children before any write', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const file = name => join(checkout, name);
+  writeIssue({ ...issue('Backlog'), labels: { totalCount: 1, nodes: [{ name: 'Spec' }] } });
+  for (const status of ['Backlog', 'Ready', 'In progress', 'Automated review', 'Human review', 'Done']) {
+    const result = run('field', '1', 'Size', 'XS', 'Status', status);
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.match(result.stdout, /BLOCKED: #1 is a spec/);
+    assert.equal(existsSync(file('mutations')), false, status + ' writes nothing');
+  }
+  writeFileSync(file('issues-sub_issues.json'), JSON.stringify([{ number: 2, state: 'closed' }, { number: 3, state: 'open' }]));
+  assert.match(run('field', '1', 'Status', 'Human review', '--spec-review').stdout, /open sub-issues #3/);
+  assert.equal(existsSync(file('mutations')), false);
+  for (const data of [{ state: 'open' }, { number: 2, state: 'unknown' }]) {
+    writeFileSync(file('issues-sub_issues.json'), JSON.stringify([data]));
+    assert.match(run('field', '1', '--spec-review', 'Status', 'Human review').stdout, /sub-issues are unreadable/);
+    assert.equal(existsSync(file('mutations')), false);
+  }
+  writeFileSync(file('fail-rest'), '');
+  assert.equal(run('field', '1', 'Status', 'Human review', '--spec-review').status, 2, 'REST failure is no acceptance');
+  assert.equal(existsSync(file('mutations')), false);
+  rmSync(file('fail-rest'));
+  writeFileSync(file('issues-sub_issues.json'), JSON.stringify([{ number: 2, state: 'closed' }]));
+  assert.equal(run('field', '1', 'Status', 'Done', '--spec-review').status, 2, 'Done stays human-only');
+  assert.equal(existsSync(file('mutations')), false);
+  assert.equal(run('field', '1', 'Status', 'Human review', '--spec-review').status, 0);
+  assert.equal(readFileSync(file('stored'), 'utf8'), 'Human review');
+  assert.equal(run('field', '1', 'Status', 'Backlog', '--spec-review').status, 0, 'only the invoked skill may return a spec to Backlog');
+  writeIssue(issue());
+  assert.equal(run('field', '1', 'Status', 'Human review').status, 0, 'ordinary tasks are unchanged');
+});
+
+test('spec handoff paginates children and re-reads them immediately before writing', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const file = name => join(checkout, name);
+  writeIssue({ ...issue('Backlog'), labels: { nodes: [{ name: 'spec' }] } });
+  const closed = Array.from({ length: 100 }, (_, index) => ({ number: index + 2, state: 'closed' }));
+  writeFileSync(file('issues-sub_issues.json'), JSON.stringify([...closed, { number: 102, state: 'open' }]));
+  assert.match(run('field', '1', 'Status', 'Human review', '--spec-review').stdout, /#102/);
+  assert.equal(existsSync(file('mutations')), false, 'an open child on page 2 blocks all writes');
+  writeFileSync(file('sub-issues-reads.json'), JSON.stringify([[{ number: 2, state: 'closed' }], [{ number: 3, state: 'open' }]]));
+  assert.match(run('field', '1', 'Status', 'Human review', 'Size', 'XS', '--spec-review').stdout, /#3/);
+  assert.equal(existsSync(file('mutations')), false, 'a child linked after preflight blocks the status mutation');
+});
+
+test('spec classification reads labels beyond the GraphQL page and fails closed on incomplete REST labels', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const file = name => join(checkout, name);
+  const first = Array.from({ length: 20 }, (_, index) => ({ name: 'label-' + index }));
+  const labelled = () => writeIssue({ ...issue(), labels: { totalCount: 21, nodes: first } });
+  writeFileSync(file('issues-labels.json'), JSON.stringify([...first, { name: 'spec' }]));
+  labelled();
+  assert.match(run('field', '1', 'Status', 'Human review').stdout, /is a spec/);
+  assert.equal(existsSync(file('mutations')), false);
+  writeFileSync(file('issues-labels.json'), JSON.stringify(first));
+  labelled();
+  assert.match(run('field', '1', 'Status', 'Human review').stdout, /Not every issue label/);
+  assert.equal(existsSync(file('mutations')), false);
+  writeFileSync(file('issues-labels.json'), JSON.stringify([...first, { name: 'ordinary' }]));
+  labelled();
+  assert.equal(run('field', '1', 'Status', 'Human review').status, 0, 'complete ordinary labels preserve task behavior');
+});
+
+test('spec handoff checks children after adding the Project item and again on a mutation retry', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const file = name => join(checkout, name);
+  const spec = { ...issue('Backlog'), labels: { nodes: [{ name: 'spec' }] } };
+  writeIssue({ ...spec, projectItems: { nodes: [] } });
+  writeFileSync(file('sub-issues-reads.json'), JSON.stringify([[{ number: 2, state: 'closed' }], [{ number: 3, state: 'open' }]]));
+  const added = run('field', '1', 'Status', 'Human review', '--spec-review');
+  assert.match(added.stdout, /#3/);
+  assert.match(readFileSync(file('mutations'), 'utf8'), /addProjectV2ItemById/, 'the item was created between child reads');
+  assert.doesNotMatch(readFileSync(file('mutations'), 'utf8'), /updateProjectV2ItemFieldValue/, 'no stale status write after Project item creation');
+  rmSync(file('mutations'));
+  rmSync(file('sub-issues-reads.json'));
+  writeIssue(spec);
+  writeFileSync(file('issues-sub_issues.json'), JSON.stringify([{ number: 2, state: 'closed' }]));
+  writeFileSync(file('status-quota-retry'), '');
+  const retried = run('field', '1', 'Status', 'Human review', '--spec-review');
+  assert.match(retried.stdout, /#3/);
+  assert.equal(existsSync(file('status-quota-retry')), false, 'the first mutation attempt met a rate refusal');
+  assert.equal(existsSync(file('mutations')), false, 'the retry re-reads the newly linked open child before mutating');
+});

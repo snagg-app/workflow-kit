@@ -5,6 +5,16 @@ import { dirname, join } from 'node:path';
 import { fixture, handoffFixture, handoffPr, issue, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
 
+test('done refuses a spec before acceptance comments or body changes', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  writeIssue({ ...issue('Backlog'), labels: { nodes: [{ name: 'spec' }] } });
+  writeFileSync(join(checkout, 'result.md'), 'Spec accepted\n\n### Retro\n\n- Keine Funde');
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /done is refused/);
+  for (const name of ['mutations', 'comment-writes', 'body-writes']) assert.equal(existsSync(join(checkout, name)), false, name);
+});
+
 // A checkout with one commit, which the Draft PR 7 shows as its head, and the files the fake gh answers from.
 function delivery(t, fixtureOf) {
   const { checkout, run, writeIssue } = fixtureOf(t);

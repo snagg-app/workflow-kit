@@ -243,11 +243,12 @@ and then work in that directory, their relative paths (changed files given to `a
   the `board.mjs field ISSUE NAME VALUE …` command that finishes it; everything else is complete. The output is one
   `NEW …` line per issue. A failure after the first issue exists names every issue that exists: finish those by hand and
   create only the missing ones. The field definitions are also read once per run by a single `new`, which therefore needs 4 requests (before: 8 to 9).
-- `field ISSUE NAME VALUE [NAME VALUE ...]`: any single-select fields (Status and Priority too), all read back together after writing.
+- `field ISSUE NAME VALUE [NAME VALUE ...] [--spec-review]`: any single-select fields (Status and Priority too), all read back together after writing.
   Every pair is checked against the field definitions before the first write: one invalid pair writes
   nothing and names the valid options. It reports failures as one `ERROR - reason` line (exit 2, nothing else printed), not a stack trace.
   Issue read errors name `OWNER/REPO#N`. `Status "In progress"` needs a startable issue assigned to you, `Status Ready` no decision wait, `Done` is
-  refused for a spec. `Status "Automated review" PR [OTHER_ISSUE...]` verifies the backlinks as `done` does. `start` and `done` set the status themselves;
+  refused for a spec. Every spec status write needs `--spec-review`, used only by a human-invoked `spec-review`; Human review reads every sub-issue over REST immediately before writing and refuses open or unreadable children.
+  `Status "Automated review" PR [OTHER_ISSUE...]` verifies the backlinks as `done` does. `start` and `done` leave specs untouched and set task status themselves;
   `field` is metadata maintenance.
 - `body ISSUE FILE BASE_FILE`: replace an issue body with `FILE` only if the current body
   still equals `BASE_FILE` (the body your change is based on; line endings and trailing

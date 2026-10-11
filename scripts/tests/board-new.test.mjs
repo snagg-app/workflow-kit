@@ -3,6 +3,26 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, issue, test } from './board-fixture.mjs';
 
+test('new permits initial Backlog for a spec but refuses any other initial status before creation', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const write = (file, data) => writeFileSync(join(checkout, file), typeof data === 'string' ? data : JSON.stringify(data));
+  write('body.md', 'Spec scope');
+  write('test-milestones.json', [{ number: 4, title: '0.1.1' }]);
+  write('test-labels.json', [{ name: 'spec' }]);
+  write('create-response.json', { number: 1, node_id: 'N1', html_url: 'https://github.com/test/example/issues/1' });
+  write('backlink-1.json', { number: 1, milestone: { title: '0.1.1' }, labels: [{ name: 'spec' }] });
+  writeIssue(issue('Backlog'));
+  const args = ['new', '--title', 'Spec', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'Spec', '--priority', 'low'];
+  for (const status of ['Ready', 'In progress', 'Automated review', 'Human review', 'Done']) {
+    const result = run(...args, '--status', status);
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.match(result.stdout, /new spec starts in Backlog/);
+    assert.equal(existsSync(join(checkout, 'created.json')), false);
+    assert.equal(existsSync(join(checkout, 'mutations')), false);
+  }
+  assert.equal(run(...args).status, 0, 'creating a spec in Backlog stays supported');
+});
+
 
 test('new checks every required value before creating, reads all values back and starts the issue on request', t => {
   const { checkout, run, writeIssue } = fixture(t);

@@ -9,6 +9,7 @@ argument-hint: "<spec issue number, URL or title words>"
 
 Target spec: `$ARGUMENTS`. A number or URL names it directly; title words go through
 `gh issue list --label spec --state all --search "<words>"`. Empty or several matches: ask once which spec.
+Only a human starts this skill. Keep a list of every sub-issue created or newly linked during this invocation (steps 5 and 8), even if it closes before the run ends.
 
 Every acceptance point and every planned decision of the spec ends with one **verdict**:
 
@@ -64,8 +65,10 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
 8. **Agreed work to tickets.** Right after step 7, each answer that asks for follow-up work gets its ticket the way
    step 5 does; the body states the decision with date and source, and "after the release" goes into its target
    release. Adjust the spec's text and acceptance point to the decisions (`board.mjs body`) and add a short addendum
-   comment (Nachtrag) on the spec: decisions, outcomes, new sub-issues. Done when every agreed piece of work has an
-   open sub-issue, read back from the sub-issues API. When all sub-issues are closed and no gap is left, continue with
-   the project's spec acceptance handoff, which proves the acceptance in a comment on the spec, and set the spec to
-   Human review (`board.mjs field SPEC Status "Human review"`). It stays open: only a human closes it or sets Done
-   (`AGENT_RULES.md`, Hard rules).
+   comment (Nachtrag) on the spec: decisions, outcomes, every sub-issue created or newly linked in this invocation.
+   Done when every agreed piece of work has an open sub-issue, read back from the sub-issues API.
+   Human review requires all sub-issues closed, no gap left, and the invocation's created-or-linked list empty.
+   Then prove acceptance in the project's spec handoff comment and run `board.mjs field SPEC Status "Human review" --spec-review`;
+   the command re-reads the children immediately before writing. Otherwise keep or return the spec to Backlog
+   (`board.mjs field SPEC Status Backlog --spec-review`) and name the new or linked sub-issues in the Nachtrag.
+   It stays open: only a human closes it or sets Done (`AGENT_RULES.md`, Hard rules).
