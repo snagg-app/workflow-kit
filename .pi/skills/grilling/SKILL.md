@@ -12,6 +12,20 @@ Every question goes through the host's **question tool** (Claude Code: `AskUserQ
 Format a round like so:
 
 ```
+❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+
+➡️ <your recommended answer>
+
+---
+
+❓ **Q2** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+
+➡️ <your recommended answer>
+```
+
+The question tool call of a round:
+
+```
 AskUserQuestion questions: [
   { header: "Q1 <short title>", question: "<question body, plain language>?", multiSelect: false,
     options: [ { label: "<your recommended answer> (Recommended)", description: "<why>" },
