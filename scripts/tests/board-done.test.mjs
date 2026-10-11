@@ -238,7 +238,7 @@ test('done refuses stale zero-file metadata when immutable Git contains a pushed
   writeFileSync(file('pr-rest-reads.json'), JSON.stringify([{ changedFiles: 0 }, { changedFiles: 1 }]));
   const result = run('done', '1', 'result.md');
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /no-change evidence/);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
   assert.equal(json('pr.json').state, 'OPEN');
   assert.deepEqual(json('issues-comments.json'), []);
   assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
@@ -257,7 +257,26 @@ for (const [name, first, second] of [
   writeFileSync(file('pr-rest-reads.json'), JSON.stringify([{ changedFiles: 0, ...first }, second]));
   const result = run('done', '1', 'result.md');
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /no-change evidence/);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
+  assert.equal(json('pr.json').state, 'OPEN');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  assert.equal(text('stored'), 'In progress');
+});
+
+for (const action of ['push', 'delete']) test(`done refuses a live remote ${action} hidden by stale empty PR metadata`, t => {
+  const { run, file, text, json, git } = delivery(t, handoffFixture);
+  git('checkout', '-q', '-b', 'other');
+  writeFileSync(file('fix.txt'), 'remote fix');
+  git('add', 'fix.txt');
+  git('commit', '-q', '-m', 'remote fix');
+  git('push', '-q', 'origin', 'other:work');
+  if (action === 'delete') git('push', '-q', 'origin', '--delete', 'work');
+  git('checkout', '-q', 'work');
+  showPr(file, json, { changedFiles: 0 }); // stale local checkout and both PR reads still point at the empty head
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
   assert.equal(json('pr.json').state, 'OPEN');
   assert.deepEqual(json('issues-comments.json'), []);
   assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));

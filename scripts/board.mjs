@@ -2768,6 +2768,7 @@ async function done() {
       assert.equal(again.base.ref, pull.base.ref, 'PR base branch changed during the comparison');
       assert.equal(again.changed_files, 0, 'PR file count contradicts the comparison');
       assert.equal(again.state, 'open', 'PR is no longer open');
+      assert.equal(git('ls-remote', '--exit-code', 'origin', `refs/heads/${pull.head.ref}`), `${head}\trefs/heads/${pull.head.ref}`, 'live remote branch differs from the expected pushed head');
     } catch (error) { return fail(`cannot confirm no-change evidence for PR #${prNumber}: ${String(error.stderr || error.message).trim()}; run done again`); }
     restPost(`repos/${project.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## Übergabe\n\n${lines(file)}\n`);
     if (pull) execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
