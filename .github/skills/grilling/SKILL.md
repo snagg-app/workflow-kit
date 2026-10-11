@@ -7,6 +7,8 @@ Interview the user relentlessly until you reach a shared understanding. Map this
 
 Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Ask the whole frontier in one round: number each question and give your recommended answer. Then wait for the user's answers before the next round.
 
+Every question goes through the host's **question tool** (Claude Code: `AskUserQuestion`): at most 4 questions per call, a bigger round takes several calls in a row. The first option of each question is your recommended answer, its label marked "(Recommended)" in the user's language. A short ❓/➡️ overview in text may come first; the user decides only in the tool. A host without a question tool gets the ❓/➡️ text as the round itself.
+
 Format a round like so:
 
 ```
@@ -21,10 +23,19 @@ Format a round like so:
 ➡️ <your recommended answer>
 ```
 
-Word each question so "yes" accepts your recommended answer.
+The question tool call of a round:
+
+```
+AskUserQuestion questions: [
+  { header: "Q1 <short title>", question: "<question body, plain language>?", multiSelect: false,
+    options: [ { label: "<your recommended answer> (Recommended)", description: "<why>" },
+               { label: "<alternative>", description: "<what it costs>" } ] },
+  { header: "Q2 <short title>", ... }
+]
+```
 
 Each round the user answers reshapes the tree: settled decisions push the frontier outward and unblock questions that depended on them. Recompute the frontier and ask the next round. A question whose answer depends on another question still open in this round belongs to a _later_ round, not this one.
 
 Finding _facts_ is your job, never the user's. When a frontier question needs a fact from the environment (filesystem, tools, etc.), dispatch a sub-agent to find it; don't ask the user for anything you could look up yourself. Don't block on it: a running exploration is an unsettled prerequisite, so only the questions downstream of it wait for the sub-agent to report; ask the rest of the frontier now. The _decisions_ are the user's: put each to them and wait.
 
-The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms you have reached a shared understanding.
+The session is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not act on it until the user confirms in the question tool that you have reached a shared understanding.

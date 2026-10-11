@@ -23,11 +23,16 @@ const implementTests = [', and the full test suite once at the end.', ', and lea
 const specRule = ['All work should be done in subagents. Protect your context window.\n',
   'All work should be done in subagents. Protect your context window.\n\nNo agent closes a spec or sets it to Done, a subagent and you included: only a human accepts a spec (`AGENT_RULES.md`, Hard rules).\n'];
 const specPr = [' marked as closing the spec and tickets.', ' marked as closing the tickets, never the spec (only a human closes a spec: `AGENT_RULES.md`, Hard rules).'];
+// grilling asks every round and the final confirmation through the host's question tool (#583).
+const grillingTool = [["Then wait for the user's answers before the next round.\n","Then wait for the user's answers before the next round.\n\nEvery question goes through the host's **question tool** (Claude Code: `AskUserQuestion`): at most 4 questions per call, a bigger round takes several calls in a row. The first option of each question is your recommended answer, its label marked \"(Recommended)\" in the user's language. A short ❓/➡️ overview in text may come first; the user decides only in the tool. A host without a question tool gets the ❓/➡️ text as the round itself.\n"],
+  ["Do not act on it until the user confirms you have reached a shared understanding.","Do not act on it until the user confirms in the question tool that you have reached a shared understanding."],
+  ["Word each question so \"yes\" accepts your recommended answer.","The question tool call of a round:\n\n```\nAskUserQuestion questions: [\n  { header: \"Q1 <short title>\", question: \"<question body, plain language>?\", multiSelect: false,\n    options: [ { label: \"<your recommended answer> (Recommended)\", description: \"<why>\" },\n               { label: \"<alternative>\", description: \"<what it costs>\" } ] },\n  { header: \"Q2 <short title>\", ... }\n]\n```"]];
 const adapt = (skill, path, content) => path !== 'SKILL.md' ? content
   : skill === 'retro' ? content.replace(/^disable-model-invocation: true\n/m, '')
     : skill === 'implement' ? content.replace(implementTests[0], implementTests[1])
       : skill === 'implement-spec' ? content.replace(specPr[0], specPr[1])
-        : skill === 'chief-of-staff' ? content.replace(specRule[0], specRule[1]) : content;
+        : skill === 'chief-of-staff' ? content.replace(specRule[0], specRule[1])
+          : skill === 'grilling' ? grillingTool.reduce((text, [from, to]) => text.replace(from, to), content) : content;
 
 function cleanSource() {
   assert.equal(git('-C', source, 'status', '--porcelain', '--untracked-files=all').trim(), '',
