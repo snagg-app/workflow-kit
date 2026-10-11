@@ -21,8 +21,9 @@ retro before handoff and the Skill tool refuses a flagged skill. The generated `
 copy leaves the full test suite to CI instead of running it once at the end
 ([Driver-Regeln](parallel-drivers.md#driver-regeln), Regel 5). The generated `implement-spec`
 copy lets its PR close the tickets, never the spec, and `chief-of-staff` names the rule that only a human
-accepts a spec ([AGENT_RULES.md](../AGENT_RULES.md#hard-rules)). No other file or skill
-is changed; the test pins all four. A Renovate update keeps the deviations.
+accepts a spec ([AGENT_RULES.md](../AGENT_RULES.md#hard-rules)). The generated `grilling` copy asks every
+round and the final confirmation through the host's question tool. No other file or skill
+is changed; the test pins all five. A Renovate update keeps the deviations.
 
 Follow [generated files](../README.md#generated-files-and-ownership) for updates,
 discovery paths and preservation. Each provider's `MATT-POCOCK-SOURCES.json`
