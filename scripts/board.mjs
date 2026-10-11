@@ -2788,12 +2788,12 @@ async function done() {
   }
   ready(prNumber, sha);
   if (process.exitCode) return;
-  if (!partial && !prepare) writeBody(before => tickAcceptance(before));
   value = String(prNumber);
   delivered = [value];
   const status = projectItem(issue)?.status?.name;
   if (partial) postBacklink(number, pull.html_url);
-  else if (!['Automated review', 'Human review'].includes(status)) set('Status', 'Automated review');
+  // A head prepared after an earlier handoff has no handoff yet: it leaves Human review.
+  else if (status !== 'Automated review' && (prepare || status !== 'Human review')) set('Status', 'Automated review');
   const result = await poll(() => reviewsForHead(prNumber));
   if (!result) return;
   if (result.failed) {
@@ -2802,6 +2802,8 @@ async function done() {
   }
   const head = result.pr.headRefOid;
   if (prepare) return console.log(`PREPARED #${number} head ${head.slice(0, 7)}: tests, ready and automated review are done; no handoff comment, boxes stay open, no Human review. Run the final proof, then board.mjs done ${number} FILE`);
+  // Boxes are ticked only once the checks of the head are green.
+  if (!partial) writeBody(before => tickAcceptance(before));
   if (file && !findHandoffComment(result.comments, issue.viewer, head)) {
     restPost(`repos/${project.repository}/issues/${prNumber}/comments`, ['-F', 'body=@-'], `## Übergabe\n\nHead: ${head.slice(0, 7)}\n\n${lines(file)}\n`);
   }

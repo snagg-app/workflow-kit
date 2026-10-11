@@ -101,6 +101,7 @@ test('done without a handoff file prepares: tests, ready, Automated review, then
   showPr(file, json, { headRefOid: later });
   assert.match(run('done', '1').stdout, new RegExp(`^PREPARED #1 head ${later.slice(0, 7)}`, 'm'));
   assert.notEqual(text('affected-tests-calls'), tests, 'the new head was tested');
+  assert.equal(text('stored'), 'Automated review', 'the new head leaves Human review');
 });
 
 test('done without a handoff file keeps the waiting and failure codes of the review', t => {
