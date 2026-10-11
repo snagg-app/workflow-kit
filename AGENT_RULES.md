@@ -119,6 +119,9 @@ work between them:
    posts the handoff comment from FILE ([Handoff comment](README.md#handoff-comment)) and checks the
    gate (threads, bot replies, Sonar issues) before it sets Human review. A red result names its
    blocker: fix it, push, run `done` again; exit 4 (`still waiting`) means run `done` again.
+   A project whose full proof must run after the automated review and before the handoff first runs
+   `done ISSUE` without FILE: it does the same up to and including the review, then ends with `PREPARED`
+   (exit 0) without handoff comment, ticking or Human review. Run the proof, then `done ISSUE FILE` for the same head.
 
 A documented blocker exception keeps the current status and failed verdict: claim by hand (assign,
 Draft PR with the claim line), skip the guarded transition and edit only its permitted scope. If prerequisites

@@ -2736,6 +2736,7 @@ function start() {
  * foreground, once per head), the PR ready for exactly the pushed head, the acceptance boxes ticked, Automated review, the wait for CI and reviewers (`still waiting: call done again`, exit 4, after --max-minutes), the handoff comment from HANDOFF_FILE
  * (result sentence and the `### Retro` list; heading and head line are added here) and the handoff gate with its Sonar issue count. Every call
  * does what is still open, so a repeated call after a push or a wait is the same call. PR: the one open PR that closes the issue.
+ * Without HANDOFF_FILE (and without a comment for the head) it stops after the automated review with `PREPARED` (exit 0): the final proof runs, then `done ISSUE FILE`.
  * `--refs`: a PR that only names the issue (a part for another base): its gate runs, the issue status stays.
  */
 async function done() {
@@ -2777,10 +2778,8 @@ async function done() {
     try { git('push', 'origin', 'HEAD'); } catch (error) { return fail(`cannot push HEAD after merging ${base}: ${failure(error)}`); }
   }
   const sha = localHead();
-  // The handoff file is only needed while no comment for this head exists (a repeated call after exit 4 has one): refuse before the tests, not after.
-  if (!file && !findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha)) {
-    return fail(`no handoff comment for head ${sha.slice(0, 7)} and no HANDOFF_FILE: write it (<Ergebnis in einem Satz>, then "### Retro"; README: Handoff comment) and run board.mjs done ${number} HANDOFF_FILE`);
-  }
+  // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.
+  const prepare = !file && !findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
   if (!isTested()) {
     try {
       execFileSync(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
@@ -2789,7 +2788,7 @@ async function done() {
   }
   ready(prNumber, sha);
   if (process.exitCode) return;
-  if (!partial) writeBody(before => tickAcceptance(before));
+  if (!partial && !prepare) writeBody(before => tickAcceptance(before));
   value = String(prNumber);
   delivered = [value];
   const status = projectItem(issue)?.status?.name;
@@ -2802,6 +2801,7 @@ async function done() {
     return console.log([outcome(result)[0], ...result.lines, quotaLine()].filter(Boolean).join('\n'));
   }
   const head = result.pr.headRefOid;
+  if (prepare) return console.log(`PREPARED #${number} head ${head.slice(0, 7)}: tests, ready and automated review are done; no handoff comment, boxes stay open, no Human review. Run the final proof, then board.mjs done ${number} FILE`);
   if (file && !findHandoffComment(result.comments, issue.viewer, head)) {
     restPost(`repos/${project.repository}/issues/${prNumber}/comments`, ['-F', 'body=@-'], `## Übergabe\n\nHead: ${head.slice(0, 7)}\n\n${lines(file)}\n`);
   }
@@ -2811,7 +2811,7 @@ async function done() {
 // check, reviews, handoff, ready and link are the steps `start` and `done` take; they stay callable for those two and for the tests, but nobody runs them by hand, so the usage leaves them out.
 const commands = { start, done, next, sweep, check: () => check(readIssue(true), { session: sessionOption() }), block, sub, field: setField, new: create,
   reviews: reviewsOnce, wait, 'quota-wait': quotaWait, handoff, merge, 'stack-sync': stackSync, ready, link, body, 'body-replace': bodyReplace };
-const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N]'
+const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N] (without HANDOFF_FILE: prepare only, stops after the automated review)'
   + ' | next [--session ID] | sweep | field ISSUE NAME VALUE [NAME VALUE ...]'
   + ' | new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] | new --from FILE'
   + ' | block ISSUE BLOCKER | sub PARENT CHILD | wait PR [--stall MINUTES] [--grace MINUTES] [--head SHA] [--max-minutes N] [--interval SECONDS] | wait PR --merged [--max-minutes N]'

@@ -75,12 +75,46 @@ test('done takes the pushed work to Human review: tests, ready, ticked boxes, Au
   assert.equal(run('done', '1').status, 0);
 });
 
-test('done without a handoff file and without a comment for the head stops before the tests', t => {
-  const { run, text } = delivery(t, handoffFixture);
+test('done without a handoff file prepares: tests, ready, Automated review, then PREPARED without comment, ticking or Human review; the final done takes the same head', t => {
+  const { run, head, text, json, git, file } = delivery(t, handoffFixture);
   const result = run('done', '1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, new RegExp(`^PREPARED #1 head ${head.slice(0, 7)}`, 'm'));
+  assert.match(text('affected-tests-calls'), /--run/, 'the targeted tests ran');
+  assert.equal(json('pr.json').isDraft, false, 'the PR is ready');
+  assert.equal(text('stored'), 'Automated review');
+  assert.deepEqual(json('issues-comments.json'), [], 'no handoff comment');
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'), 'the boxes stay open');
+
+  // The final call hands off the same head without repeating the tests.
+  const tests = text('affected-tests-calls');
+  assert.equal(run('done', '1', 'result.md').status, 0);
+  assert.equal(text('affected-tests-calls'), tests);
+  assert.equal(text('stored'), 'Human review');
+  assert.equal(json('backlink-1.json').body, '- [x] first\n- [ ] moved on, see #12\n- [x] done');
+  assert.match(json('issues-comments.json').at(-1).body, new RegExp(`^## Übergabe\\n\\nHead: ${head.slice(0, 7)}`));
+
+  // A head pushed after the preparation is tested again.
+  git('commit', '--allow-empty', '-q', '-m', 'later');
+  git('push', '-q', 'origin', 'work');
+  const later = git('rev-parse', 'HEAD');
+  showPr(file, json, { headRefOid: later });
+  assert.match(run('done', '1').stdout, new RegExp(`^PREPARED #1 head ${later.slice(0, 7)}`, 'm'));
+  assert.notEqual(text('affected-tests-calls'), tests, 'the new head was tested');
+});
+
+test('done without a handoff file keeps the waiting and failure codes of the review', t => {
+  const { run, file, json, text } = delivery(t, handoffFixture);
+  const pr = json('pr.json'), checks = conclusion => { pr.commits.nodes[0].commit.statusCheckRollup.contexts.nodes = [{ __typename: 'CheckRun', name: 'CI', status: conclusion ? 'COMPLETED' : 'IN_PROGRESS', conclusion }]; writeFileSync(file('pr.json'), JSON.stringify(pr)); };
+  checks(null);
+  let result = run('done', '1', '--max-minutes', '0.01');
+  assert.equal(result.status, 4, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stdout, /PREPARED/);
+  checks('FAILURE');
+  result = run('done', '1');
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /^blocker: no handoff comment for head /m);
-  assert.equal(text('affected-tests-calls'), '', 'the tests did not run');
+  assert.doesNotMatch(result.stdout, /PREPARED/);
+  assert.equal(text('stored'), 'Automated review');
 });
 
 test('done merges a base the branch is behind, pushes it and tests the merged head; a second call adds no merge commit', t => {
