@@ -43,7 +43,8 @@ function git(...args) {
   const tool = externalTool('git', process.cwd(), projectDirectory);
   for (let attempt = 1; ; attempt++) {
     try {
-      return execFileSync(tool.file, ['-C', projectDirectory, ...args], { encoding: 'utf8', env: tool.env, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+      const output = execFileSync(tool.file, ['-C', projectDirectory, ...args], { encoding: 'utf8', env: tool.env, stdio: ['ignore', 'pipe', 'pipe'] });
+      return args.includes('-z') ? output : output.trim();
     } catch (error) {
       if (args[0] !== 'fetch' || attempt === 3 || !/cannot lock ref|unable to update local ref/.test(String(error.stderr || error.message))) throw error;
       sleep(1);
@@ -1303,7 +1304,7 @@ function useBaseSettings(pr) {
   const file = rest(`repos/${project.repository}/contents/.github/workflow-project.json?ref=${encodeURIComponent(pr.baseRefName)}`);
   assert.equal(file?.encoding, 'base64', `.github/workflow-project.json on ${pr.baseRefName} is unreadable`);
   const base = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
-  gate = { ...project, ...Object.fromEntries(['awaitApps', 'optionalReviewers', 'updateBranchChecks'].map(key => [key, base[key]])) };
+  gate = { ...project, ...Object.fromEntries(['awaitApps', 'optionalReviewers', 'updateBranchChecks', 'doneBaseMerge'].map(key => [key, base[key]])) };
   optional = undefined;
 }
 // "optionalReviewers" lists bot logins or app slugs whose traces are shown but never awaited, stalled or counted as red
@@ -2732,7 +2733,7 @@ function start() {
 }
 
 /**
- * `done ISSUE [PR] [HANDOFF_FILE]`: everything from the last push to Human review. First the PR base is merged into a branch behind it and pushed (a conflict fails, the merge aborted). The targeted tests of the changed files (in the
+ * `done ISSUE [PR] [HANDOFF_FILE]`: everything from the last push to Human review. First the target branch's doneBaseMerge policy decides whether the fetched PR base is merged and pushed (a conflict fails, the merge aborted). The targeted tests of the changed files (in the
  * foreground, once per head), the PR ready for exactly the pushed head, the acceptance boxes ticked, Automated review, the wait for CI and reviewers (`still waiting: call done again`, exit 4, after --max-minutes), the handoff comment from HANDOFF_FILE
  * (result sentence and the `### Retro` list; heading and head line are added here) and the handoff gate with its Sonar issue count. Every call
  * does what is still open, so a repeated call after a push or a wait is the same call. PR: the one open PR that closes the issue.
@@ -2779,20 +2780,40 @@ async function done() {
   // The tests of a head run once: a call that only waits (after exit 4) neither repeats them nor merges a base that moved meanwhile.
   const tested = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-tested'));
   const isTested = () => existsSync(tested) && readFileSync(tested, 'utf8') === localHead();
-  // The tests must see what will be merged (#558): an untested branch behind its base gets the base merged and pushed first. A conflict is aborted, the branch stays as it was.
+  try {
+    useBaseSettings({ baseRefName: pull.base.ref });
+    assert.ok(gate.doneBaseMerge === undefined || ['always', 'overlap'].includes(gate.doneBaseMerge), 'doneBaseMerge must be always or overlap; omit it for always');
+  } catch (error) { return fail(`cannot read the base-merge policy: ${error.message}`); }
+  // An untested head applies the target base's policy (#558, #579). A conflict is aborted, the branch stays as it was.
   if (!isTested()) {
     const base = `origin/${pull.base.ref}`, failure = error => String(error.stderr || error.message).trim();
     // Only the PR's own branch of this repository is merged into and pushed.
     const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
     if (branch !== pull.head.ref || pull.head.repo?.full_name?.toLowerCase() !== project.repository.toLowerCase()) return fail(`the checkout is on ${branch}, not on the branch ${pull.head.ref} of ${project.repository} that PR #${prNumber} shows: check it out first`);
     try { git('fetch', 'origin'); } catch (error) { return fail(`cannot fetch the base ${base}: ${failure(error)}`); }
+    let mergeNeeded = true, mergeTarget = base;
+    if (gate.doneBaseMerge === 'overlap') try {
+      const head = localHead();
+      mergeTarget = git('rev-parse', base);
+      const ancestor = git('merge-base', head, mergeTarget);
+      const paths = target => git('diff', '--name-only', '-z', '--no-renames', ancestor, target).split('\0').filter(Boolean);
+      const own = new Set(paths(head));
+      mergeNeeded = paths(mergeTarget).some(path => own.has(path));
+      // A directory/file conflict can affect distinct paths; Git probes it without touching the checkout.
+      if (!mergeNeeded) try { git('merge-tree', '--write-tree', head, mergeTarget); } catch (error) {
+        if (error.status !== 1) throw error;
+        mergeNeeded = true;
+      }
+    } catch (error) { return fail(`cannot compare the base ${base}: ${failure(error)}`); }
     // A branch that has the base stays as it is ("Already up to date", no commit).
-    try { git('merge', '--no-edit', base); } catch (error) {
-      const files = git('diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
-      try { git('merge', '--abort'); } catch { /* no merge was started */ }
-      return fail(`merging ${base} conflicts${files.length ? ` in ${files.join(', ')}` : `: ${failure(error)}`}; merge it yourself, push, then run done again`);
+    if (mergeNeeded) {
+      try { git('merge', '--no-edit', mergeTarget); } catch (error) {
+        const files = git('diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
+        try { git('merge', '--abort'); } catch { /* no merge was started */ }
+        return fail(`merging ${base} conflicts${files.length ? ` in ${files.join(', ')}` : `: ${failure(error)}`}; merge it yourself, push, then run done again`);
+      }
+      try { git('push', 'origin', 'HEAD'); } catch (error) { return fail(`cannot push HEAD after merging ${base}: ${failure(error)}`); }
     }
-    try { git('push', 'origin', 'HEAD'); } catch (error) { return fail(`cannot push HEAD after merging ${base}: ${failure(error)}`); }
   }
   const sha = localHead();
   // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.
