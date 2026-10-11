@@ -49,7 +49,8 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
 6. **Report on the spec.** One comment on the spec in plain language: verdict table with proofs, gap tickets from
    step 5, path of the HTML report, and the questions from step 4 that step 7 settles.
 
-7. **Walk the user through.** Give the path or link of the HTML report, then call the Skill tool with "grilling";
+7. **Walk the user through.** Open the HTML report in the user's external browser (`start` on Windows, `open` on
+   macOS, `xdg-open` on Linux) and give its path, so the user sees each candidate while answering; then call the Skill tool with "grilling";
    the questions from step 4 are its first frontier, asked through the question tool, in plain language (kit
    `docs/CONTRIBUTING.md`, Einfache Sprache), each with your recommendation first. Each architecture candidate gets
    the options "Sub-issue now", "Sub-issue after the release", "Discuss first (grilling)" and "Report only", worded in
