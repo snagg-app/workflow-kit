@@ -75,7 +75,7 @@ function api(argv, input, stdout, stderr, exit) {
       exit(0);
     }
     if (parts[3] === 'issues' && parts.length === 5) {
-      stdout(fs.readFileSync(backlink));
+      stdout(JSON.stringify({ labels: [], ...JSON.parse(fs.readFileSync(backlink)) }));
       exit(0);
     }
     const comments = 'backlink-comments-' + parts[4] + '.json';
@@ -261,6 +261,13 @@ function api(argv, input, stdout, stderr, exit) {
     }
     const file = parts.at(-3) + '-' + parts.at(-1) + '.json';
     const page = Number(new URLSearchParams(path.split('?')[1]).get('page') ?? 1);
+    if (parts[5] === 'sub_issues' && page === 1 && fs.existsSync('sub-issues-reads.json')) {
+      const reads = JSON.parse(fs.readFileSync('sub-issues-reads.json'));
+      const next = reads.length > 1 ? reads.shift() : reads[0];
+      fs.writeFileSync('sub-issues-reads.json', JSON.stringify(reads));
+      stdout(JSON.stringify(next));
+      exit(0);
+    }
     const items = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file)) : [];
     stdout(JSON.stringify(items.slice((page - 1) * 100, page * 100)));
     exit(0);
@@ -274,6 +281,13 @@ function api(argv, input, stdout, stderr, exit) {
     const headers = ['HTTP/2.0 200 OK', 'Content-Type: application/json; charset=utf-8', ...remaining === undefined ? [] : [`X-Ratelimit-Remaining: ${remaining}`, `X-Ratelimit-Reset: ${reset}`]];
     stdout(argv.includes('-i') ? `${headers.join('\r\n')}\r\n\r\n${body}` : body);
   };
+  if (query.startsWith('mutation') && query.includes('updateProjectV2ItemFieldValue') && fs.existsSync('status-quota-retry')) {
+    fs.unlinkSync('status-quota-retry');
+    fs.writeFileSync('issues-sub_issues.json', JSON.stringify([{ number: 3, state: 'open' }]));
+    answer(JSON.stringify({ errors: [{ type: 'RATE_LIMIT', message: 'API rate limit already exceeded for user ID 1.' }] }), [4000, Math.ceil((Date.now() + 3000) / 1000)]);
+    stderr('gh: API rate limit already exceeded for user ID 1.\n');
+    exit(1);
+  }
   // limited: GitHub refuses the next query, like its RATE_LIMIT error, and takes the file away: the quota is back after one wait.
   // "free" in the file: the refusal is stale, its own headers show 4000 points left and a reset three seconds away.
   if (fs.existsSync('limited') || fs.existsSync('limited-200')) {

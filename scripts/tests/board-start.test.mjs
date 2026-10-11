@@ -5,6 +5,16 @@ import { dirname, join } from 'node:path';
 import { fixture, handoffPr, issue, predecessor, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
 
+test('start refuses a spec before assignment or claim writes', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  writeIssue({ ...issue('Ready'), labels: { nodes: [{ name: 'spec' }] } });
+  const result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /start is refused/);
+  assert.deepEqual(JSON.parse(readFileSync(join(checkout, 'issue.json'), 'utf8')).assignees.nodes, []);
+  for (const name of ['mutations', 'created-pr', 'develops']) assert.equal(existsSync(join(checkout, name)), false, name);
+});
+
 // A checkout with an origin that already holds the branch of issue 1, and the files the fake gh answers from.
 function startFixture(t) {
   const { checkout, run, writeIssue, env } = fixture(t);

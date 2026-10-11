@@ -236,7 +236,8 @@ test('status refuses Done for a spec, by the label of the project file, and writ
   assert.equal(result.status, 2, result.stdout + result.stderr);
   assert.match(result.stdout, /^ERROR - BLOCKED: #1 is a spec .*Only a human closes a spec/m);
   assert.equal(existsSync(join(checkout, 'mutations')), false, 'a refused status writes nothing');
-  assert.equal(run('field', '1', 'Status', 'Human review').status, 0, 'a delivered spec goes to Human review');
+  assert.equal(run('field', '1', 'Status', 'Human review').status, 2, 'only a human-invoked spec-review changes spec status');
+  assert.equal(run('field', '1', 'Status', 'Human review', '--spec-review').status, 0, 'the skill can hand off a spec without open children');
 
   writeFileSync(join(checkout, '.github/workflow-project.json'), JSON.stringify({ repository: 'test/example', id: 'P1', specLabel: 'Konzept' }));
   assert.equal(run('field', '1', 'Status', 'Done').status, 0, 'the default label means nothing once the project names its own');

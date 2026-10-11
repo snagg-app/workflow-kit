@@ -3,6 +3,19 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, issue, test } from './board-fixture.mjs';
 
+test('sweep leaves a conflicting spec untouched, including a spec beyond the first label page', t => {
+  const { checkout, run } = fixture(t);
+  const first = Array.from({ length: 20 }, (_, index) => ({ name: 'label-' + index }));
+  const row = { ...issue('Human review'), labels: { totalCount: 21, nodes: first }, closedByPullRequestsReferences: { totalCount: 1,
+    nodes: [{ number: 70, state: 'OPEN', mergeStateStatus: 'DIRTY', repository: { nameWithOwner: 'test/example' } }] } };
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([row]));
+  writeFileSync(join(checkout, 'issues-labels.json'), JSON.stringify([...first, { name: 'spec' }]));
+  const result = run('sweep');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^clean$/m);
+  assert.equal(existsSync(join(checkout, 'mutations')), false, 'no conflict comment or status write');
+});
+
 test('sweep sends a Human-review issue with a conflicting PR back to Automated review with a comment and leaves the others alone', t => {
   const { checkout, run, queries } = fixture(t);
   const pr = (mergeStateStatus, changes) => ({ number: 70, url: 'https://github.com/test/example/pull/70', state: 'OPEN', merged: false, baseRefName: 'main', mergeStateStatus, repository: { nameWithOwner: 'test/example' }, ...changes });

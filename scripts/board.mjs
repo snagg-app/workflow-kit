@@ -95,9 +95,9 @@ function sleepUntilReset(resetAt) {
 
 /**
  * One GraphQL request. `tolerate` is a pattern for a failure whose partial answer is still wanted (one of several aliased mutations
- * failed): gh then exits non-zero, but the data of the others is in its output.
+ * failed): gh then exits non-zero, but the data of the others is in its output. `beforeSend` runs after pauses, on every attempt.
  */
-function graphql(query, variables = {}, tolerate) {
+function graphql(query, variables = {}, tolerate, beforeSend) {
   // Organization-linked Priority fields live on the issue and need this preview header.
   const args = ['api', 'graphql', '-i', '-H', 'GraphQL-Features: issue_fields', '-f',
     `query=${query.startsWith('query') ? `${query.slice(0, query.lastIndexOf('}'))} rateLimit{cost}}` : query}`];
@@ -105,6 +105,7 @@ function graphql(query, variables = {}, tolerate) {
   for (let sleeps = 0; ; sleeps++) {
     if (command in sleepers && quota?.remaining < sleepers[command] && Date.parse(quota.resetAt) > Date.now()) sleepUntilReset(quota.resetAt);
     try {
+      beforeSend?.();
       // stderr piped: a tolerated refusal ("already exists") is no failure, and a real one reaches the error message.
       const response = execFileSync(gh.file, args, { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, stdio: 'pipe' });
       const { headers, body } = splitResponse(response);
@@ -169,7 +170,7 @@ const issueQuery = subIssues => `query($owner:String!,$name:String!,$number:Int!
   issue(number:$number){
   ${issueFields(predecessorFields)}
   closedByPullRequestsReferences(first:100){totalCount nodes{number state body updatedAt mergeStateStatus repository{nameWithOwner} headRefName}}
-  labels(first:20){nodes{name}}
+  labels(first:20){totalCount nodes{name}}
   ${subIssues ? `subIssues(first:${subIssues}){totalCount nodes{${issueFields('number state stateReason repository{nameWithOwner}')}}}` : ''}}}}`;
 /** Names the issue in failures (a bare "Could not resolve to an Issue" hides which repository was meant). */
 const named = (label, read) => {
@@ -205,8 +206,34 @@ const projectItem = issue => issue.projectItems.nodes.find(item => item.project.
 // "specLabel" in the project file (default "spec") marks a spec. Only a human closes a spec or sets it to Done (AGENT_RULES.md, Hard rules).
 const specLabel = project.specLabel === undefined ? 'spec' : project.specLabel;
 assert.ok(typeof specLabel === 'string' && specLabel.trim(), 'specLabel in .github/workflow-project.json must be a label name; omit the field for "spec"');
-const isSpec = issue => Boolean(issue.labels?.nodes?.some(label => label?.name?.toLowerCase() === specLabel.toLowerCase()));
+function isSpec(issue) {
+  const labels = issue.labels;
+  if (!labels) return false;
+  assert.ok(Array.isArray(labels.nodes) && labels.nodes.every(label => typeof label?.name === 'string'), 'Issue labels are unreadable');
+  assert.ok(labels.totalCount === undefined || (Number.isSafeInteger(labels.totalCount) && labels.totalCount >= labels.nodes.length), 'Issue label count is unreadable');
+  if (labels.nodes.some(label => label.name.toLowerCase() === specLabel.toLowerCase())) return true;
+  if (labels.totalCount > labels.nodes.length) {
+    const all = restAll(`repos/${project.repository}/issues/${issue.number}/labels`);
+    assert.ok(all.length === labels.totalCount && all.every(label => typeof label?.name === 'string'), 'Not every issue label is readable; retry the read');
+    labels.nodes = all;
+    return all.some(label => label.name.toLowerCase() === specLabel.toLowerCase());
+  }
+  return false;
+}
 const specRefusal = (issueNumber, what) => `BLOCKED: #${issueNumber} is a spec (label "${specLabel}"); ${what}. Only a human closes a spec or sets Done; record the acceptance in a comment on the spec (AGENT_RULES.md, Hard rules).`;
+
+/** Specs are untouched outside a human-invoked spec-review; re-read children immediately before Human review. */
+function guardSpecStatus(issue, { fieldName, option }) {
+  if (fieldName !== 'Status' || !isSpec(issue)) return;
+  assert.ok(option.name !== 'Done', specRefusal(issue.number, 'Status Done is refused'));
+  assert.ok(command === 'field' && process.argv.includes('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
+  if (option.name === 'Human review') {
+    const children = restAll(`repos/${project.repository}/issues/${issue.number}/sub_issues`);
+    assert.ok(children.every(child => Number.isSafeInteger(child?.number) && ['open', 'closed'].includes(child.state)), 'Spec sub-issues are unreadable');
+    const open = children.filter(child => child.state === 'open');
+    assert.ok(!open.length, specRefusal(issue.number, `Human review is refused: open sub-issues ${open.map(child => `#${child.number}`).join(', ')}`));
+  }
+}
 
 // "staleHours" in the project file (default 6): after that long without activity the work counts as abandoned and a new session may take it over (#400).
 const staleHours = project.staleHours === undefined ? 6 : project.staleHours;
@@ -707,16 +734,17 @@ function sweep() {
     const { search } = graphql(`query($q:String!,$after:String){search(query:$q,type:ISSUE_ADVANCED,first:100,after:$after){
       issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{id number
       projectItems(first:100){nodes{id project{id} status:fieldValueByName(name:"Status"){...on ProjectV2ItemFieldSingleSelectValue{name}}}}
-      labels(first:20){nodes{name}}
+      labels(first:20){totalCount nodes{name}}
       closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{number url state merged mergedAt baseRefName mergeStateStatus headRefName repository{nameWithOwner}}}}}}}`,
     { q: `repo:${project.repository} is:issue is:open`, ...(after && { after }) });
     for (const issue of search.nodes) {
+      if (isSpec(issue)) continue;
       const linked = issue.closedByPullRequestsReferences;
       const own = linked.nodes.filter(node => node.repository.nameWithOwner.toLowerCase() === project.repository.toLowerCase());
       // GitHub closes an issue only for a merge into the default branch; a merge into release/** closes it here (comment first, then close).
       // ponytail: reads the first 10 linked PRs; a release PR behind them is missed, never an error.
       // A spec stays open until a human accepts it, however many of its tickets are delivered.
-      const delivered = !isSpec(issue) && own.filter(node => node.merged && node.baseRefName.startsWith('release/'))
+      const delivered = own.filter(node => node.merged && node.baseRefName.startsWith('release/'))
         .sort((a, b) => Date.parse(a.mergedAt) - Date.parse(b.mergedAt)).at(-1);
       // A human reopened it after the latest merge: closing it again would undo that (#510). REST, only for the issues that would be closed.
       const reopened = delivered && restAll(`repos/${project.repository}/issues/${issue.number}/events`)
@@ -867,7 +895,7 @@ function resolveOption(fieldName, optionName) {
 
 /** Guards of a transition; a refusal throws. They print (backlinks), so run them only after every pair is valid. */
 function guardOption(issue, { fieldName, option }) {
-  if (fieldName === 'Status' && option.name === 'Done' && isSpec(issue)) throw new Error(specRefusal(issue.number, `Status ${option.name} is refused`));
+  guardSpecStatus(issue, { fieldName, option });
   if (fieldName === 'Status' && option.name === 'Ready') {
     // Ready contradicts an open decision wait: it stays Backlog until the line is removed (#514).
     const decisions = waitReasons(issue.body).blocked.filter(reason => reason.startsWith(decisionWait));
@@ -892,10 +920,11 @@ function guardOption(issue, { fieldName, option }) {
 }
 
 function writeOption(issue, { fieldName, field, linked, option }) {
+  const beforeSend = () => guardSpecStatus(issue, { fieldName, option });
   if (linked) {
     graphql(`mutation($issue:ID!,$field:ID!,$option:ID!){setIssueFieldValue(input:{issueId:$issue,
       issueFields:[{fieldId:$field,singleSelectOptionId:$option}]}){clientMutationId}}`,
-    { issue: issue.id, field: linked.id, option: option.id });
+    { issue: issue.id, field: linked.id, option: option.id }, undefined, beforeSend);
   } else {
     let item = projectItem(issue)?.id;
     if (!item) {
@@ -905,7 +934,7 @@ function writeOption(issue, { fieldName, field, linked, option }) {
     }
     graphql(`mutation($project:ID!,$item:ID!,$field:ID!,$option:String!){updateProjectV2ItemFieldValue(input:{projectId:$project,
       itemId:$item,fieldId:$field,value:{singleSelectOptionId:$option}}){projectV2Item{id}}}`,
-    { project: project.id, item, field: field.id, option: option.id });
+    { project: project.id, item, field: field.id, option: option.id }, undefined, beforeSend);
   }
   return `${project.repository}#${issue.number} ${fieldName}: ${option.name}`;
 }
@@ -926,7 +955,7 @@ function set(fieldName, optionName = value, beforeWrite) {
 
 /** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing arguments. */
 function fieldPairs() {
-  const args = process.argv.slice(4);
+  const args = process.argv.slice(4).filter(arg => arg !== '--spec-review');
   if (args[0].toLowerCase() === 'status' && args[1].toLowerCase() === 'automated review') return [args.slice(0, 2)];
   assert.ok(args.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
   const pairs = Array.from({ length: args.length / 2 }, (_, index) => args.slice(index * 2, index * 2 + 2));
@@ -999,6 +1028,7 @@ function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields 
     assert.ok(pairs.some(([fieldName]) => fieldName.toLowerCase() === required.toLowerCase()), `the project requires ${required}: give a value for it`);
   }
   const plans = planFields(pairs);
+  assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || plans.find(plan => plan.fieldName === 'Status').option.name === 'Backlog', 'A new spec starts in Backlog; only a human-invoked spec-review changes its status');
   repositoryLists ??= { milestones: restAll(`repos/${project.repository}/milestones`), labels: restAll(`repos/${project.repository}/labels`) };
   const exact = (list, name, key) => list.find(item => item[key].toLowerCase() === name.toLowerCase());
   const found = exact(repositoryLists.milestones, milestone, 'title');
@@ -1261,7 +1291,7 @@ const findBacklink = (comments, prUrl) => comments.find(comment => (comment.body
 /** Explicit scope works with Refs on release branches; native closing links remain a separate proof. */
 let delivered; // [PR, ...OTHER_ISSUE] as `done` knows them; else they follow "Automated review" on the command line
 function verifyBacklinks(issue) {
-  const [prRef, ...extraIssues] = delivered ?? process.argv.slice(command === 'field' ? 6 : 5);
+  const [prRef, ...extraIssues] = delivered ?? process.argv.filter(arg => arg !== '--spec-review').slice(command === 'field' ? 6 : 5);
   assert.ok(prRef !== undefined, 'Automated review needs the PR number: field ISSUE Status "Automated review" PR [OTHER_ISSUE...]');
   const positive = ref =>/^\d+$/.test(ref ?? '') && Number.isSafeInteger(Number(ref)) && Number(ref) > 0;
   assert.ok(positive(prRef) && extraIssues.every(ref => validBlocker(ref) && positive(ref.slice(ref.lastIndexOf('#') + 1))),
@@ -2679,6 +2709,7 @@ function start() {
     assert.equal(read(), want, `${key} must be ${want} but is overridden outside this clone's config; fix that override`);
   }
   const issue = readIssue();
+  assert.ok(!isSpec(issue), specRefusal(number, 'start is refused; agents leave specs untouched'));
   const takeover = process.argv.includes('--takeover');
   // --takeover without an open PR would claim, branch and open an empty Draft PR (#564): refuse before anything is written.
   // A foreign assignee without a PR yet is what --takeover takes over then (#572).
@@ -2750,6 +2781,7 @@ async function done() {
   if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}: run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
   const pull = prNumber === undefined ? undefined : rest(`repos/${project.repository}/pulls/${prNumber}`);
   const partial = prNumber !== undefined && (process.argv.includes('--refs') || isPartialPr(issue, prNumber));
+  assert.ok(partial || !isSpec(issue), specRefusal(number, 'done is refused; agents leave specs untouched (use --refs for a partial PR)'));
   const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
   // A PR without a change (a check task: `start` opened it as the claim) delivers nothing to merge: the result goes to the issue, the PR closes.
   if ((!pull || pull.changed_files === 0) && !partial) {
@@ -2852,7 +2884,7 @@ async function done() {
 const commands = { start, done, next, sweep, check: () => check(readIssue(true), { session: sessionOption() }), block, sub, field: setField, new: create,
   reviews: reviewsOnce, wait, 'quota-wait': quotaWait, handoff, merge, 'stack-sync': stackSync, ready, link, body, 'body-replace': bodyReplace };
 const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N] (without HANDOFF_FILE: prepare only, stops after the automated review)'
-  + ' | next [--session ID] | sweep | field ISSUE NAME VALUE [NAME VALUE ...]'
+  + ' | next [--session ID] | sweep | field ISSUE NAME VALUE [NAME VALUE ...] [--spec-review: only a human-invoked spec-review changes spec status]'
   + ' | new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] | new --from FILE'
   + ' | block ISSUE BLOCKER | sub PARENT CHILD | wait PR [--stall MINUTES] [--grace MINUTES] [--head SHA] [--max-minutes N] [--interval SECONDS] | wait PR --merged [--max-minutes N]'
   + ' | quota-wait [--max-minutes N] | merge PR [--stack] [--stall MINUTES] [--grace MINUTES] [--interval SECONDS (0-60)] [--max-minutes N] | stack-sync TOP'
@@ -2865,7 +2897,7 @@ if (process.argv.slice(2).some(arg => arg === '--help' || arg === '-h')) {
 // A writing command takes only its own flags (value 1: followed by a value) and as many plain words as it names (the issue or PR
 // included); any other argument is a mistake that must not reach a write. `field` checks its own trailing words.
 const writeArgs = { start: { words: 1, flags: { '--session': 1, '--takeover': 0 } }, done: { words: 3, flags: { '--refs': 0, '--max-minutes': 1 } },
-  sweep: { words: 0 }, field: { words: Infinity }, block: { words: 2 }, sub: { words: 2 }, link: { words: 2, flags: { '--refs': 0 } },
+  sweep: { words: 0 }, field: { words: Infinity, flags: { '--spec-review': 0 } }, block: { words: 2 }, sub: { words: 2 }, link: { words: 2, flags: { '--refs': 0 } },
   body: { words: 3 }, 'body-replace': { words: 1, flags: { '--from': 1, '--to': 1 } },
   new: { words: 0, flags: { '--title': 1, '--body-file': 1, '--milestone': 1, '--label': 1, '--priority': 1, '--field': 1, '--from': 1, '--status': 1 } },
   ready: { words: 2, flags: { '--local': 0, '--attempts': 1, '--interval': 1 } }, handoff: { words: 2, flags: { '--stall': 1, '--grace': 1, '--interval': 1, '--refs': 0 } },
@@ -2903,7 +2935,7 @@ if (command === 'wait' && Number.isSafeInteger(number) && value !== '--merged' &
 }
 if (!commands[command] || (!['next', 'sweep', 'new', 'quota-wait'].includes(command) && !Number.isSafeInteger(number))
   // Field names and options travel as GraphQL variables, so any printable text works (Größe, Area/Team, P0: urgent).
-  || (command === 'field' && !(process.argv.length > 5 && process.argv.slice(4).every(text => /^[^\p{Cc}-][^\p{Cc}]*$/u.test(text))))
+  || (command === 'field' && !(process.argv.length > 5 && process.argv.slice(4).filter(arg => arg !== '--spec-review').every(text => /^[^\p{Cc}-][^\p{Cc}]*$/u.test(text))))
   // A misspelled flag must not silently turn the session check off.
   || (command === 'next' && process.argv.length > 3 && !(process.argv.length === 5 && process.argv[3] === '--session' && /^\w[\w.-]*$/.test(process.argv[4])))
   || (command === 'check' && process.argv.length > 4 && !(process.argv.length === 6 && process.argv[4] === '--session' && /^\w[\w.-]*$/.test(process.argv[5])))
