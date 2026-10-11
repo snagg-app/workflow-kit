@@ -51,8 +51,10 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
 
 7. **Walk the user through.** Open the HTML report in the user's external browser (`start` on Windows, `open` on
    macOS, `xdg-open` on Linux) and give its path, so the user sees each candidate while answering; then call the Skill tool with "grilling";
-   the questions from step 4 are its first frontier, asked through the question tool, in plain language (kit
-   `docs/CONTRIBUTING.md`, Einfache Sprache), each with your recommendation first. Each architecture candidate gets
+   the questions from step 4 are its first frontier, in plain language (kit `docs/CONTRIBUTING.md`, Einfache Sprache).
+   Here every round and the final confirmation go through the host's question tool (Claude Code: `AskUserQuestion`)
+   instead of grilling's ❓/➡️ text: at most 4 questions per call, a bigger round takes further calls, your
+   recommended option first and marked as recommended. The ❓/➡️ text is at most a short overview before the call. Each architecture candidate gets
    the options "Sub-issue now", "Sub-issue after the release", "Discuss first (grilling)" and "Report only", worded in
    the user's language; "Discuss first" opens its own branch of the tree. Every answer ends in exactly one outcome:
    follow-up work (its scope and timing), accepted deviation, rejected candidate, or left on purpose. A rejection with
