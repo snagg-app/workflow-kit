@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fixture, handoffFixture, handoffPr, issue, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
@@ -43,7 +43,7 @@ function showPr(file, json, { headRefOid, ...changes }) {
 // The base gets a commit that the branch lacks (files: written in it) and the branch an own commit (files: written in it).
 function moveBase(git, checkout, theirs = {}, mine = {}) {
   const commit = (files, message) => {
-    for (const [name, content] of Object.entries(files)) { writeFileSync(join(checkout, name), content); git('add', name); }
+    for (const [name, content] of Object.entries(files)) { mkdirSync(dirname(join(checkout, name)), { recursive: true }); writeFileSync(join(checkout, name), content); git('add', name); }
     git('commit', '--allow-empty', '-q', '-m', message);
   };
   git('checkout', '-q', '-b', 'side');
@@ -53,6 +53,84 @@ function moveBase(git, checkout, theirs = {}, mine = {}) {
   git('branch', '-q', '-D', 'side');
   commit(mine, 'own work');
 }
+
+function baseMergePolicy(file, json, doneBaseMerge = 'overlap') {
+  writeFileSync(file('base-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), doneBaseMerge }));
+}
+
+test('done overlap policy from the remote target base keeps unrelated moves off the pushed head', t => {
+  const { run, git, checkout, file, text, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), doneBaseMerge: 'always' }));
+  moveBase(git, checkout, { 'other.txt': 'base' }, { 'fix.txt': 'fix' });
+  git('push', '-q', 'origin', 'work');
+  const own = git('rev-parse', 'HEAD');
+  showPr(file, json, { headRefOid: own });
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git('rev-parse', 'HEAD'), own);
+  assert.match(git('ls-remote', 'origin', 'refs/heads/work'), new RegExp(`^${own}`));
+  assert.equal(readFileSync(join(checkout, '.git', 'board-done-tested'), 'utf8'), own);
+  assert.match(text('affected-tests-calls'), /--run/);
+  assert.equal(text('stored'), 'Human review');
+});
+
+test('done overlap policy merges a shared file even when both edits can merge cleanly', t => {
+  const { run, git, checkout, file, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  moveBase(git, checkout, { 'shared.txt': 'same' }, { 'shared.txt': 'same' });
+  git('push', '-q', 'origin', 'work');
+  const own = git('rev-parse', 'HEAD');
+  showPr(file, json, { headRefOid: own, isDraft: false });
+  assert.equal(run('done', '1', 'result.md').status, 1, 'the merged head must become visible on the PR before delivery');
+  const merged = git('rev-parse', 'HEAD');
+  assert.notEqual(merged, own);
+  git('merge-base', '--is-ancestor', 'origin/release/0.1.1', merged);
+  assert.equal(readFileSync(join(checkout, '.git', 'board-done-tested'), 'utf8'), merged);
+  showPr(file, json, { headRefOid: merged });
+  assert.equal(run('done', '1', 'result.md').status, 0);
+});
+
+for (const [name, theirs, mine] of [
+  ['shared-file conflict', { 'a.txt': 'theirs' }, { 'a.txt': 'mine' }],
+  ['directory/file conflict with distinct changed paths', { 'path/file.txt': 'theirs' }, { path: 'mine' }],
+]) test(`done overlap policy refuses ${name} before tests and status writes`, t => {
+  const { run, git, checkout, file, text, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  moveBase(git, checkout, theirs, mine);
+  const own = git('rev-parse', 'HEAD');
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
+  assert.equal(git('rev-parse', 'HEAD'), own);
+  assert.ok(!existsSync(join(checkout, '.git', 'MERGE_HEAD')));
+  assert.equal(text('affected-tests-calls'), '');
+  assert.equal(text('stored'), 'In progress');
+});
+
+for (const policy of [null, 'never']) test(`done rejects malformed base merge policy ${policy} before writes`, t => {
+  const { run, git, file, text, json, head } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json, policy);
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
+  assert.equal(git('rev-parse', 'HEAD'), head);
+  assert.equal(text('affected-tests-calls'), '');
+  assert.equal(text('stored'), 'In progress');
+  assert.equal(json('pr.json').isDraft, true);
+});
+
+test('done overlap comparison fails closed when the fetched PR base does not exist', t => {
+  const { run, git, file, text, json, head } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  showPr(file, json, { baseRefName: 'missing' });
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
+  assert.equal(git('rev-parse', 'HEAD'), head);
+  assert.equal(text('affected-tests-calls'), '');
+  assert.equal(text('stored'), 'In progress');
+});
 
 test('done takes the pushed work to Human review: tests, ready, ticked boxes, Automated review, wait, handoff comment', t => {
   const { run, head, text, json, git } = delivery(t, handoffFixture);
@@ -120,6 +198,8 @@ test('done without a handoff file keeps the waiting and failure codes of the rev
 
 test('done merges a base the branch is behind, pushes it and tests the merged head; a second call adds no merge commit', t => {
   const { run, head, git, checkout, file, text, json } = delivery(t, handoffFixture);
+  writeFileSync(file('base-project.json'), text('.github/workflow-project.json')); // target base omits the setting: always wins over a local overlap override
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), doneBaseMerge: 'overlap' }));
   moveBase(git, checkout);
   git('update-ref', 'refs/remotes/origin/release/0.1.1', head); // the last fetch is older than the base: done fetches it itself
   showPr(file, json, { isDraft: false }); // ready() refuses at once: the PR still shows the old head
@@ -165,8 +245,9 @@ test('done does not repeat a fetch that fails for another reason', t => {
   assert.match(result.stdout, /cannot fetch the base origin\/release\/0\.1\.1/);
 });
 
-test('done does not merge a base that moved after the tests of this head: repeated calls only wait', t => {
+for (const policy of ['always', 'overlap']) test(`done ${policy} does not merge a base that moved after the tests of this head: repeated calls only wait`, t => {
   const { run, head, git, checkout, file, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json, policy);
   moveBase(git, checkout);
   const own = git('rev-parse', 'HEAD');
   writeFileSync(join(checkout, '.git', 'board-done-tested'), own);

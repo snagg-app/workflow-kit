@@ -80,6 +80,15 @@ as a blocker, because they are findings, not waiting. A `null` or other non-list
 ERROR; omit the field instead. A check that only asks for the base to be merged (the retarget restart check of a
 stacked PR) goes in `"updateBranchChecks"`, a list of check names: `board.mjs merge` then merges the base into the PR
 branch instead of ending `FAILED`. The script keeps these settings too.
+`"doneBaseMerge"` selects the project's rule for the first untested `done` head:
+`"always"` (the default, also when omitted) merges the fetched PR base before tests;
+`"overlap"` merges only when both sides changed a path since their merge-base or Git
+detects a conflict, including directory/file conflicts. Unrelated changes leave the
+pushed head intact. Rename/delete paths are compared without rename folding and
+without the GitHub file-list cap. The setting is read from the current PR target
+branch, never the checkout; another value or an unreadable comparison fails closed.
+The conflict probe uses Git's `merge-tree --write-tree` (Git 2.38 or newer).
+Both modes keep the exact-head tests, CI/review gates and tested-head resume behavior.
 `board.mjs wait` and `done` also keep waiting a few minutes after Ready and after each push, because a
 review bot may start late (`"reviewerGraceMinutes"`, default 3). The wait ends sooner when a required bot has answered on
 the head, a limit notice included. A project whose bots do not start on their own sets

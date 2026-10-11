@@ -113,7 +113,9 @@ work between them:
    loop and handle its **Rückmeldungen** first (a comment, review or thread after your handoff, a
    push-back to In progress or Automated review, an @mention). Answer in the ticket with a comment
    that has the line `Agent: claude|codex, Session: ID` (last line), or hand off again with `done`.
-2. Implement and push. `node .vendor/workflow-kit/scripts/board.mjs done ISSUE FILE` then runs the
+2. Implement and push. `done` first follows the target branch's
+   [base-merge policy](SETUP.md#3-board-and-labels).
+   `node .vendor/workflow-kit/scripts/board.mjs done ISSUE FILE` then runs the
    targeted tests, marks the PR ready for the pushed head, ticks the acceptance boxes, sets Automated
    review, waits for CI and every non-optional reviewer ([review loop](docs/CONTRIBUTING.md#review-loop)),
    posts the handoff comment from FILE ([Handoff comment](README.md#handoff-comment)) and checks the
