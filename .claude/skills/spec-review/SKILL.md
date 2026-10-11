@@ -1,6 +1,6 @@
 ---
 name: spec-review
-description: "Check a spec issue against the code: complete, correct, as planned. Open decisions and architecture candidates are settled with the user first; agreed work becomes new sub-issues of the spec."
+description: "Check a spec issue against the code: complete, correct, as planned. Open decisions and architecture candidates are settled with the user through the question tool; agreed work becomes new sub-issues of the spec."
 disable-model-invocation: true
 argument-hint: "<spec issue number, URL or title words>"
 ---
@@ -28,31 +28,41 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
 
 2. **Architecture pass.** Read [`improve-codebase-architecture`](../improve-codebase-architecture/SKILL.md) and run its
    steps 1 and 2 (explore, HTML report) with the spec's code as the named direction, on the review ref.
-   It is user-invoked, so follow the file; skip its closing question, step 5 asks about every candidate.
+   It is user-invoked, so follow the file; skip its closing question, step 7 asks about every candidate.
    A candidate counts as **deviates** when it breaks the spec, an ADR or the project's target architecture.
-   Done when every candidate is listed for step 5.
+   Done when every candidate is listed for step 7.
 
 3. **Verdict per point.** Check each listed point against the review ref: presence with `file:line`,
    absence with one `git grep` per pattern over the whole result. Done when every point carries a verdict and its proof.
 
 4. **Collect the questions.** One question per **deviates** or **open** verdict whose fix needs a decision
    (two reasonable ways, where a rule lives, scope, accept the deviation or fix it), and one per architecture
-   candidate from step 2 (follow-up, reject, or leave). A gap with one obvious fix needs no question.
+   candidate from step 2, always: also when it breaks the spec, an ADR or the target architecture, and whatever
+   strength you gave it. A gap with one obvious fix needs no question: it becomes a ticket in step 5.
 
-5. **Settle them with the user.** Call the Skill tool with "grilling"; the questions from step 4 are its first
-   frontier, in plain language (kit `docs/CONTRIBUTING.md`, Einfache Sprache), each with your recommendation.
-   Every answer ends in exactly one outcome: follow-up work (its scope), accepted deviation, rejected candidate,
-   or left on purpose. A rejection with a load-bearing reason gets the ADR offer of
-   `improve-codebase-architecture` step 3. Done when the frontier is empty and the user confirmed.
+5. **Gap tickets.** Each **open** gap with one obvious fix, without a matching open sub-issue, first gets a search of
+   open issues (`gh issue list --search "<finding words>"`): an unlinked match from an earlier run is linked with
+   `board.mjs sub SPEC N`. Otherwise it becomes a new issue via `board.mjs new` (required fields per the project's
+   tracker doc), then `board.mjs sub SPEC NEW`. No ticket carries an open decision; `needs-human-input` is only for
+   work a human must do. Architecture candidates never get a ticket here.
 
-6. **Agreed work to tickets.** Each open gap and each answer that asks for follow-up work, without a matching open
-   sub-issue, first gets a search of open issues (`gh issue list --search "<finding words>"`): an unlinked match
-   from an earlier run is linked with `board.mjs sub SPEC N`. Otherwise it becomes a new issue via `board.mjs new`
-   (required fields per the project's tracker doc), then `board.mjs sub SPEC NEW`. The body states the
-   decision from step 5 with date and source. No ticket carries an open decision; `needs-human-input` is only for
-   work a human must do. Done when every agreed gap has an open sub-issue, read back from the sub-issues API.
+6. **Report on the spec.** One comment on the spec in plain language: verdict table with proofs, gap tickets from
+   step 5, path of the HTML report, and the questions from step 4 that step 7 settles.
 
-7. **Report on the spec.** One comment on the spec in plain language: verdict table with proofs, the decisions
-   from step 5 with their outcome, new sub-issues, path of the HTML report. When all sub-issues are closed and
-   no gap is left, continue with the project's spec acceptance handoff, which proves the acceptance in a comment on the spec,
-   and set the spec to Human review (`board.mjs field SPEC Status "Human review"`). It stays open: only a human closes it or sets Done (`AGENT_RULES.md`, Hard rules).
+7. **Walk the user through.** Give the path or link of the HTML report, then call the Skill tool with "grilling";
+   the questions from step 4 are its first frontier, asked through the question tool, in plain language (kit
+   `docs/CONTRIBUTING.md`, Einfache Sprache), each with your recommendation first. Each architecture candidate gets
+   the options "Sub-issue now", "Sub-issue after the release", "Discuss first (grilling)" and "Report only", worded in
+   the user's language; "Discuss first" opens its own branch of the tree. Every answer ends in exactly one outcome:
+   follow-up work (its scope and timing), accepted deviation, rejected candidate, or left on purpose. A rejection with
+   a load-bearing reason gets the ADR offer of `improve-codebase-architecture` step 3. Done when the frontier is empty
+   and the user confirmed.
+
+8. **Agreed work to tickets.** Right after step 7, each answer that asks for follow-up work gets its ticket the way
+   step 5 does; the body states the decision with date and source, and "after the release" goes into its target
+   release. Adjust the spec's text and acceptance point to the decisions (`board.mjs body`) and add a short addendum
+   comment (Nachtrag) on the spec: decisions, outcomes, new sub-issues. Done when every agreed piece of work has an
+   open sub-issue, read back from the sub-issues API. When all sub-issues are closed and no gap is left, continue with
+   the project's spec acceptance handoff, which proves the acceptance in a comment on the spec, and set the spec to
+   Human review (`board.mjs field SPEC Status "Human review"`). It stays open: only a human closes it or sets Done
+   (`AGENT_RULES.md`, Hard rules).
