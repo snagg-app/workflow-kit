@@ -2749,16 +2749,33 @@ async function done() {
   if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}: run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
   const pull = prNumber === undefined ? undefined : rest(`repos/${project.repository}/pulls/${prNumber}`);
   const partial = prNumber !== undefined && (process.argv.includes('--refs') || isPartialPr(issue, prNumber));
+  const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
   // A PR without a change (a check task: `start` opened it as the claim) delivers nothing to merge: the result goes to the issue, the PR closes.
   if ((!pull || pull.changed_files === 0) && !partial) {
     assert.ok(file, `PR #${prNumber} has no change: name the FILE with the result for the issue`);
+    if (pull) try {
+      const head = localHead(), base = pull.base.sha;
+      assert.equal(pull.head.sha, head, 'PR head differs from the expected pushed checkout head');
+      assert.equal(git('branch', '--show-current'), pull.head.ref, 'checkout is not on the PR branch');
+      assert.equal(pull.head.repo?.full_name?.toLowerCase(), project.repository.toLowerCase(), 'PR branch belongs to another repository');
+      assert.match(base ?? '', /^[a-f0-9]{40}$/, 'PR base commit is missing');
+      git('fetch', 'origin', base, head);
+      const mergeBase = git('merge-base', base, head);
+      git('diff', '--quiet', mergeBase, head);
+      const again = rest(`repos/${project.repository}/pulls/${prNumber}`);
+      assert.equal(again.head.sha, head, 'PR head changed during the comparison');
+      assert.equal(again.base.sha, base, 'PR base changed during the comparison');
+      assert.equal(again.base.ref, pull.base.ref, 'PR base branch changed during the comparison');
+      assert.equal(again.changed_files, 0, 'PR file count contradicts the comparison');
+      assert.equal(again.state, 'open', 'PR is no longer open');
+      assert.equal(git('ls-remote', '--exit-code', 'origin', `refs/heads/${pull.head.ref}`), `${head}\trefs/heads/${pull.head.ref}`, 'live remote branch differs from the expected pushed head');
+    } catch (error) { return fail(`cannot confirm no-change evidence for PR #${prNumber}: ${String(error.stderr || error.message).trim()}; run done again`); }
     restPost(`repos/${project.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## Übergabe\n\n${lines(file)}\n`);
     if (pull) execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
     writeBody(before => tickAcceptance(before));
     set('Status', 'Human review');
     return console.log(pull ? `CLOSED PR #${prNumber} (no change); the result is in the comment on #${number}` : `DONE #${number} (no PR); the result is in the comment on #${number}`);
   }
-  const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
   // The tests of a head run once: a call that only waits (after exit 4) neither repeats them nor merges a base that moved meanwhile.
   const tested = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-tested'));
   const isTested = () => existsSync(tested) && readFileSync(tested, 'utf8') === localHead();

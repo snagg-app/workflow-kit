@@ -20,7 +20,7 @@ function delivery(t, fixtureOf) {
   const file = name => join(checkout, name);
   const text = name => existsSync(file(name)) ? readFileSync(file(name), 'utf8') : '';
   const json = name => JSON.parse(text(name));
-  const pr = handoffPr({ id: 'PR7', isDraft: true, headRefName: 'work', headRefOid: head, isCrossRepository: false, headRepository: { nameWithOwner: 'test/example' }, url: 'https://github.com/test/example/pull/7', body: 'Closes #1' });
+  const pr = handoffPr({ id: 'PR7', isDraft: true, headRefName: 'work', headRefOid: head, baseRefOid: head, isCrossRepository: false, headRepository: { nameWithOwner: 'test/example' }, url: 'https://github.com/test/example/pull/7', body: 'Closes #1' });
   pr.commits.nodes[0].commit.oid = head;
   writeFileSync(file('pr.json'), JSON.stringify(pr));
   writeFileSync(file('handoff-fixture'), '');
@@ -228,6 +228,62 @@ test('done closes a PR without a change, puts the result on the issue and moves 
   assert.equal(text('affected-tests-calls'), '', 'nothing to test');
 });
 
+for (const path of ['fix.txt', ' ']) test(`done refuses stale zero-file metadata when immutable Git contains a pushed change (${JSON.stringify(path)})`, t => {
+  if (path === ' ' && process.platform === 'win32') return t.skip('Win32 Git rejects whitespace-only paths; Linux CI covers this Git-diff regression');
+  const { run, file, text, json, git } = delivery(t, handoffFixture);
+  writeFileSync(file(path), 'real fix');
+  git('add', path);
+  git('commit', '-q', '-m', 'fix');
+  git('push', '-q', 'origin', 'work');
+  showPr(file, json, { headRefOid: git('rev-parse', 'HEAD'), changedFiles: 0 });
+  writeFileSync(file('pr-rest-reads.json'), JSON.stringify([{ changedFiles: 0 }, { changedFiles: 1 }]));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
+  assert.equal(json('pr.json').state, 'OPEN');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  assert.equal(text('stored'), 'In progress');
+  assert.equal(text('affected-tests-calls'), '');
+});
+
+for (const [name, first, second] of [
+  ['changed remote head', {}, { headRefOid: 'b'.repeat(40) }],
+  ['changed remote base', {}, { baseRefOid: 'b'.repeat(40) }],
+  ['contradictory counter', {}, { changedFiles: 1 }],
+  ['unreadable base commit', { baseRefOid: 'b'.repeat(40) }, {}],
+  ['head differs from checkout', { headRefOid: 'b'.repeat(40) }, {}],
+]) test(`done leaves issue and PR untouched for no-change ${name}`, t => {
+  const { run, file, text, json } = delivery(t, handoffFixture);
+  writeFileSync(file('pr-rest-reads.json'), JSON.stringify([{ changedFiles: 0, ...first }, second]));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
+  assert.equal(json('pr.json').state, 'OPEN');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  assert.equal(text('stored'), 'In progress');
+});
+
+for (const action of ['push', 'delete']) test(`done refuses a live remote ${action} hidden by stale empty PR metadata`, t => {
+  const { run, file, text, json, git } = delivery(t, handoffFixture);
+  git('checkout', '-q', '-b', 'other');
+  writeFileSync(file('fix.txt'), 'remote fix');
+  git('add', 'fix.txt');
+  git('commit', '-q', '-m', 'remote fix');
+  git('push', '-q', 'origin', 'other:work');
+  if (action === 'delete') git('push', '-q', 'origin', '--delete', 'work');
+  git('checkout', '-q', 'work');
+  showPr(file, json, { changedFiles: 0 }); // stale local checkout and both PR reads still point at the empty head
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker:/);
+  assert.equal(json('pr.json').state, 'OPEN');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  assert.equal(text('stored'), 'In progress');
+});
+
 test('done without any PR puts the result on the issue, ticks the boxes and moves it to Human review; without a file it stops', t => {
   const { run, text, json } = delivery(t, fixture); // no PR closes the issue
   let result = run('done', '1');
@@ -253,4 +309,15 @@ test('done hands a partial PR off without a native link, status or ticked boxes,
   assert.equal(text('stored'), 'In progress', 'the issue status stays');
   assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'), 'the boxes of the issue stay open');
   assert.equal(json('pr.json').isDraft, false);
+});
+
+test('done keeps an empty --refs PR on the regular test and review path', t => {
+  const { run, file, text, json } = delivery(t, handoffFixture);
+  showPr(file, json, { changedFiles: 0 });
+  const result = run('done', '1', '7', 'result.md', '--refs');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(json('pr.json').state, 'OPEN');
+  assert.match(text('affected-tests-calls'), /--run/);
+  assert.equal(text('stored'), 'In progress');
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
 });

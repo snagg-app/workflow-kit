@@ -222,7 +222,7 @@ function api(argv, input, stdout, stderr, exit) {
       }
       const pr = JSON.parse(fs.readFileSync('pr.json'));
       stdout(JSON.stringify({ number: pr.number, html_url: pr.url, state: pr.state === 'OPEN' ? 'open' : 'closed', merged: pr.state === 'MERGED', draft: pr.isDraft, changed_files: pr.changedFiles, body: pr.body, updated_at: pr.updatedAt ?? 'u',
-        mergeable_state: String(pr.mergeStateStatus).toLowerCase(), head: { sha: pr.headRefOid, ref: pr.headRefName, repo: { full_name: pr.headRepository?.nameWithOwner } }, base: { ref: pr.baseRefName } }));
+        mergeable_state: String(pr.mergeStateStatus).toLowerCase(), head: { sha: pr.headRefOid, ref: pr.headRefName, repo: { full_name: pr.headRepository?.nameWithOwner } }, base: { ref: pr.baseRefName, sha: pr.baseRefOid } }));
       exit(0);
     }
     if (parts[3] === 'commits' && parts[5] === 'statuses') {
