@@ -228,10 +228,11 @@ test('done closes a PR without a change, puts the result on the issue and moves 
   assert.equal(text('affected-tests-calls'), '', 'nothing to test');
 });
 
-test('done refuses stale zero-file metadata when immutable Git contains a pushed change', t => {
+for (const path of ['fix.txt', ' ']) test(`done refuses stale zero-file metadata when immutable Git contains a pushed change (${JSON.stringify(path)})`, t => {
+  if (path === ' ' && process.platform === 'win32') return t.skip('Win32 Git rejects whitespace-only paths; Linux CI covers this Git-diff regression');
   const { run, file, text, json, git } = delivery(t, handoffFixture);
-  writeFileSync(file('fix.txt'), 'real fix');
-  git('add', 'fix.txt');
+  writeFileSync(file(path), 'real fix');
+  git('add', path);
   git('commit', '-q', '-m', 'fix');
   git('push', '-q', 'origin', 'work');
   showPr(file, json, { headRefOid: git('rev-parse', 'HEAD'), changedFiles: 0 });

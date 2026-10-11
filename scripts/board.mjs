@@ -2761,7 +2761,7 @@ async function done() {
       assert.match(base ?? '', /^[a-f0-9]{40}$/, 'PR base commit is missing');
       git('fetch', 'origin', base, head);
       const mergeBase = git('merge-base', base, head);
-      assert.equal(git('diff', '--name-only', mergeBase, head), '', 'immutable Git diff contains a change');
+      git('diff', '--quiet', mergeBase, head);
       const again = rest(`repos/${project.repository}/pulls/${prNumber}`);
       assert.equal(again.head.sha, head, 'PR head changed during the comparison');
       assert.equal(again.base.sha, base, 'PR base changed during the comparison');
