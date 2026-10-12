@@ -180,11 +180,14 @@ and then work in that directory, their relative paths (changed files given to `a
   line when you rewrite the PR body. It ends with
   `START #N session … branch … base … PR #…`; for a stack it names the PR to link above. Abandoned work (below, `next`) is taken over
   with the same call: `start` writes the new session into the claim line of its PR. A handover is the same edit of the claim line by hand. A new start is BLOCKED with `finish #N first` while you have an own unfinished issue (a resume or a stack on its work is not).
-- `done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N]`: everything from the last push to Human review. PR defaults to the one open PR
+- `done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N] [--skip-local-tests REASON]`: everything from the last push to Human review. PR defaults to the one open PR
   that closes the issue; name it for a partial PR (`Refs #N`, no closing link) or with `--refs` (the PR only names the issue, whether or not another PR closes it: only the PR gate runs, and the issue status, assignment and acceptance boxes stay untouched). In order, each step only if still open, so a repeated call after a push or a wait is the same call:
   0. The PR base is fetched; an untested head (once per push, not on a repeated call that only waits) that does not contain it gets it merged and pushed, so the tests see what will be merged. A project with [`"doneBaseMerge": "overlap"`](SETUP.md#3-board-and-labels) merges only for shared changed paths or a Git-detected conflict; unrelated base changes leave the head intact. A conflict ends in `FAILED` naming the files, the merge aborted: resolve it, push, call `done` again.
      Without HANDOFF_FILE and without a handoff comment for the (merged) head, `done` only prepares: steps 1 to 5 run (tests, ready, status Automated review, the wait), then it ends with `PREPARED` (exit 0), without ticking the boxes, handoff comment or Human review. Run the final proof then, and `done ISSUE FILE` takes over the same head (its tests are not repeated; a head pushed since is tested again).
   1. The targeted tests of the changed files (`affected-tests.mjs --run`, once per head, in the foreground).
+     With `--skip-local-tests REASON`, the driver explicitly skips only this local run and names why. The reason must be non-empty and cannot start with `--`.
+     The output names the skipped head and reason; no tested-head marker is written or changed. Name any historical proof with its original SHA in the handoff.
+     Base merges, CI, reviews and handoff gates still run. A skipped preparation reports the skip; repeat the flag on later `done` calls to keep skipping.
   2. The Draft PR ready for exactly the pushed head (the local `HEAD` is compared with the PR head as a prefix; the PR is reread 6 times, 5 s apart,
      because GitHub can show the previous push for a moment; closed PRs, forks and a head that stays different are refused; written once, only a read-back showing that head ready counts).
      This comes before any wait: bots and Sonar analyze no Draft, so never close and reopen a PR to start them.

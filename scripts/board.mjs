@@ -2768,11 +2768,15 @@ function start() {
  * foreground, once per head), the PR ready for exactly the pushed head, the acceptance boxes ticked, Automated review, the wait for CI and reviewers (`still waiting: call done again`, exit 4, after --max-minutes), the handoff comment from HANDOFF_FILE
  * (result sentence and the `### Retro` list; heading and head line are added here) and the handoff gate with its Sonar issue count. Every call
  * does what is still open, so a repeated call after a push or a wait is the same call. PR: the one open PR that closes the issue.
+ * `--skip-local-tests REASON` skips only local tests without updating the tested-head marker; CI and review gates still apply.
  * Without HANDOFF_FILE (and without a comment for the head) it stops after the automated review with `PREPARED` (exit 0): the final proof runs, then `done ISSUE FILE`.
  * `--refs`: a PR that only names the issue (a part for another base): its gate runs, the issue status stays.
  */
 async function done() {
-  const args = process.argv.slice(4), words = args.filter((arg, index) => !arg.startsWith('--') && args[index - 1] !== '--max-minutes');
+  const args = process.argv.slice(4), skipAt = args.indexOf('--skip-local-tests');
+  const skipReason = skipAt < 0 ? undefined : args[skipAt + 1]?.trim();
+  assert.ok(skipAt < 0 || (skipReason && !skipReason.startsWith('--')), '--skip-local-tests needs a non-empty reason');
+  const words = args.filter((arg, index) => !arg.startsWith('--') && !['--max-minutes', '--skip-local-tests'].includes(args[index - 1]));
   const given = /^\d+$/.test(words[0] ?? '') ? Number(words.shift()) : undefined, file = words.shift();
   assert.ok(!words.length, 'done takes ISSUE [PR] [FILE]');
   const issue = readIssue(), found = currentIssuePr(issue);
@@ -2850,7 +2854,8 @@ async function done() {
   const sha = localHead();
   // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.
   const prepare = !file && !findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
-  if (!isTested()) {
+  if (skipReason) console.log(`LOCAL TESTS SKIPPED ${sha}: ${skipReason}`);
+  else if (!isTested()) {
     try {
       execFileSync(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
     } catch { return fail('the targeted tests of the changed files failed (output above); fix them, push, then run done again'); }
@@ -2871,7 +2876,7 @@ async function done() {
     return console.log([outcome(result)[0], ...result.lines, quotaLine()].filter(Boolean).join('\n'));
   }
   const head = result.pr.headRefOid;
-  if (prepare) return console.log(`PREPARED #${number} head ${head.slice(0, 7)}: tests, ready and automated review are done; no handoff comment, boxes stay open, no Human review. Run the final proof, then board.mjs done ${number} FILE`);
+  if (prepare) return console.log(`PREPARED #${number} head ${head.slice(0, 7)}: ${skipReason ? 'local tests skipped; ready' : 'tests, ready'} and automated review are done; no handoff comment, boxes stay open, no Human review. ${skipReason ? 'Repeat --skip-local-tests REASON to skip local tests again; then run' : 'Run the final proof, then'} board.mjs done ${number} FILE`);
   // Boxes are ticked only once the checks of the head are green.
   if (!partial) writeBody(before => tickAcceptance(before));
   if (file && !findHandoffComment(result.comments, issue.viewer, head)) {
@@ -2883,7 +2888,7 @@ async function done() {
 // check, reviews, handoff, ready and link are the steps `start` and `done` take; they stay callable for those two and for the tests, but nobody runs them by hand, so the usage leaves them out.
 const commands = { start, done, next, sweep, check: () => check(readIssue(true), { session: sessionOption() }), block, sub, field: setField, new: create,
   reviews: reviewsOnce, wait, 'quota-wait': quotaWait, handoff, merge, 'stack-sync': stackSync, ready, link, body, 'body-replace': bodyReplace };
-const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N] (without HANDOFF_FILE: prepare only, stops after the automated review)'
+const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N] [--skip-local-tests REASON] (without HANDOFF_FILE: prepare only, stops after the automated review)'
   + ' | next [--session ID] | sweep | field ISSUE NAME VALUE [NAME VALUE ...] [--spec-review: only a human-invoked spec-review changes spec status]'
   + ' | new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] | new --from FILE'
   + ' | block ISSUE BLOCKER | sub PARENT CHILD | wait PR [--stall MINUTES] [--grace MINUTES] [--head SHA] [--max-minutes N] [--interval SECONDS] | wait PR --merged [--max-minutes N]'
@@ -2896,7 +2901,7 @@ if (process.argv.slice(2).some(arg => arg === '--help' || arg === '-h')) {
 }
 // A writing command takes only its own flags (value 1: followed by a value) and as many plain words as it names (the issue or PR
 // included); any other argument is a mistake that must not reach a write. `field` checks its own trailing words.
-const writeArgs = { start: { words: 1, flags: { '--session': 1, '--takeover': 0 } }, done: { words: 3, flags: { '--refs': 0, '--max-minutes': 1 } },
+const writeArgs = { start: { words: 1, flags: { '--session': 1, '--takeover': 0 } }, done: { words: 3, flags: { '--refs': 0, '--max-minutes': 1, '--skip-local-tests': 1 } },
   sweep: { words: 0 }, field: { words: Infinity, flags: { '--spec-review': 0 } }, block: { words: 2 }, sub: { words: 2 }, link: { words: 2, flags: { '--refs': 0 } },
   body: { words: 3 }, 'body-replace': { words: 1, flags: { '--from': 1, '--to': 1 } },
   new: { words: 0, flags: { '--title': 1, '--body-file': 1, '--milestone': 1, '--label': 1, '--priority': 1, '--field': 1, '--from': 1, '--status': 1 } },
