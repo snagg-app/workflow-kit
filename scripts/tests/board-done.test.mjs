@@ -443,6 +443,84 @@ test('done without any PR puts the result on the issue, ticks the boxes and move
   assert.equal(text('affected-tests-calls'), '', 'nothing to test');
 });
 
+const mergedDelivery = { number: 7, state: 'MERGED', mergeCommit: { oid: 'f'.repeat(40) }, repository: { nameWithOwner: 'test/example' } };
+const closedDelivery = () => ({ ...issue('Done'), state: 'CLOSED', stateReason: 'COMPLETED',
+  closedByPullRequestsReferences: { totalCount: 1, nodes: [mergedDelivery] } });
+
+test('done Prepare then external merge then FILE preserves Done, body and comments with readable merge evidence', t => {
+  const { run, file, text, json, writeIssue } = delivery(t, handoffFixture);
+  assert.equal(run('done', '1').status, 0, 'Prepare succeeds before the external merge');
+  showPr(file, json, { state: 'MERGED', mergeCommit: mergedDelivery.mergeCommit });
+  writeIssue(closedDelivery());
+  writeFileSync(file('stored'), 'Done');
+  const before = ['stored', 'backlink-1.json', 'issues-comments.json', 'mutations', 'affected-tests-calls'].map(text);
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /ALREADY DONE #1: closed as completed; PR #7 merged \(f{40}\); no changes/);
+  assert.deepEqual(['stored', 'backlink-1.json', 'issues-comments.json', 'mutations', 'affected-tests-calls'].map(text), before);
+});
+
+test('done re-reads external closure before the first No-PR mutation', t => {
+  const { run, file, text, json } = delivery(t, fixture);
+  writeFileSync(file('issue-next.json'), JSON.stringify(closedDelivery()));
+  writeFileSync(file('stored'), 'Done');
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /ALREADY DONE #1/);
+  assert.equal(text('stored'), 'Done');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  assert.equal(text('mutations'), '');
+  assert.equal(text('affected-tests-calls'), '');
+  assert.ok(text('queries').split('\n').some(line => line.includes('includeClosedPrs:true')), 'closed PRs must be requested from GitHub');
+});
+
+for (const [name, changes] of [
+  ['unreadable issue state', { state: null }],
+  ['unreadable closure reason', { stateReason: null }],
+  ['not-planned closure', { stateReason: 'NOT_PLANNED' }],
+  ['incomplete PR list', { closedByPullRequestsReferences: { totalCount: 2, nodes: [mergedDelivery] } }],
+  ['unreadable PR state', { closedByPullRequestsReferences: { totalCount: 1, nodes: [{ ...mergedDelivery, state: null }] } }],
+  ['unreadable merge commit', { closedByPullRequestsReferences: { totalCount: 1, nodes: [{ ...mergedDelivery, mergeCommit: null }] } }],
+  ['unmerged linked PR', { closedByPullRequestsReferences: { totalCount: 1, nodes: [{ ...mergedDelivery, state: 'CLOSED' }] } }],
+  ['unrelated merged PR', { closedByPullRequestsReferences: { totalCount: 1, nodes: [{ ...mergedDelivery, repository: { nameWithOwner: 'other/repo' } }] } }],
+  ['new open PR', { state: 'OPEN', closedByPullRequestsReferences: { totalCount: 1, nodes: [{ ...mergedDelivery, state: 'OPEN' }] } }],
+]) test(`done refuses No-PR ${name} before any mutation`, t => {
+  const { run, file, text, json } = delivery(t, fixture);
+  writeFileSync(file('issue-next.json'), JSON.stringify({ ...closedDelivery(), ...changes }));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /FAILED\nblocker: cannot confirm issue closure for #1/);
+  assert.equal(text('stored'), 'In progress');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  assert.equal(text('mutations'), '');
+  assert.equal(text('affected-tests-calls'), '');
+});
+
+test('done delivers a human-reopened issue through the existing No-PR handoff', t => {
+  const { run, text, json, writeIssue } = delivery(t, fixture);
+  writeIssue({ ...closedDelivery(), state: 'OPEN', stateReason: 'REOPENED' });
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^DONE #1 \(no PR\)/m);
+  assert.equal(text('stored'), 'Human review');
+  assert.match(json('issues-comments.json').at(-1).body, /^## Übergabe\n\nAlles geliefert\./);
+  assert.ok(json('backlink-1.json').body.startsWith('- [x] first'));
+});
+
+test('done leaves issue untouched when the API closure read fails', t => {
+  const { run, file, text, json } = delivery(t, fixture);
+  writeFileSync(file('fail'), '');
+  const result = run('done', '1', 'result.md');
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /test\/example#1/);
+  assert.equal(text('stored'), 'In progress');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  assert.equal(text('mutations'), '');
+});
+
 test('done hands a partial PR off without a native link, status or ticked boxes, also when no other PR closes the issue', t => {
   const { run, writeIssue, text, json } = delivery(t, fixture);
   // No PR closes the issue: the PR only names it, and the issue is neither assigned nor in review.

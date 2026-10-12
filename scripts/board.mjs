@@ -2816,6 +2816,23 @@ async function done() {
       assert.equal(again.state, 'open', 'PR is no longer open');
       assert.equal(git('ls-remote', '--exit-code', 'origin', `refs/heads/${pull.head.ref}`), `${head}\trefs/heads/${pull.head.ref}`, 'live remote branch differs from the expected pushed head');
     } catch (error) { return fail(`cannot confirm no-change evidence for PR #${prNumber}: ${String(error.stderr || error.message).trim()}; run done again`); }
+    // Prepare and FILE can straddle a human merge: refresh closure immediately before the first issue mutation.
+    try {
+      const fresh = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){
+        state stateReason closedByPullRequestsReferences(first:100,includeClosedPrs:true){totalCount nodes{number state mergeCommit{oid} repository{nameWithOwner}}}}}}`,
+      { owner, name, number }).repository.issue;
+      assert.ok(fresh && ['OPEN', 'CLOSED'].includes(fresh.state), 'issue closure state is unreadable');
+      const linked = currentIssuePr(fresh);
+      assert.ok(!linked.unknown, linked.unknown);
+      if (fresh.state === 'CLOSED') {
+        assert.equal(fresh.stateReason, 'COMPLETED', 'closed issue is not confirmed completed');
+        const merged = fresh.closedByPullRequestsReferences.nodes.find(pr => pr.state === 'MERGED'
+          && pr.repository?.nameWithOwner?.toLowerCase() === project.repository.toLowerCase());
+        assert.ok(Number.isSafeInteger(merged?.number) && merged.number > 0 && /^[a-f0-9]{40}$/.test(merged.mergeCommit?.oid ?? ''), 'closed issue has no readable linked merged PR');
+        return console.log(`ALREADY DONE #${number}: closed as completed; PR #${merged.number} merged (${merged.mergeCommit.oid}); no changes`);
+      }
+      assert.equal(linked.number, prNumber, 'the open issue-linked PR changed; run done again');
+    } catch (error) { return fail(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
     restPost(`repos/${project.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## Übergabe\n\n${lines(file)}\n`);
     if (pull) execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
     writeBody(before => tickAcceptance(before));
