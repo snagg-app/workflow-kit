@@ -62,6 +62,23 @@ test('done prepares and hands off both review status schemas without rewriting t
   }
 });
 
+test('done refuses missing review options before merging, pushing or ready mutations (#593 delta)', t => {
+  const { run, file, text, json, git, checkout } = delivery(t, handoffFixture);
+  moveBase(git, checkout, { 'base.txt': 'moved base' }, { 'own.txt': 'own change' });
+  git('push', '-q', 'origin', 'work');
+  const head = git('rev-parse', 'HEAD');
+  showPr(file, json, { headRefOid: head });
+  writeFileSync(file('status-options.json'), JSON.stringify(['In progress', 'Human review']));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /Automated review.*is not an option/);
+  assert.equal(git('rev-parse', 'HEAD'), head, 'No base merge');
+  assert.equal(git('ls-remote', 'origin', 'refs/heads/work').split('\t')[0], head, 'No push');
+  assert.equal(json('pr.json').isDraft, true, 'No ready mutation');
+  for (const name of ['mutations', 'comment-writes', 'body-writes', 'affected-tests-calls']) assert.equal(text(name), '', name);
+  assert.equal(text('stored'), 'In progress', 'No status mutation');
+});
+
 // What GitHub shows of PR 7: the changes, and a head (also the one of its last commit).
 function showPr(file, json, { headRefOid, ...changes }) {
   const pr = { ...json('pr.json'), ...changes };

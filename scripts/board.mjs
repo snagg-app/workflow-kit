@@ -2818,6 +2818,8 @@ async function done() {
     set('Status', 'Human review');
     return console.log(pull ? `CLOSED PR #${prNumber} (no change); the result is in the comment on #${number}` : `DONE #${number} (no PR); the result is in the comment on #${number}`);
   }
+  // Validate the review destination before a base merge/push or ready mutation; backlinks still run after ready.
+  if (!partial) resolveOption('Status', 'Automated review');
   // The tests of a head run once: a call that only waits (after exit 4) neither repeats them nor merges a base that moved meanwhile.
   const tested = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-tested'));
   const isTested = () => existsSync(tested) && readFileSync(tested, 'utf8') === localHead();
