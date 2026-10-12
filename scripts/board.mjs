@@ -410,7 +410,8 @@ function stackBase(open, currentPrNumber) {
           if (resolved.refused) refused.push(resolved.refused);
           if (!resolved.pr) unknown.push(`PR #${member.number} at the native stack base is unreadable`);
           else {
-            const expectedBase = baseIndex === 0 ? stack.base?.ref : members[baseIndex - 1]?.head?.ref;
+            const previous = members.slice(0, baseIndex).findLast(pr => pr.state !== 'closed' || typeof pr.merged_at !== 'string');
+            const expectedBase = previous ? previous.head?.ref : stack.base?.ref;
             if (typeof expectedBase !== 'string' || typeof member.head?.ref !== 'string' || typeof member.head?.sha !== 'string') {
               unknown.push(`PR #${member.number} has incomplete native stack branch data`);
             } else if (resolved.pr.baseRefName !== expectedBase || resolved.pr.headRefName !== member.head.ref || resolved.pr.headRefOid !== member.head.sha) {
