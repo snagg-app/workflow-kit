@@ -410,9 +410,11 @@ function stackBase(open, currentPrNumber) {
           if (resolved.refused) refused.push(resolved.refused);
           if (!resolved.pr) unknown.push(`PR #${member.number} at the native stack base is unreadable`);
           else {
+            const stopped = members.slice(0, baseIndex).find(pr => pr.state === 'closed' && typeof pr.merged_at !== 'string');
             const previous = members.slice(0, baseIndex).findLast(pr => pr.state !== 'closed' || typeof pr.merged_at !== 'string');
             const expectedBase = previous ? previous.head?.ref : stack.base?.ref;
-            if (typeof expectedBase !== 'string' || typeof member.head?.ref !== 'string' || typeof member.head?.sha !== 'string') {
+            if (stopped) refused.push(`PR #${stopped.number} below it in native stack #${stack.number} closed without merge`);
+            else if (typeof expectedBase !== 'string' || typeof member.head?.ref !== 'string' || typeof member.head?.sha !== 'string') {
               unknown.push(`PR #${member.number} has incomplete native stack branch data`);
             } else if (resolved.pr.baseRefName !== expectedBase || resolved.pr.headRefName !== member.head.ref || resolved.pr.headRefOid !== member.head.sha) {
               unknown.push(`PR #${member.number} branch data changed while reading native stack #${stack.number}`);

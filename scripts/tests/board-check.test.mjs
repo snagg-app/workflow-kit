@@ -203,7 +203,10 @@ test('a native stack selects its tip for new work and the immediate lower layer 
   setStack([bottom, middle], { pull_requests: [member(bottom, { state: 'closed', merged_at: null }), member(middle)] });
   middle.baseRefName = 'release/0.1.1';
   writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
-  assert.equal(check().status, 2, 'A lower layer closed without merge does not count as merged');
+  assert.equal(check().status, 1, 'A lower layer closed without merge blocks a retargeted successor');
+  middle.baseRefName = bottom.headRefName;
+  writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
+  assert.equal(check().status, 1, 'A lower layer closed without merge blocks even when its branch still matches');
   middle.baseRefName = bottom.headRefName;
   writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
   setStack([bottom, middle]);
