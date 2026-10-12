@@ -471,7 +471,8 @@ function api(argv, input, stdout, stderr, exit) {
   }
   else if (query.includes('issue(number:$number){id parent{')) data = { repository: { issue: JSON.parse(fs.readFileSync('child.json')) } };
   else if (query.includes('fields(first:100)')) data = { node: { fields: { nodes: [{
-    id: 'F1', name: 'Status', options: ['Backlog', 'Ready', 'In progress', 'Automated review', 'Human review', 'Done'].map(name => ({ id: name, name }))
+    id: 'F1', name: 'Status', options: (fs.existsSync('status-options.json') ? JSON.parse(fs.readFileSync('status-options.json'))
+      : ['Backlog', 'Ready', 'In progress', 'Automated review', 'Human review', 'Done']).map(name => ({ id: name, name }))
   }, { id: 'F2', name: 'Priority', options: ['High', 'Low'].map(name => ({ id: name, name })) },
   { id: 'F3', name: 'Size', options: ['XS', 'S'].map(name => ({ id: name, name })) }] } } };
   else if (query.includes('search(')) {

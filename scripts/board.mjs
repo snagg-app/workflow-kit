@@ -202,6 +202,9 @@ function loadDeliveries(predecessors) {
   }
 }
 const projectItem = issue => issue.projectItems.nodes.find(item => item.project.id === project.id);
+// Existing boards use either spelling; unknown statuses keep their value and fail closed.
+const statusName = name => String(name).toLowerCase() === 'auto review' ? 'Automated review' : name;
+const projectStatus = issue => statusName(projectItem(issue)?.status?.name);
 
 // "specLabel" in the project file (default "spec") marks a spec. Only a human closes a spec or sets it to Done (AGENT_RULES.md, Hard rules).
 const specLabel = project.specLabel === undefined ? 'spec' : project.specLabel;
@@ -528,7 +531,7 @@ function startReasons(issue, session, takeover) {
 
 /** Unfinished work of the caller: rows (number, assignees, projectItems, closedByPullRequestsReferences) in In progress or Automated review that are assigned to the login and whose open PR names SESSION. */
 function ownWork(rows, login, session) {
-  return rows.filter(row => ['In progress', 'Automated review'].includes(projectItem(row)?.status?.name)
+  return rows.filter(row => ['In progress', 'Automated review'].includes(projectStatus(row))
     && row.assignees.nodes.some(assignee => assignee.login.toLowerCase() === login.toLowerCase()) && ownPr(row, session));
 }
 
@@ -550,7 +553,7 @@ function feedback(issue, login, session) {
   const events = [...(issue.comments?.nodes ?? []), ...openPrs(issue).flatMap(pr => [...(pr.comments?.nodes ?? []), ...(pr.reviews?.nodes ?? [])])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   const anchor = events.findLastIndex(event => handoffHeading.test(event.body) || replyLine.test(event.body));
-  const mention = new RegExp(`(?<![\\w-])@${RegExp.escape(login)}(?![\\w-])`, 'i'), status = projectItem(issue)?.status?.name, tracked = mine && anchor >= 0;
+  const mention = new RegExp(`(?<![\\w-])@${RegExp.escape(login)}(?![\\w-])`, 'i'), status = projectStatus(issue), tracked = mine && anchor >= 0;
   const seen = events.slice(anchor + 1).filter(event => tracked || mention.test(event.body));
   const why = [tracked && handoffHeading.test(events[anchor].body) && ['In progress', 'Automated review'].includes(status) && `back in ${status} after the handoff`,
     seen.length && (tracked ? `${seen.length} new comment(s) or review(s) since your last reply or handoff` : `mentions @${login}`)].filter(Boolean);
@@ -591,7 +594,7 @@ function mayStart(verdict) {
 
 /** Verdict inputs of one issue, shared by the issue itself and its sub-issues. */
 function issueReasons(issue) {
-  const status = projectItem(issue)?.status?.name;
+  const status = projectStatus(issue);
   const blocked = [], unknown = [];
   if (issue.state !== 'OPEN') blocked.push('issue is closed');
   if (!projectItem(issue)) unknown.push(`issue is not on ${project.url}`);
@@ -838,7 +841,7 @@ function next() {
   const held = ready.filter(issue => issue.reasons.length && !stackable.some(candidate => candidate.number === issue.number));
   // Unfinished work comes first: the own (finish it before a new start), then work that nobody moves (a stale PR, a Human-review PR with conflicts),
   // which a new session may take over (start ISSUE --session ID).
-  const status = issue => projectItem(issue)?.status?.name;
+  const status = projectStatus;
   const session = sessionOption(), mine = session ? ownWork(nodes, login, session) : [];
   const abandoned = nodes.filter(issue => ['In progress', 'Automated review', 'Human review'].includes(status(issue)) && !mine.includes(issue) && openPr(issue) && isStale(issue));
   const work = (issue, note) => `#${issue.number} [${status(issue)}] ${issue.title} (PR #${openPr(issue)?.number ?? '-'}${note ? `, ${note}` : ''})`;
@@ -888,7 +891,9 @@ function addToProject(issue) {
 /** Look up a field and option; nothing is printed or written. */
 function resolveOption(fieldName, optionName) {
   const { field, linked, choices } = selectField(fieldName);
-  const option = choices.find(choice => choice.name.toLowerCase() === String(optionName).toLowerCase());
+  const normalized = name => String(fieldName === 'Status' ? statusName(name) : name).toLowerCase();
+  const option = choices.find(choice => choice.name.toLowerCase() === String(optionName).toLowerCase())
+    ?? choices.find(choice => normalized(choice.name) === normalized(optionName));
   assert.ok(option, `${fieldName}: "${optionName}" is not an option; use one of: ${choices.map(choice => choice.name).join(', ')}`);
   return { fieldName, field, linked, option };
 }
@@ -916,7 +921,7 @@ function guardOption(issue, { fieldName, option }) {
     try { if (!mayStart(check(judged))) throw new Error(verdict.join('; ')); } finally { console.log = log; }
     if (wasDone) log(`note: #${issue.number} is open again and was Done; it moves to In progress`);
   }
-  if (fieldName === 'Status' && option.name === 'Automated review') verifyBacklinks(issue);
+  if (fieldName === 'Status' && statusName(option.name) === 'Automated review') verifyBacklinks(issue);
 }
 
 function writeOption(issue, { fieldName, field, linked, option }) {
@@ -956,7 +961,7 @@ function set(fieldName, optionName = value, beforeWrite) {
 /** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing arguments. */
 function fieldPairs() {
   const args = process.argv.slice(4).filter(arg => arg !== '--spec-review');
-  if (args[0].toLowerCase() === 'status' && args[1].toLowerCase() === 'automated review') return [args.slice(0, 2)];
+  if (args[0].toLowerCase() === 'status' && statusName(args[1]).toLowerCase() === 'automated review') return [args.slice(0, 2)];
   assert.ok(args.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
   const pairs = Array.from({ length: args.length / 2 }, (_, index) => args.slice(index * 2, index * 2 + 2));
   return pairs;
@@ -1898,7 +1903,7 @@ function tickAcceptance(text) {
 function handoffIssueReasons(issue, viewer, reviewedHead, currentPrNumber) {
   if (!mayStart(check(issue, undefined, currentPrNumber))) return;
   assert.ok(issue.id, 'Issue identity is unreadable');
-  const status = projectItem(issue)?.status?.name;
+  const status = projectStatus(issue);
   const reasons = [];
   // An upper layer may be handed off before the base is merged, but only as a layer on that base.
   // A merged base leaves a plain PR on the trunk; it still has to come from this repository and target that trunk.
@@ -2839,6 +2844,8 @@ async function done() {
     set('Status', 'Human review');
     return console.log(pull ? `CLOSED PR #${prNumber} (no change); the result is in the comment on #${number}` : `DONE #${number} (no PR); the result is in the comment on #${number}`);
   }
+  // Validate the review destination before a base merge/push or ready mutation; backlinks still run after ready.
+  if (!partial) resolveOption('Status', 'Automated review');
   // The tests of a head run once: a call that only waits (after exit 4) neither repeats them nor merges a base that moved meanwhile.
   const tested = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-tested'));
   const isTested = () => existsSync(tested) && readFileSync(tested, 'utf8') === localHead();
@@ -2891,7 +2898,7 @@ async function done() {
   if (process.exitCode) return;
   value = String(prNumber);
   delivered = [value];
-  const status = projectItem(issue)?.status?.name;
+  const status = projectStatus(issue);
   if (partial) postBacklink(number, pull.html_url);
   // A head prepared after an earlier handoff has no handoff yet: it leaves Human review.
   else if (status !== 'Automated review' && (prepare || status !== 'Human review')) set('Status', 'Automated review');

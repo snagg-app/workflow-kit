@@ -43,6 +43,42 @@ function delivery(t, fixtureOf) {
   return { run, writeIssue, head, file, text, json, git, checkout };
 }
 
+test('done prepares and hands off both review status schemas without rewriting the review option on resume (#593)', t => {
+  for (const status of ['Auto review', 'Automated review']) {
+    const { run, file, text, json } = delivery(t, handoffFixture);
+    writeFileSync(file('status-options.json'), JSON.stringify(['In progress', status, 'Human review']));
+    let result = run('done', '1');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^PREPARED #1 /m);
+    assert.equal(text('stored'), status, 'Write the existing option');
+    const mutations = text('mutations');
+    result = run('done', '1');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(text('mutations'), mutations, 'Resume must recognize the alias already stored');
+    result = run('done', '1', 'result.md');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(text('stored'), 'Human review');
+    assert.equal(json('issues-comments.json').length, 1, 'One handoff, with the existing gates');
+  }
+});
+
+test('done refuses missing review options before merging, pushing or ready mutations (#593 delta)', t => {
+  const { run, file, text, json, git, checkout } = delivery(t, handoffFixture);
+  moveBase(git, checkout, { 'base.txt': 'moved base' }, { 'own.txt': 'own change' });
+  git('push', '-q', 'origin', 'work');
+  const head = git('rev-parse', 'HEAD');
+  showPr(file, json, { headRefOid: head });
+  writeFileSync(file('status-options.json'), JSON.stringify(['In progress', 'Human review']));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /Automated review.*is not an option/);
+  assert.equal(git('rev-parse', 'HEAD'), head, 'No base merge');
+  assert.equal(git('ls-remote', 'origin', 'refs/heads/work').split('\t')[0], head, 'No push');
+  assert.equal(json('pr.json').isDraft, true, 'No ready mutation');
+  for (const name of ['mutations', 'comment-writes', 'body-writes', 'affected-tests-calls']) assert.equal(text(name), '', name);
+  assert.equal(text('stored'), 'In progress', 'No status mutation');
+});
+
 // What GitHub shows of PR 7: the changes, and a head (also the one of its last commit).
 function showPr(file, json, { headRefOid, ...changes }) {
   const pr = { ...json('pr.json'), ...changes };

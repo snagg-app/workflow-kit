@@ -3,6 +3,36 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, handoffPr, issue, predecessor, test } from './board-fixture.mjs';
 
+test('review status aliases select the live option and keep validation and backlinks (#593)', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const file = name => join(checkout, name);
+  writeIssue(issue('In progress'));
+  writeFileSync(file('pr.json'), JSON.stringify(handoffPr({ url: 'https://github.com/test/example/pull/7', body: 'Closes #1' })));
+  writeFileSync(file('backlink-1.json'), JSON.stringify({ number: 1, state: 'open', comments: 1 }));
+  writeFileSync(file('backlink-comments-1.json'), JSON.stringify([{ id: 1, body: 'https://github.com/test/example/pull/7', html_url: 'u' }]));
+  for (const options of [['Auto review'], ['Automated review'], ['Auto review', 'Automated review']]) {
+    writeFileSync(file('status-options.json'), JSON.stringify(options));
+    for (const requested of ['Auto review', 'Automated review', 'auto review']) {
+      rmSync(file('mutations'), { force: true });
+      const refused = run('field', '1', 'Status', requested);
+      assert.equal(refused.status, 2, refused.stdout + refused.stderr);
+      assert.match(refused.stdout, /needs the PR number/);
+      assert.equal(existsSync(file('mutations')), false, 'The alias must not bypass backlinks');
+      const result = run('field', '1', 'Status', requested, '7');
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      const expected = options.find(name => name.toLowerCase() === requested.toLowerCase()) ?? options[0];
+      assert.equal(readFileSync(file('stored'), 'utf8'), expected, 'Prefer the exact option when both exist');
+    }
+  }
+  for (const options of [[], ['Automatic review']]) {
+    writeFileSync(file('status-options.json'), JSON.stringify(options));
+    rmSync(file('mutations'), { force: true });
+    assert.equal(run('field', '1', 'Status', 'Automated review', '7').status, 2);
+    assert.equal(existsSync(file('mutations')), false, 'An unknown or missing option writes nothing');
+  }
+  assert.equal(run('field', '1', 'Size', 'Auto review').status, 2, 'Aliases apply only to Status');
+});
+
 test('Automated review sets the missing native link and backlink itself and refuses only when that fails', t => {
   const { checkout, run, writeIssue } = fixture(t);
   writeIssue(issue('In progress'));

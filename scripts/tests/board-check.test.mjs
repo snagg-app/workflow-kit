@@ -7,7 +7,7 @@ import { fixture, handoffPr, issue, predecessor, test } from './board-fixture.mj
 import { isolatedGit } from './fixtures.mjs';
 
 
-test('board check exits 0 only for startable issues: 1 blocked, 2 unknown', t => {
+test('board check exits 0 only for startable issues: 1 blocked, 2 unknown (#593)', t => {
   const { checkout, run, writeIssue } = fixture(t);
   const check = (...args) => { writeIssue(issue(...args)); return run('check', '1').status; };
 
@@ -15,6 +15,12 @@ test('board check exits 0 only for startable issues: 1 blocked, 2 unknown', t =>
   assert.equal(check('Ready', [predecessor('OPEN', null)]), 1);
   assert.equal(check('Ready', [predecessor('CLOSED', 'NOT_PLANNED')]), 1);
   assert.equal(check('Backlog', []), 1);
+  for (const status of ['Auto review', 'Automated review']) assert.equal(check(status, []), 0, status);
+  assert.equal(check('Automatic review', []), 2, 'An unrelated status remains unknown');
+  const missing = issue();
+  missing.projectItems.nodes[0].status = null;
+  writeIssue(missing);
+  assert.equal(run('check', '1').status, 2, 'A missing status remains unknown');
   assert.equal(check('Ready', [predecessor('CLOSED', 'COMPLETED')], 2), 2, 'Unreadable predecessors are unknown');
   assert.equal(check('Ready', [predecessor('CLOSED', null)]), 2, 'A closure without a reason is unknown');
   writeFileSync(join(checkout, 'fail'), '');
@@ -576,7 +582,7 @@ test('--cwd names the project of a command, not the working directory', t => {
 
 
 // Vaultdex #1458, #1484: drivers left issues in Automated review and started new ones.
-test('check of a new issue is BLOCKED with "finish #N first" while the own session has an unfinished issue, unless it stacks on that work', t => {
+test('check of a new issue is BLOCKED with "finish #N first" while the own session has an unfinished issue, unless it stacks on that work (#593)', t => {
   const { checkout, run, writeIssue, queries } = fixture(t);
   // The open PR of #5 is the claim of session S1.
   const own = (status, assignee = 'worker') => ({ ...issue(status), number: 5, assignees: { nodes: [{ login: assignee }] },
@@ -589,6 +595,8 @@ test('check of a new issue is BLOCKED with "finish #N first" while the own sessi
   assert.equal(blocked.status, 1, blocked.stdout);
   assert.match(blocked.stdout, /^- finish #5 first/m);
   assert.ok(queries().some(query => query.includes('search(') && query.includes('closedByPullRequestsReferences(first:10){nodes{state body ')), 'the search asks for the PR bodies, where the claims stand');
+  search(own('Auto review'));
+  assert.match(run('check', '1', '--session', 'S1').stdout, /^- finish #5 first/m, 'The alias keeps the session claim gate');
   const other = run('check', '1', '--session', 'S2');
   assert.equal(other.status, 0, `the claim of another session is not mine: ${other.stdout}`);
   search(own('Human review'));
