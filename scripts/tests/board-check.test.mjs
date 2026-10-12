@@ -190,6 +190,27 @@ test('a native stack selects its tip for new work and the immediate lower layer 
   assert.equal(atTip.status, 4, atTip.stdout + atTip.stderr);
   assert.match(atTip.stdout, /^stack base: PR #1345 in stack #88 \(branch branch-1345, base branch-1318\)/m);
 
+  // GitHub retargets the next open layer to the trunk after merging the bottom layer.
+  setStack([bottom, middle], { pull_requests: [member(bottom, { state: 'closed', merged_at: '2026-10-12T20:38:11Z' }), member(middle)] });
+  middle.baseRefName = 'release/0.1.1';
+  writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
+  const retargeted = check();
+  assert.equal(retargeted.status, 4, retargeted.stdout + retargeted.stderr);
+  assert.match(retargeted.stdout, /^stack base: PR #1345 in stack #88 \(branch branch-1345, base release\/0.1.1\)/m);
+  middle.baseRefName = 'main';
+  writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
+  assert.equal(check().status, 2, 'A mismatched base remains UNKNOWN after a lower merge');
+  setStack([bottom, middle], { pull_requests: [member(bottom, { state: 'closed', merged_at: null }), member(middle)] });
+  middle.baseRefName = 'release/0.1.1';
+  writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
+  assert.equal(check().status, 1, 'A lower layer closed without merge blocks a retargeted successor');
+  middle.baseRefName = bottom.headRefName;
+  writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
+  assert.equal(check().status, 1, 'A lower layer closed without merge blocks even when its branch still matches');
+  middle.baseRefName = bottom.headRefName;
+  writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ [middle.number]: middle }));
+  setStack([bottom, middle]);
+
   const second = predecessor('OPEN', null, [middle], { number: 776, repository: { nameWithOwner: 'test/example' } });
   writeIssue(issue('Ready', [basePredecessor, second]));
   assert.equal(check().status, 4, 'Multiple blocker PRs in one native linear stack resolve to its top');
