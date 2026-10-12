@@ -2731,15 +2731,17 @@ function start() {
   if (continued) assert.ok(continued.headRefName, 'The claimed PR branch is unreadable');
   const taken = continued?.headRefName;
   const stem = `${agent}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
+  const localBranchExists = name => {
+    try { git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`); return true; } catch { return false; }
+  };
   let branch = taken ?? stem;
-  for (let suffix = 1; !taken && workBranches(issue).includes(branch); suffix++) {
+  for (let suffix = 1; !taken && (workBranches(issue).includes(branch) || localBranchExists(branch)); suffix++) {
     branch = `${stem}-${session}${suffix === 1 ? '' : `-${suffix}`}`;
   }
   if (!taken && !workBranches(issue).includes(branch)) execFileSync(gh.file, ['issue', 'develop', String(number), '--repo', project.repository, '--name', branch, '--base', base], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
   git('fetch', 'origin');
   if (git('branch', '--show-current') !== branch) {
-    let local = true;
-    try { git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`); } catch { local = false; }
+    const local = Boolean(taken) && localBranchExists(branch);
     // --takeover (#550): the predecessor's worktree may still hold the branch; it belongs to nobody after the takeover.
     git('switch', ...takeover ? ['--ignore-other-worktrees'] : [], ...local ? [branch] : ['--track', `origin/${branch}`]);
     // The predecessor may have pushed from another clone: catch up when that is a fast-forward, else leave the branch as it is.
