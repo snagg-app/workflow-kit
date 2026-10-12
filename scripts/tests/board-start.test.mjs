@@ -19,6 +19,7 @@ test('start refuses a spec before assignment or claim writes', t => {
 function startFixture(t) {
   const { checkout, run, writeIssue, env } = fixture(t);
   env.CODEX_THREAD_ID = '';
+  env.BOARD_FIXTURE_DEVELOP_GIT = '1';
   const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
   const origin = join(dirname(checkout), 'origin.git');
   git(dirname(checkout), 'init', '-q', '--bare', origin);
@@ -28,8 +29,7 @@ function startFixture(t) {
   git(checkout, 'config', 'user.email', 't@t');
   git(checkout, 'commit', '--allow-empty', '-q', '-m', 'base');
   git(checkout, 'remote', 'add', 'origin', origin);
-  // The branch `gh issue develop` makes on GitHub.
-  git(checkout, 'push', '-q', 'origin', 'main', 'main:refs/heads/claude/1-fixture');
+  git(checkout, 'push', '-q', 'origin', 'main');
   const file = name => join(checkout, name);
   const text = name => existsSync(file(name)) ? readFileSync(file(name), 'utf8') : '';
   writeFileSync(file('handoff-fixture'), '');
@@ -88,27 +88,38 @@ test('start takes a Ready issue to a Draft PR that closes it, and the same call 
   assert.equal(JSON.parse(text('pr.json')).body, 'Closes #1\nAgent: claude, Session: S2\nMehr');
 });
 
-for (const retained of ['remote', 'local']) test(`start leaves a closed foreign Codex session ${retained} branch untouched (#588)`, t => {
+for (const retained of ['remote', 'local', 'other repository']) test(`start leaves a closed foreign Codex session ${retained} branch untouched (#588)`, t => {
   const { checkout, run, writeIssue, git, file, text, env } = startFixture(t);
   env.CODEX_THREAD_ID = 'S2';
   const oldBranch = 'codex/1-fixture', newBranch = 'codex/1-fixture-S2';
-  // The fake gh records develop; its GitHub-created branch must exist in the local bare origin.
-  git(checkout, 'push', '-q', 'origin', `main:refs/heads/${newBranch}`);
-  if (retained === 'remote') git(checkout, 'push', '-q', 'origin', `main:refs/heads/${oldBranch}`);
+  if (retained !== 'local') git(checkout, 'push', '-q', 'origin', `main:refs/heads/${oldBranch}`);
   else {
     const foreign = git(checkout, 'commit-tree', '-p', 'main', '-m', 'S1 work', 'main^{tree}');
     git(checkout, 'update-ref', `refs/heads/${oldBranch}`, foreign);
   }
   const oldHead = git(checkout, 'ls-remote', 'origin', `refs/heads/${oldBranch}`);
   const localHead = retained === 'local' ? git(checkout, 'rev-parse', `refs/heads/${oldBranch}`) : null;
-  writeFileSync(file('branches.json'), JSON.stringify(retained === 'remote' ? [oldBranch] : []));
+  // Omitted by the bounded GraphQL list: the exact remote ref must still hold this name.
+  writeFileSync(file('branches.json'), '[]');
   writeFileSync(file('branch-work.json'), JSON.stringify({ [oldBranch]: { ahead: 0 } }));
-  writeIssue({ ...issue('Ready'), closedByPullRequestsReferences: { totalCount: 1, nodes: [{
+  const linked = [{
     number: 6, state: 'CLOSED', body: 'Closes #1\nAgent: codex, Session: S1\n',
     headRefName: oldBranch, repository: { nameWithOwner: 'test/example' },
-  }] } });
+  }];
+  if (retained === 'other repository') linked.push({
+    number: 8, state: 'OPEN', body: 'Agent: codex, Session: S2\n',
+    headRefName: oldBranch, repository: { nameWithOwner: 'test/other' },
+  });
+  writeIssue({ ...issue('Ready'), closedByPullRequestsReferences: { totalCount: linked.length, nodes: linked } });
 
   const result = run('start', '1', '--session', 'S2');
+  if (retained === 'other repository') {
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /test\/other#8/);
+    assert.equal(git(checkout, 'ls-remote', 'origin', `refs/heads/${oldBranch}`), oldHead);
+    for (const name of ['develops', 'created-pr', 'stored']) assert.equal(existsSync(file(name)), false, name);
+    return;
+  }
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(git(checkout, 'branch', '--show-current'), newBranch);
   assert.equal(git(checkout, 'ls-remote', 'origin', `refs/heads/${oldBranch}`), oldHead);
@@ -144,7 +155,8 @@ test('start with a failing setup ends with an error and shows its output, claim 
 });
 
 test('start takes over a fresh PR of another session only with --takeover', t => {
-  const { run, writeIssue, file, text } = startFixture(t);
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
   const body = 'Closes #1\nAgent: claude, Session: OLD\nMehr';
   writeFileSync(file('pr.json'), JSON.stringify({ ...JSON.parse(text('pr.json')), body }));
   writeIssue({ ...issue('In progress'), updatedAt: new Date().toISOString(), closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'OPEN', body, updatedAt: new Date().toISOString(), headRefName: 'claude/1-fixture', repository: { nameWithOwner: 'test/example' } }] } });
@@ -211,6 +223,7 @@ test('start stops without a write when someone is assigned between the check and
 
 test('start names the worktree that holds its claimed branch when it cannot switch to it', t => {
   const { checkout, run, writeIssue, git } = startFixture(t);
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
   // The predecessor's worktree still has the branch checked out.
   const other = join(dirname(checkout), 'predecessor');
   git(checkout, 'worktree', 'add', '-q', '--track', '-b', 'claude/1-fixture', other, 'origin/claude/1-fixture');
@@ -226,6 +239,7 @@ test('start names the worktree that holds its claimed branch when it cannot swit
 test('start --takeover switches to a branch another worktree holds and catches up with origin', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
   const body = 'Closes #1\nAgent: claude, Session: OLD\nMehr';
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
   writeFileSync(file('pr.json'), JSON.stringify({ ...JSON.parse(text('pr.json')), body }));
   writeIssue({ ...issue('In progress'), updatedAt: new Date().toISOString(), closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'OPEN', body, updatedAt: new Date().toISOString(), headRefName: 'claude/1-fixture', repository: { nameWithOwner: 'test/example' } }] } });
   git(checkout, 'worktree', 'add', '-q', '--track', '-b', 'claude/1-fixture', join(dirname(checkout), 'predecessor'), 'origin/claude/1-fixture');

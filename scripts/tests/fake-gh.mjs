@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 
 // The fake `gh` of the board tests: what `gh api …` and `gh pr merge …` answer, read from files in the working directory
 // (the checkout of the test). board-worker.mjs hands every gh call of board.mjs to fakeGh instead of starting a process.
@@ -511,6 +512,10 @@ function pr(argv, input, stdout, stderr, exit) {
 /** gh issue develop …: the branch exists afterwards (branches.json), the call is kept in develops. */
 function issue(argv) {
   fs.appendFileSync('develops', argv.slice(2).join(' ') + '\n');
+  if (process.env.BOARD_FIXTURE_DEVELOP_GIT === '1') {
+    const name = argv[argv.indexOf('--name') + 1], base = argv[argv.indexOf('--base') + 1];
+    execFileSync('git', ['push', 'origin', `${base}:refs/heads/${name}`], { encoding: 'utf8' });
+  }
   const known = fs.existsSync('branches.json') ? JSON.parse(fs.readFileSync('branches.json')) : [];
   fs.writeFileSync('branches.json', JSON.stringify([...known, argv[argv.indexOf('--name') + 1]]));
 }

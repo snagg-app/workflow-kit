@@ -520,7 +520,7 @@ const foreignAssignees = issue => issue.assignees.nodes.map(user => user.login).
 
 /** What the open PRs, branches and assignees of an issue hold against a start by SESSION: one rule for `check` and `next`. */
 function startReasons(issue, session, takeover) {
-  if (ownPr(issue, session)) return { blocked: [], notes: [] };
+  if (session && claimOf(openPr(issue) ?? {})?.[2] === session) return { blocked: [], notes: [] };
   const found = workReasons(issue, session, takeover), others = foreignAssignees(issue);
   if (others.length && !takeover) found.blocked.push(`assigned to ${others.join(', ')}; pass --takeover to take it over`);
   return found;
@@ -2727,7 +2727,8 @@ function start() {
   const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
     : baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch);
   // Only a session claim or an allowed takeover proves branch ownership; the agent prefix does not.
-  const continued = ownPr(issue, session) ?? ((takeover || isStale(issue)) ? openPr(issue) : undefined);
+  const current = openPr(issue);
+  const continued = current && (claimOf(current)?.[2] === session || takeover || isStale(issue)) ? current : undefined;
   if (continued) assert.ok(continued.headRefName, 'The claimed PR branch is unreadable');
   const taken = continued?.headRefName;
   const stem = `${agent}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
@@ -2735,7 +2736,8 @@ function start() {
     try { git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`); return true; } catch { return false; }
   };
   let branch = taken ?? stem;
-  for (let suffix = 1; !taken && (workBranches(issue).includes(branch) || localBranchExists(branch)); suffix++) {
+  for (let suffix = 1; !taken && (workBranches(issue).includes(branch) || localBranchExists(branch)
+    || git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`)); suffix++) {
     branch = `${stem}-${session}${suffix === 1 ? '' : `-${suffix}`}`;
   }
   if (!taken && !workBranches(issue).includes(branch)) execFileSync(gh.file, ['issue', 'develop', String(number), '--repo', project.repository, '--name', branch, '--base', base], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
