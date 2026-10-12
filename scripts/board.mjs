@@ -2726,10 +2726,15 @@ function start() {
   set('Status', 'In progress');
   const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
     : baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch);
-  // An own branch of this issue is continued (a resume), a foreign one is left alone. --takeover (#560) continues the head branch of the open PR, whatever its prefix.
-  const taken = takeover ? openPr(issue)?.headRefName : undefined;
-  const branch = taken ?? workBranches(issue).find(existing => existing.startsWith(`${agent}/`))
-    ?? `${agent}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
+  // Only a session claim or an allowed takeover proves branch ownership; the agent prefix does not.
+  const continued = ownPr(issue, session) ?? ((takeover || isStale(issue)) ? openPr(issue) : undefined);
+  if (continued) assert.ok(continued.headRefName, 'The claimed PR branch is unreadable');
+  const taken = continued?.headRefName;
+  const stem = `${agent}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
+  let branch = taken ?? stem;
+  for (let suffix = 1; !taken && workBranches(issue).includes(branch); suffix++) {
+    branch = `${stem}-${session}${suffix === 1 ? '' : `-${suffix}`}`;
+  }
   if (!taken && !workBranches(issue).includes(branch)) execFileSync(gh.file, ['issue', 'develop', String(number), '--repo', project.repository, '--name', branch, '--base', base], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
   git('fetch', 'origin');
   if (git('branch', '--show-current') !== branch) {

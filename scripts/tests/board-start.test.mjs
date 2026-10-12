@@ -36,7 +36,7 @@ function startFixture(t) {
   writeFileSync(file('pr.json'), JSON.stringify(handoffPr({ id: 'PR7', isDraft: true, linkPages: [[]], url: 'https://github.com/test/example/pull/7' })));
   writeFileSync(file('backlink-1.json'), JSON.stringify({ number: 1, state: 'open', comments: 0 }));
   writeFileSync(file('backlink-comments-1.json'), '[]');
-  return { checkout, run, writeIssue, git, file, text };
+  return { checkout, run, writeIssue, git, file, text, env };
 }
 
 test('start takes a Ready issue to a Draft PR that closes it, and the same call resumes', t => {
@@ -69,7 +69,7 @@ test('start takes a Ready issue to a Draft PR that closes it, and the same call 
   // The same call again: the issue now has its PR, claim and branch, so nothing is created twice.
   rmSync(file('created-pr'));
   const developed = text('develops'), comments = JSON.parse(text('backlink-comments-1.json')).length;
-  const openPr = body => writeIssue({ ...JSON.parse(text('issue.json')), closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'OPEN', body, repository: { nameWithOwner: 'test/example' } }] } });
+  const openPr = body => writeIssue({ ...JSON.parse(text('issue.json')), closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'OPEN', body, headRefName: 'claude/1-fixture', repository: { nameWithOwner: 'test/example' } }] } });
   openPr('Closes #1\nAgent: claude, Session: S1\n');
   result = run('start', '1', '--session', 'S1');
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -86,6 +86,29 @@ test('start takes a Ready issue to a Draft PR that closes it, and the same call 
   result = run('start', '1', '--session', 'S2');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(JSON.parse(text('pr.json')).body, 'Closes #1\nAgent: claude, Session: S2\nMehr');
+});
+
+test('start leaves a closed foreign Codex session branch untouched (#588)', t => {
+  const { checkout, run, writeIssue, git, file, text, env } = startFixture(t);
+  env.CODEX_THREAD_ID = 'S2';
+  const oldBranch = 'codex/1-fixture', newBranch = 'codex/1-fixture-S2';
+  // The fake gh records develop; its GitHub-created branch must exist in the local bare origin.
+  git(checkout, 'push', '-q', 'origin', `main:refs/heads/${oldBranch}`, `main:refs/heads/${newBranch}`);
+  const oldHead = git(checkout, 'ls-remote', 'origin', `refs/heads/${oldBranch}`);
+  writeFileSync(file('branches.json'), JSON.stringify([oldBranch]));
+  writeFileSync(file('branch-work.json'), JSON.stringify({ [oldBranch]: { ahead: 0 } }));
+  writeIssue({ ...issue('Ready'), closedByPullRequestsReferences: { totalCount: 1, nodes: [{
+    number: 6, state: 'CLOSED', body: 'Closes #1\nAgent: codex, Session: S1\n',
+    headRefName: oldBranch, repository: { nameWithOwner: 'test/example' },
+  }] } });
+
+  const result = run('start', '1', '--session', 'S2');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(checkout, 'branch', '--show-current'), newBranch);
+  assert.equal(git(checkout, 'ls-remote', 'origin', `refs/heads/${oldBranch}`), oldHead);
+  assert.equal(git(checkout, 'rev-list', '--count', `origin/main..origin/${newBranch}`), '1');
+  assert.match(text('develops'), /--name codex\/1-fixture-S2 --base main/);
+  assert.ok(text('created-pr').includes('Agent: codex, Session: S2\n'));
 });
 
 for (const [setup, expected] of [[undefined, ''], ['echo "setup on $BRANCH" > setup-ran', 'setup on claude/1-fixture']]) {
