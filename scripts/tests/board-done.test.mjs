@@ -192,6 +192,59 @@ test('done without a handoff file prepares: tests, ready, Automated review, then
   assert.equal(text('stored'), 'Automated review', 'the new head leaves Human review');
 });
 
+test('done can explicitly skip local tests through preparation and handoff without a tested marker', t => {
+  const { run, head, text, json, file } = delivery(t, handoffFixture);
+  const reason = 'Historical proof unchanged after base merge';
+  const prepared = run('done', '1', '--skip-local-tests', reason);
+  assert.equal(prepared.status, 0, prepared.stdout + prepared.stderr);
+  assert.match(prepared.stdout, new RegExp(`LOCAL TESTS SKIPPED ${head}: ${reason}`));
+  assert.match(prepared.stdout, /PREPARED.*local tests skipped/);
+  assert.equal(text('affected-tests-calls'), '');
+  assert.equal(existsSync(file('.git/board-done-tested')), false);
+  assert.equal(json('pr.json').isDraft, false);
+  assert.equal(text('stored'), 'Automated review');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+  const delivered = run('done', '1', 'result.md', '--skip-local-tests', reason);
+  assert.equal(delivered.status, 0, delivered.stdout + delivered.stderr);
+  assert.equal(text('stored'), 'Human review');
+  assert.equal(text('affected-tests-calls'), '');
+  assert.equal(existsSync(file('.git/board-done-tested')), false);
+  assert.match(json('issues-comments.json').at(-1).body, new RegExp(`Head: ${head.slice(0, 7)}`));
+});
+
+test('done skip preserves an old tested SHA and still refuses failed CI on the new head', t => {
+  const { run, head, text, json, file, git } = delivery(t, handoffFixture);
+  writeFileSync(file('.git/board-done-tested'), head);
+  git('commit', '--allow-empty', '-q', '-m', 'new head');
+  git('push', '-q', 'origin', 'work');
+  const later = git('rev-parse', 'HEAD');
+  assert.notEqual(later, head);
+  showPr(file, json, { headRefOid: later });
+  const pr = json('pr.json');
+  pr.commits.nodes[0].commit.statusCheckRollup.contexts.nodes = [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }];
+  writeFileSync(file('pr.json'), JSON.stringify(pr));
+  const result = run('done', '1', 'result.md', '--skip-local-tests', 'No local repeat');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(text('.git/board-done-tested'), head);
+  assert.equal(text('affected-tests-calls'), '');
+  assert.equal(text('stored'), 'Automated review');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
+});
+
+for (const reason of [[], [''], ['  '], ['--refs']]) test(`done refuses invalid skip reason ${JSON.stringify(reason)} before mutations`, t => {
+  const { run, head, text, json, file, git } = delivery(t, handoffFixture);
+  const result = run('done', '1', 'result.md', '--skip-local-tests', ...reason);
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /--skip-local-tests needs a non-empty reason/);
+  assert.equal(git('rev-parse', 'HEAD'), head);
+  assert.equal(text('affected-tests-calls'), '');
+  assert.equal(text('stored'), 'In progress');
+  assert.equal(json('pr.json').isDraft, true);
+  for (const name of ['mutations', 'comment-writes', 'body-writes', '.git/board-done-tested']) assert.equal(existsSync(file(name)), false, name);
+});
+
 test('done without a handoff file keeps the waiting and failure codes of the review', t => {
   const { run, file, json, text } = delivery(t, handoffFixture);
   const pr = json('pr.json'), checks = conclusion => { pr.commits.nodes[0].commit.statusCheckRollup.contexts.nodes = [{ __typename: 'CheckRun', name: 'CI', status: conclusion ? 'COMPLETED' : 'IN_PROGRESS', conclusion }]; writeFileSync(file('pr.json'), JSON.stringify(pr)); };
