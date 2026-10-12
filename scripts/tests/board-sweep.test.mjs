@@ -3,6 +3,16 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, issue, test } from './board-fixture.mjs';
 
+test('sweep writes the Auto review option for a conflicting Human-review PR (#593)', t => {
+  const { checkout, run } = fixture(t);
+  writeFileSync(join(checkout, 'status-options.json'), JSON.stringify(['Human review', 'Auto review']));
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([{ ...issue('Human review'), closedByPullRequestsReferences: { totalCount: 1,
+    nodes: [{ number: 70, url: 'https://github.com/test/example/pull/70', state: 'OPEN', baseRefName: 'main', mergeStateStatus: 'DIRTY', repository: { nameWithOwner: 'test/example' } }] } }]));
+  const result = run('sweep');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(join(checkout, 'stored'), 'utf8'), 'Auto review');
+});
+
 test('sweep leaves a conflicting spec untouched, including a spec beyond the first label page', t => {
   const { checkout, run } = fixture(t);
   const first = Array.from({ length: 20 }, (_, index) => ({ name: 'label-' + index }));

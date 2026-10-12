@@ -43,6 +43,25 @@ function delivery(t, fixtureOf) {
   return { run, writeIssue, head, file, text, json, git, checkout };
 }
 
+test('done prepares and hands off both review status schemas without rewriting the review option on resume (#593)', t => {
+  for (const status of ['Auto review', 'Automated review']) {
+    const { run, file, text, json } = delivery(t, handoffFixture);
+    writeFileSync(file('status-options.json'), JSON.stringify(['In progress', status, 'Human review']));
+    let result = run('done', '1');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(result.stdout, /^PREPARED #1 /m);
+    assert.equal(text('stored'), status, 'Write the existing option');
+    const mutations = text('mutations');
+    result = run('done', '1');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(text('mutations'), mutations, 'Resume must recognize the alias already stored');
+    result = run('done', '1', 'result.md');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(text('stored'), 'Human review');
+    assert.equal(json('issues-comments.json').length, 1, 'One handoff, with the existing gates');
+  }
+});
+
 // What GitHub shows of PR 7: the changes, and a head (also the one of its last commit).
 function showPr(file, json, { headRefOid, ...changes }) {
   const pr = { ...json('pr.json'), ...changes };
