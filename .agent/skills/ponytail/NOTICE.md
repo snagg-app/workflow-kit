@@ -1,7 +1,7 @@
 # Ponytail provenance
 
 The six sibling `ponytail*` skill packages and shared `.agents/hooks/ponytail-*.js` derive from
-[DietrichGebert/ponytail 4.10.3](https://github.com/DietrichGebert/ponytail/tree/v4.10.3),
+[DietrichGebert/ponytail 5.2.0](https://github.com/DietrichGebert/ponytail/tree/v5.2.0),
 the pinned `.vendor/ponytail` submodule.
 Copyright (c) 2026 DietrichGebert; [MIT license](LICENSE.md) applies to all skills and hooks.
 

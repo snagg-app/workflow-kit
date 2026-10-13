@@ -13,7 +13,7 @@ const git = (process.env.PATH || '').split(path.delimiter).filter(path.isAbsolut
   .map(directory => path.join(directory, windows ? 'git.exe' : 'git')).find(existsSync);
 // Deadlines only catch hung hooks; they must not measure speed on slow shared runners.
 const hookTimeout = Number(process.env.WORKFLOW_KIT_HOOK_TIMEOUT_MS) || 30_000;
-const version = '4.10.3-1';
+const version = '5.2.0-1';
 
 test('installed hooks run every manifest command without executing checkout programs', async t => {
   assert.ok(git, 'Git must be available on an absolute PATH');
@@ -140,26 +140,33 @@ test('adapted hooks preserve explicit host and checkout state and drain stdout o
   const otherCheckout = path.join(temp, 'other-checkout');
   mkdirSync(path.join(otherCheckout, '.git'), { recursive: true });
   assert.equal(activate(otherCheckout, 'claude', {}, 'continue'), '', 'Other checkout has no mode');
-  activate(checkout, 'codex');
-  for (const hook of ['mode-tracker', 'subagent']) for (const eof of [true, false]) {
-    const output = await new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [path.join(snapshot, `ponytail-${hook}.js`), 'codex'],
-        { cwd: checkout, env: { ...env, PONYTAIL_SUBAGENT_MATCHER: '^worker$' } });
-      const deadline = setTimeout(() => { child.kill(); reject(new Error(`${hook}: stdin hang`)); }, hookTimeout);
-      let stdout = '', stderr = '';
-      child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
-      child.stdout.on('data', chunk => { stdout += chunk; });
-      child.stderr.on('data', chunk => { stderr += chunk; });
-      child.on('error', error => { clearTimeout(deadline); reject(error); });
-      child.on('close', code => {
-        clearTimeout(deadline);
-        code === 0 ? resolve(stdout) : reject(new Error(`${hook}: ${code} ${stderr}`));
+  for (const host of ['codex', 'copilot']) {
+    activate(checkout, host);
+    for (const hook of ['mode-tracker', 'subagent']) for (const eof of [true, false]) {
+      const output = await new Promise((resolve, reject) => {
+        const child = spawn(process.execPath, [path.join(snapshot, `ponytail-${hook}.js`), host],
+          { cwd: checkout, env: { ...env, PONYTAIL_SUBAGENT_MATCHER: '^worker$' } });
+        const deadline = setTimeout(() => { child.kill(); reject(new Error(`${hook}: stdin hang`)); }, hookTimeout);
+        let stdout = '', stderr = '';
+        child.stdout.setEncoding('utf8'); child.stderr.setEncoding('utf8');
+        child.stdout.on('data', chunk => { stdout += chunk; });
+        child.stderr.on('data', chunk => { stderr += chunk; });
+        child.on('error', error => { clearTimeout(deadline); reject(error); });
+        child.on('close', code => {
+          clearTimeout(deadline);
+          code === 0 ? resolve(stdout) : reject(new Error(`${hook}: ${code} ${stderr}`));
+        });
+        const input = JSON.stringify(hook === 'mode-tracker' ? { prompt: '/ponytail lite' } : { agentName: 'worker' });
+        if (eof) child.stdin.end(input); else child.stdin.write(input);
       });
-      const input = JSON.stringify(hook === 'mode-tracker' ? { prompt: '/ponytail lite' } : { agentName: 'worker' });
-      if (eof) child.stdin.end(input); else child.stdin.write(input);
-    });
-    const parsed = JSON.parse(output);
-    assert.equal(parsed.hookSpecificOutput.hookEventName, hook === 'mode-tracker' ? 'UserPromptSubmit' : 'SubagentStart');
-    assert.ok(parsed.hookSpecificOutput.additionalContext.endsWith('lite:' + rules), `${hook} eof=${eof}: complete rules`);
+      const parsed = JSON.parse(output);
+      if (host === 'codex') {
+        assert.equal(parsed.hookSpecificOutput.hookEventName, hook === 'mode-tracker' ? 'UserPromptSubmit' : 'SubagentStart');
+        assert.ok(parsed.hookSpecificOutput.additionalContext.endsWith('lite:' + rules), `${hook} eof=${eof}: complete rules`);
+      } else {
+        assert.equal(Boolean(parsed.additionalContext), hook === 'subagent', 'Copilot receives supported subagent context');
+        if (hook === 'subagent') assert.equal(parsed.additionalContext, 'lite:' + rules, `Copilot eof=${eof}: complete rules`);
+      }
+    }
   }
 });
