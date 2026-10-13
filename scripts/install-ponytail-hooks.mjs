@@ -7,7 +7,7 @@ import path from 'node:path';
 import { projectRoot } from './checkout-root.mjs';
 
 const root = projectRoot();
-const version = '4.10.3-1';
+const version = '5.2.0-1';
 const destination = path.join(homedir(), '.ponytail', 'vaultdex', version);
 const insideCheckout = directory => {
   for (;; directory = path.dirname(directory)) {

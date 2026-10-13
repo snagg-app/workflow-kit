@@ -1,8 +1,8 @@
 diff --git a/hooks/ponytail-activate.js b/hooks/ponytail-activate.js
-index 93510ce..432a6ba 100644
+index 3680e2e..432a6ba 100644
 --- a/hooks/ponytail-activate.js
 +++ b/hooks/ponytail-activate.js
-@@ -3,13 +3,10 @@
+@@ -3,14 +3,10 @@
  // Grok, CodeBuddy and Cursor sessionStart)
  //
  // Runs on every session start:
@@ -13,158 +13,222 @@ index 93510ce..432a6ba 100644
  
 -const fs = require('fs');
 -const path = require('path');
+-const { execFileSync } = require('child_process');
 -const { getDefaultMode, getClaudeDir, isShellSafe } = require('./ponytail-config');
 +const { getDefaultMode } = require('./ponytail-config');
  const { getPonytailInstructions } = require('./ponytail-instructions');
  const {
    clearMode,
-@@ -19,19 +16,20 @@ const {
-   isCodex,
-   isCopilot,
-   isCursor,
-+  readMode,
-   setMode,
+@@ -25,176 +21,46 @@ const {
    writeHookOutput,
  } = require('./ponytail-runtime');
  
 -const claudeDir = getClaudeDir();
 -const settingsPath = path.join(claudeDir, 'settings.json');
  
--const mode = getDefaultMode();
+-function activate(mode) {
+-  // "off" mode — skip activation entirely, don't write flag or emit rules
+-  if (mode === 'off') {
+-    clearMode();
+-    process.exit(0);
+-  }
+-
+-  // Cursor with the always-on rule in the workspace: the rule already carries the
+-  // ruleset and would contradict any other level, so leave the flag alone and
+-  // hand the model a one-line notice instead of a second copy (#817).
+-  if (isCursor) {
+-    const rule = cursorRulePath();
+-    if (rule) {
+-      try {
+-        writeHookOutput('SessionStart', mode, cursorRuleNotice(rule));
+-      } catch (e) {
+-        // Silent fail — stdout closed/EPIPE at hook exit must not surface as a hook failure
+-      }
+-      process.exit(0);
+-    }
+-  }
+-
+-  // 1. Write flag file
+-  try {
+-    setMode(mode);
+-  } catch (e) {
+-    // Silent fail -- flag is best-effort, don't block the hook
+-  }
+-
+-  // 2. Emit the ponytail ruleset, filtered to the active intensity level.
+-  let output = getPonytailInstructions(mode);
+-
+-  // 2b. Codebase map: what already exists, so "reuse first" costs no search. Fail open: a map
+-  // that cannot be built must never block or slow the session start.
+-  if (mode !== 'review' && process.env.PONYTAIL_MAP !== '0') try {
+-    const map = execFileSync(process.execPath, [path.join(__dirname, 'ponytail-map.js')], {
+-      encoding: 'utf8', timeout: 1000, maxBuffer: 64 * 1024, stdio: ['ignore', 'pipe', 'ignore'],
+-    }).trimEnd();
+-    if (map) output += '\n\n' + map;
+-  } catch (e) { /* no map */ }
+-
+-  // 3. Detect missing statusline config — nudge Claude to help set it up
+-  if (!isCodex && !isCopilot && !isCursor && !isCodeBuddy) try {
+-    const isWindows = process.platform === 'win32';
+-    let statusCommand = null;
+-    if (fs.existsSync(settingsPath)) {
+-      // Strip UTF-8 BOM some editors prepend on Windows (breaks JSON.parse)
+-      const raw = fs.readFileSync(settingsPath, 'utf8').replace(/^\uFEFF/, '');
+-      const settings = JSON.parse(raw);
+-      if (settings.statusLine) {
+-        statusCommand = String(settings.statusLine.command || '');
+-      }
+-    }
 +// Native matcher groups pass this flag for resume/compact (and Claude forks).
 +// No stdin read: activation must also work when the host leaves its pipe open.
 +const mode = process.argv[3] === 'continue' ? readMode() || 'off' : getDefaultMode();
  
- // "off" mode — skip activation entirely, don't write flag or emit rules
- if (mode === 'off') {
-   clearMode();
--  process.exit(0);
+-    // A statusLine already set up before #1032 can still run a script from a
+-    // plugin version that has since been deleted. Only absolute paths are checked,
+-    // so ~ or $HOME forms are never mistaken for missing files.
+-    const ref = statusCommand &&
+-      statusCommand.match(/"([^"]*ponytail-statusline\.(?:sh|ps1))"|(\S*ponytail-statusline\.(?:sh|ps1))/);
+-    const refPath = ref ? (ref[1] || ref[2]) : null;
+-    // isShellSafe keeps quotes, newlines and shell metacharacters from
+-    // settings.json out of the model context.
+-    // On Windows only drive-letter or UNC paths count: a Git Bash path such as
+-    // /c/Users/... is absolute to Node but does not resolve, so it would be
+-    // flagged as broken while it works.
+-    const checkable = refPath && isShellSafe(refPath) && path.isAbsolute(refPath) &&
+-      (!isWindows || /^([A-Za-z]:[\\/]|\\\\)/.test(refPath));
+-    const stalePath = checkable && !fs.existsSync(refPath) ? refPath : null;
+-
+-    // The plugin root is a versioned cache dir (.../ponytail/4.12.0/) that Claude
+-    // Code deletes on update, so a statusLine pointing into it goes blank after the
+-    // next update (#1032). Point it at a copy in the config dir instead. A statusLine
+-    // that already runs ponytail keeps its script type, so its copy stays fresh.
+-    const usePs1 = refPath ? refPath.endsWith('.ps1') : isWindows;
+-    const scriptName = usePs1 ? 'ponytail-statusline.ps1' : 'ponytail-statusline.sh';
+-    const scriptPath = path.join(claudeDir, scriptName);
+-
+-    // Nudge at most once — the flag file marks that the user has already seen
+-    // (and implicitly declined) the statusline setup offer. Repeating it every
+-    // session start turns a helpful hint into a nag. A broken path is nudged once
+-    // per path: the flag records it.
+-    const nudgeFlagPath = path.join(claudeDir, '.ponytail-statusline-nudged');
+-    let nudged = null;
+-    try { nudged = fs.readFileSync(nudgeFlagPath, 'utf8'); } catch (e) { /* not nudged yet */ }
+-    const nudge = stalePath ? nudged !== stalePath : statusCommand === null && nudged === null;
+-
+-    // Refresh the copy every session so script fixes ship with plugin updates.
+-    // Copy to a new temp file, then rename: the rename replaces a symlink at
+-    // scriptPath instead of writing through it, and a concurrent session never
+-    // runs a half-written script.
+-    if (nudge || fs.existsSync(scriptPath)) {
+-      const tmpPath = scriptPath + '.' + process.pid + '.tmp';
+-      try {
+-        fs.copyFileSync(path.join(__dirname, scriptName), tmpPath, fs.constants.COPYFILE_EXCL);
+-        fs.chmodSync(tmpPath, 0o644);
+-        fs.renameSync(tmpPath, scriptPath);
+-      } finally {
+-        try { fs.unlinkSync(tmpPath); } catch (e) { /* renamed */ }
+-      }
+-    }
++// "off" mode — skip activation entirely, don't write flag or emit rules
++if (mode === 'off') {
++  clearMode();
 +  return;
- }
++}
  
- // Cursor with the always-on rule in the workspace: the rule already carries the
-@@ -45,7 +43,7 @@ if (isCursor) {
-     } catch (e) {
-       // Silent fail — stdout closed/EPIPE at hook exit must not surface as a hook failure
+-    if (nudge) {
+-      try { fs.writeFileSync(nudgeFlagPath, stalePath || ''); } catch (e) { /* best-effort */ }
+-      if (stalePath) {
+-        output += "\n\n" +
+-          "STATUSLINE BROKEN: The statusLine in " + settingsPath + " runs " + stalePath +
+-          ", which no longer exists (the ponytail plugin was updated and its old version removed), " +
+-          "so the ponytail badge is blank. Replace that path with " + scriptPath + ", which survives updates, " +
+-          "quoting it for your shell. Keep the rest of the command. " +
+-          "Proactively offer to fix this for the user on first interaction.";
+-      } else if (isShellSafe(scriptPath)) {
+-        const command = isWindows
+-          ? `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
+-          : `bash "${scriptPath}"`;
+-        const statusLineSnippet =
+-          '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
+-        output += "\n\n" +
+-          "STATUSLINE SETUP NEEDED: The ponytail plugin includes a statusline badge showing active mode " +
+-          "(e.g. [PONYTAIL], [PONYTAIL:ULTRA]). It is not configured yet. " +
+-          "To enable, add this to " + settingsPath + ": " +
+-          statusLineSnippet + " " +
+-          "Proactively offer to set this up for the user on first interaction.";
+-      } else {
+-        // ponytail: config dir path has shell metacharacters; don't embed it in a
+-        // command snippet; have the agent wire it up by hand instead.
+-        output += "\n\n" +
+-          "STATUSLINE SETUP NEEDED: The ponytail plugin includes a statusline badge showing active mode. " +
+-          "Its path contains characters unsafe to embed in a shell command, so configure it manually: " +
+-          "add a statusLine command of type \"command\" that runs " + scriptName +
+-          " from " + claudeDir + " to " + settingsPath + ", quoting/escaping the path for your shell. " +
+-          "Proactively offer to set this up for the user on first interaction.";
+-      }
++// Cursor with the always-on rule in the workspace: the rule already carries the
++// ruleset and would contradict any other level, so leave the flag alone and
++// hand the model a one-line notice instead of a second copy (#817).
++if (isCursor) {
++  const rule = cursorRulePath();
++  if (rule) {
++    try {
++      writeHookOutput('SessionStart', mode, cursorRuleNotice(rule));
++    } catch (e) {
++      // Silent fail — stdout closed/EPIPE at hook exit must not surface as a hook failure
      }
--    process.exit(0);
+-  } catch (e) {
+-    // Silent fail — don't block session start over statusline detection
 +    return;
    }
++}
+ 
+-  try {
+-    writeHookOutput('SessionStart', mode, output);
+-  } catch (e) {
+-    // Silent fail — stdout closed/EPIPE at hook exit must not surface as a hook failure
+-  }
++// 1. Write flag file
++try {
++  setMode(mode);
++} catch (e) {
++  // Silent fail -- flag is best-effort, don't block the hook
  }
  
-@@ -57,110 +55,9 @@ try {
- }
- 
- // 2. Emit the ponytail ruleset, filtered to the active intensity level.
--let output = getPonytailInstructions(mode);
+-// Compaction re-runs SessionStart inside the same conversation, so it keeps the
+-// live level (or stays off after "stop ponytail") instead of resetting to the
+-// default. Claude Code and Codex pass the trigger as `source` on stdin; reading
+-// it there keeps the hook entry, and the trust Codex gave it, unchanged.
+-let input = '';
+-let done = false;
++// 2. Emit the ponytail ruleset, filtered to the active intensity level.
 +const output = getPonytailInstructions(mode);
  
--// 2b. Codebase map: what already exists, so "reuse first" costs no search. Fail open: a map
--// that cannot be built must never block or slow the session start.
--if (mode !== 'review' && process.env.PONYTAIL_MAP !== '0') try {
--  const map = require('./ponytail-map').buildMap(process.cwd());
--  if (map) output += '\n\n' + map;
--} catch (e) { /* no map */ }
--
--// 3. Detect missing statusline config — nudge Claude to help set it up
--if (!isCodex && !isCopilot && !isCursor && !isCodeBuddy) try {
--  const isWindows = process.platform === 'win32';
--  let statusCommand = null;
--  if (fs.existsSync(settingsPath)) {
--    // Strip UTF-8 BOM some editors prepend on Windows (breaks JSON.parse)
--    const raw = fs.readFileSync(settingsPath, 'utf8').replace(/^\uFEFF/, '');
--    const settings = JSON.parse(raw);
--    if (settings.statusLine) {
--      statusCommand = String(settings.statusLine.command || '');
--    }
+-function finish() {
+-  if (done) return;
+-  done = true;
+-  let source = '';
+-  try {
+-    // Strip UTF-8 BOM some shells prepend when piping (breaks JSON.parse)
+-    source = JSON.parse(input.replace(/^\uFEFF/, '')).source;
+-  } catch (e) {
+-    // No payload, or an unparseable one: treat it as a fresh session
 -  }
--
--  // A statusLine already set up before #1032 can still run a script from a
--  // plugin version that has since been deleted. Only absolute paths are checked,
--  // so ~ or $HOME forms are never mistaken for missing files.
--  const ref = statusCommand &&
--    statusCommand.match(/"([^"]*ponytail-statusline\.(?:sh|ps1))"|(\S*ponytail-statusline\.(?:sh|ps1))/);
--  const refPath = ref ? (ref[1] || ref[2]) : null;
--  // isShellSafe keeps quotes, newlines and shell metacharacters from
--  // settings.json out of the model context.
--  // On Windows only drive-letter or UNC paths count: a Git Bash path such as
--  // /c/Users/... is absolute to Node but does not resolve, so it would be
--  // flagged as broken while it works.
--  const checkable = refPath && isShellSafe(refPath) && path.isAbsolute(refPath) &&
--    (!isWindows || /^([A-Za-z]:[\\/]|\\\\)/.test(refPath));
--  const stalePath = checkable && !fs.existsSync(refPath) ? refPath : null;
--
--  // The plugin root is a versioned cache dir (.../ponytail/4.12.0/) that Claude
--  // Code deletes on update, so a statusLine pointing into it goes blank after the
--  // next update (#1032). Point it at a copy in the config dir instead. A statusLine
--  // that already runs ponytail keeps its script type, so its copy stays fresh.
--  const usePs1 = refPath ? refPath.endsWith('.ps1') : isWindows;
--  const scriptName = usePs1 ? 'ponytail-statusline.ps1' : 'ponytail-statusline.sh';
--  const scriptPath = path.join(claudeDir, scriptName);
--
--  // Nudge at most once — the flag file marks that the user has already seen
--  // (and implicitly declined) the statusline setup offer. Repeating it every
--  // session start turns a helpful hint into a nag. A broken path is nudged once
--  // per path: the flag records it.
--  const nudgeFlagPath = path.join(claudeDir, '.ponytail-statusline-nudged');
--  let nudged = null;
--  try { nudged = fs.readFileSync(nudgeFlagPath, 'utf8'); } catch (e) { /* not nudged yet */ }
--  const nudge = stalePath ? nudged !== stalePath : statusCommand === null && nudged === null;
--
--  // Refresh the copy every session so script fixes ship with plugin updates.
--  // Copy to a new temp file, then rename: the rename replaces a symlink at
--  // scriptPath instead of writing through it, and a concurrent session never
--  // runs a half-written script.
--  if (nudge || fs.existsSync(scriptPath)) {
--    const tmpPath = scriptPath + '.' + process.pid + '.tmp';
--    try {
--      fs.copyFileSync(path.join(__dirname, scriptName), tmpPath, fs.constants.COPYFILE_EXCL);
--      fs.chmodSync(tmpPath, 0o644);
--      fs.renameSync(tmpPath, scriptPath);
--    } finally {
--      try { fs.unlinkSync(tmpPath); } catch (e) { /* renamed */ }
--    }
--  }
--
--  if (nudge) {
--    try { fs.writeFileSync(nudgeFlagPath, stalePath || ''); } catch (e) { /* best-effort */ }
--    if (stalePath) {
--      output += "\n\n" +
--        "STATUSLINE BROKEN: The statusLine in " + settingsPath + " runs " + stalePath +
--        ", which no longer exists (the ponytail plugin was updated and its old version removed), " +
--        "so the ponytail badge is blank. Replace that path with " + scriptPath + ", which survives updates, " +
--        "quoting it for your shell. Keep the rest of the command. " +
--        "Proactively offer to fix this for the user on first interaction.";
--    } else if (isShellSafe(scriptPath)) {
--      const command = isWindows
--        ? `powershell -ExecutionPolicy Bypass -File "${scriptPath}"`
--        : `bash "${scriptPath}"`;
--      const statusLineSnippet =
--        '"statusLine": { "type": "command", "command": ' + JSON.stringify(command) + ' }';
--      output += "\n\n" +
--        "STATUSLINE SETUP NEEDED: The ponytail plugin includes a statusline badge showing active mode " +
--        "(e.g. [PONYTAIL], [PONYTAIL:ULTRA]). It is not configured yet. " +
--        "To enable, add this to " + settingsPath + ": " +
--        statusLineSnippet + " " +
--        "Proactively offer to set this up for the user on first interaction.";
--    } else {
--      // ponytail: config dir path has shell metacharacters; don't embed it in a
--      // command snippet; have the agent wire it up by hand instead.
--      output += "\n\n" +
--        "STATUSLINE SETUP NEEDED: The ponytail plugin includes a statusline badge showing active mode. " +
--        "Its path contains characters unsafe to embed in a shell command, so configure it manually: " +
--        "add a statusLine command of type \"command\" that runs " + scriptName +
--        " from " + claudeDir + " to " + settingsPath + ", quoting/escaping the path for your shell. " +
--        "Proactively offer to set this up for the user on first interaction.";
--    }
--  }
--} catch (e) {
--  // Silent fail — don't block session start over statusline detection
+-  activate(source === 'compact' ? (readMode() || 'off') : getDefaultMode());
 -}
 +// Vaultdex: no global statusline setup, personal-settings reads or codebase map (the kit packages no ponytail-map.js).
  
- try {
-   writeHookOutput('SessionStart', mode, output);
+-process.stdin.on('data', chunk => { input += chunk; });
+-// Never hang the session start (#443, #790): like the mode tracker, recover on a
+-// stdin error or after a short ref'd fallback, and start at the default level.
+-process.stdin.on('end', () => { finish(); process.exit(0); });
+-process.stdin.on('error', () => { finish(); process.exit(0); });
+-setTimeout(() => { finish(); process.exit(0); }, 1000);
++try {
++  writeHookOutput('SessionStart', mode, output);
++} catch (e) {
++  // Silent fail — stdout closed/EPIPE at hook exit must not surface as a hook failure
++}
 diff --git a/hooks/ponytail-mode-tracker.js b/hooks/ponytail-mode-tracker.js
 index 161a726..1cf96fa 100644
 --- a/hooks/ponytail-mode-tracker.js
@@ -203,11 +267,15 @@ index 161a726..1cf96fa 100644
 +// Keep fallback alive for stuck stdin; normal EOF cancels it.
 +const fallback = setTimeout(finishInput, 1000);
 diff --git a/hooks/ponytail-runtime.js b/hooks/ponytail-runtime.js
-index 19b332a..0652743 100644
+index 27e9cee..82241ae 100644
 --- a/hooks/ponytail-runtime.js
 +++ b/hooks/ponytail-runtime.js
-@@ -5,6 +5,10 @@ const { createHash } = require('crypto');
- const { getClaudeDir, getConfigDir } = require('./ponytail-config');
+@@ -2,9 +2,13 @@ const fs = require('fs');
+ const path = require('path');
+ const os = require('os');
+ const { createHash } = require('crypto');
+-const { getClaudeDir, getQoderDir } = require('./ponytail-config');
++const { getClaudeDir, getConfigDir, getQoderDir } = require('./ponytail-config');
  
  const STATE_FILE = '.ponytail-active';
 +// Project hooks do not receive plugin data variables; an explicit host also
@@ -247,7 +315,7 @@ index 19b332a..0652743 100644
  // COPILOT_PLUGIN_DATA is unset under VS Code Copilot, so fall back to
  // getClaudeDir() rather than building a path from undefined.
  if (isCopilot) stateDir = process.env.COPILOT_PLUGIN_DATA || getClaudeDir();
- if (isQoder) stateDir = path.join(os.homedir(), '.qoder');
+ if (isQoder) stateDir = getQoderDir();
  if (isCodeBuddy) stateDir = process.env.CODEBUDDY_CONFIG_DIR || path.join(os.homedir(), '.codebuddy');
  if (isCursor) stateDir = path.join(os.homedir(), '.cursor');
 +if (projectHost) {
@@ -269,13 +337,13 @@ index 19b332a..0652743 100644
  // Replacing separators with '_' aliases e.g. /work/a/b and /work/a_b (#662).
  // Do not read old sanitized keys: they cannot be assigned to one project safely.
  const projectStatePath = projectDir
-@@ -103,9 +114,9 @@ function cursorRuleNotice(rule) {
+@@ -109,9 +120,9 @@ function writeOut(text) {
  
  function writeHookOutput(event, mode, context = '') {
    if (isCopilot) {
 -    // Copilot reads additionalContext on SessionStart; ignores output elsewhere.
 +    // Copilot accepts context at session and supported subagent creation.
-     process.stdout.write(JSON.stringify(
+     writeOut(JSON.stringify(
 -      event === 'SessionStart' && context ? { additionalContext: context } : {}));
 +      ['SessionStart', 'SubagentStart'].includes(event) && context ? { additionalContext: context } : {}));
      return;
@@ -336,7 +404,7 @@ index f2d9fe2..f94d4ca 100644
 +// Keep fallback alive for stuck stdin; normal EOF cancels it.
 +const fallback = setTimeout(finishInput, 1000);
 diff --git a/skills/ponytail/SKILL.md b/skills/ponytail/SKILL.md
-index 32ac909..e57554b 100644
+index b76922f..4c1ae6c 100644
 --- a/skills/ponytail/SKILL.md
 +++ b/skills/ponytail/SKILL.md
 @@ -6,7 +6,6 @@ description: >
@@ -348,10 +416,10 @@ index 32ac909..e57554b 100644
  ---
  
 diff --git a/skills/ponytail-debt/SKILL.md b/skills/ponytail-debt/SKILL.md
-index f74a0d2..b09af33 100644
+index 0ae3e9a..bbc4bf5 100644
 --- a/skills/ponytail-debt/SKILL.md
 +++ b/skills/ponytail-debt/SKILL.md
-@@ -37,6 +37,6 @@ End with `<N> markers, <M> with no trigger.` Nothing found: `No ponytail: debt.
+@@ -40,6 +40,6 @@ End with `<N> markers, <M> with no trigger.` Nothing found: `No shortcut debt. C
  
  ## Boundaries
  
@@ -362,7 +430,7 @@ index f74a0d2..b09af33 100644
 +the repository's CONTRIBUTING.md, not in a second ledger file. One-shot.
 +"stop ponytail-debt" or "normal mode" to revert.
 diff --git a/skills/ponytail-help/SKILL.md b/skills/ponytail-help/SKILL.md
-index 54e6beb..f439a8e 100644
+index 6bf1824..f3ac1b5 100644
 --- a/skills/ponytail-help/SKILL.md
 +++ b/skills/ponytail-help/SKILL.md
 @@ -31,39 +31,31 @@ Level sticks until changed or session end.
