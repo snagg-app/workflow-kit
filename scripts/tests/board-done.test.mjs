@@ -17,7 +17,7 @@ test('done refuses a spec before acceptance comments or body changes', t => {
 
 // A checkout with one commit, which the Draft PR 7 shows as its head, and the files the fake gh answers from.
 function delivery(t, fixtureOf) {
-  const { checkout, run, writeIssue } = fixtureOf(t);
+  const { checkout, run, writeIssue, env } = fixtureOf(t);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: checkout, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
   git('init', '-q', '-b', 'work');
   git('config', 'user.name', 't'); // board.mjs commits its merge with the checkout's own identity
@@ -40,7 +40,7 @@ function delivery(t, fixtureOf) {
   writeFileSync(file('backlink-comments-1.json'), JSON.stringify([{ id: 1, body: 'https://github.com/test/example/pull/7', html_url: 'u' }]));
   writeFileSync(file('result.md'), 'Alles geliefert.\n\n### Retro\n\n- Keine Funde\n');
   writeIssue({ ...issue('In progress'), assignees: { nodes: [{ login: 'worker' }] } });
-  return { run, writeIssue, head, file, text, json, git, checkout };
+  return { run, writeIssue, head, file, text, json, git, checkout, env };
 }
 
 test('done prepares and hands off both review status schemas without rewriting the review option on resume (#593)', t => {
@@ -226,6 +226,33 @@ test('done without a handoff file prepares: tests, ready, Automated review, then
   assert.match(run('done', '1').stdout, new RegExp(`^PREPARED #1 head ${later.slice(0, 7)}`, 'm'));
   assert.notEqual(text('affected-tests-calls'), tests, 'the new head was tested');
   assert.equal(text('stored'), 'Automated review', 'the new head leaves Human review');
+});
+
+test('done rejects four Sonar issues before preparation or handoff, and accepts zero (#598)', t => {
+  for (const count of [4, 0]) for (const handoff of [false, true]) {
+    const { run, file, text, json, env } = delivery(t, handoffFixture);
+    env.SONAR_TOKEN = ''; // Use the fake check summary, never a developer's token.
+    const data = json('pr.json'), contexts = data.commits.nodes[0].commit.statusCheckRollup.contexts;
+    contexts.nodes.push({ __typename: 'CheckRun', name: 'SonarCloud Code Analysis', status: 'COMPLETED', conclusion: 'SUCCESS',
+      summary: `[${count} New issues]`, detailsUrl: 'https://sonarcloud.io/dashboard?id=test_example&pullRequest=7',
+      checkSuite: { app: { slug: 'sonarqubecloud' } } });
+    contexts.totalCount = contexts.nodes.length;
+    writeFileSync(file('pr.json'), JSON.stringify(data));
+    const result = run('done', '1', ...(handoff ? ['result.md'] : []));
+    assert.equal(result.status, count ? 1 : 0, result.stdout + result.stderr);
+    if (count) {
+      assert.match(result.stdout, /^FAILED: 4 open Sonar issues$/m);
+      assert.match(result.stdout, /^sonar: 4 open issues$/m);
+      assert.match(result.stdout, /^blocker: 4 open Sonar issues on this head/m);
+      assert.doesNotMatch(result.stdout, /PREPARED|Run the final proof|HANDOFF/);
+      assert.equal(text('stored'), 'Automated review');
+      assert.deepEqual(json('issues-comments.json'), [], 'No handoff comment');
+      assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'), 'No acceptance ticks');
+    } else {
+      assert.match(result.stdout, handoff ? /HANDOFF #1/ : /^PREPARED #1 /m);
+      assert.equal(text('stored'), handoff ? 'Human review' : 'Automated review');
+    }
+  }
 });
 
 test('done can explicitly skip local tests through preparation and handoff without a tested marker', t => {
