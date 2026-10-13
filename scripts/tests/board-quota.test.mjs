@@ -4,6 +4,20 @@ import { join } from 'node:path';
 import { quotaOf, retryAt, splitResponse, untilText, waitInterval } from '../quota.mjs';
 import { fixture, handoffPr, issue, test } from './board-fixture.mjs';
 
+test('check reports its own GraphQL calls and spend, including a refused read', t => {
+  const { checkout, run, writeIssue, queries } = fixture(t);
+  writeIssue(issue());
+  writeFileSync(join(checkout, 'quota-left'), '4000');
+  const result = run('check', '1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const count = queries().length;
+  assert.match(result.stderr, new RegExp(`quota: 4000 left, ${count} points used by this run, ${count} GraphQL calls, resets `));
+  writeFileSync(join(checkout, 'limited'), '');
+  const refused = run('check', '1');
+  assert.equal(refused.status, 2, refused.stdout + refused.stderr);
+  assert.match(refused.stderr, /quota: 0 left, 0 points used by this run, 1 GraphQL calls, resets /, 'A failure carries its own actual quota; no invented charge');
+});
+
 test('a used-up GraphQL quota is waited out by reviews and reported by the other commands', t => {
   const { checkout, run, writeIssue } = fixture(t);
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr()));

@@ -3,6 +3,38 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, issue, predecessor, test } from './board-fixture.mjs';
 
+test('next reads PR feedback by actual unique ids instead of multiplying every search slot', t => {
+  const { checkout, run, queries } = fixture(t);
+  const pr = { id: 'PR1', number: 101, state: 'OPEN', body: 'Agent: codex, Session: S1', repository: { nameWithOwner: 'test/example' },
+    comments: { nodes: [{ createdAt: '2026-10-13T10:00:00Z', url: 'https://example.test/feedback', body: '@worker please fix' }] }, reviews: { nodes: [] } };
+  const row = number => ({ ...issue('Human review'), number, issueFieldValues: { nodes: [] }, closedByPullRequestsReferences: { totalCount: 1, nodes: [pr] } });
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([row(1), row(2)]));
+  const result = run('next');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /https:\/\/example.test\/feedback/, 'PR feedback remains visible');
+  const sent = queries(), searches = sent.filter(query => query.includes('search('));
+  assert.ok(searches.every(query => !query.includes('reviews(last:5)')), 'PR comments/reviews are not nested under 30 issues times 10 PRs');
+  assert.equal(sent.filter(query => query.includes('nodes(ids:["PR1"])') && query.includes('...on PullRequest')).length, 1, 'One read per actual unique PR');
+  writeFileSync(join(checkout, 'pr-feedback-unreadable'), '');
+  assert.notEqual(run('next').status, 0, 'Unreadable feedback must never become an empty result');
+});
+
+test('next batches feedback beyond 100 actual PRs without losing a later mention', t => {
+  const { checkout, run, queries } = fixture(t);
+  const rows = Array.from({ length: 11 }, (_, index) => ({ ...issue('Human review'), number: index + 1, issueFieldValues: { nodes: [] },
+    closedByPullRequestsReferences: { totalCount: 10, nodes: Array.from({ length: 10 }, (_, prIndex) => ({
+      id: `PR${index * 10 + prIndex}`, number: index * 10 + prIndex + 100, state: 'OPEN', body: '', repository: { nameWithOwner: 'test/example' },
+      comments: { nodes: index === 10 && prIndex === 9 ? [{ createdAt: '2026-10-13T10:00:00Z', url: 'https://example.test/last', body: '@worker fix' }] : [] }, reviews: { nodes: [] },
+    })) } }));
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify(rows));
+  const result = run('next');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /https:\/\/example.test\/last/);
+  const batches = queries().filter(query => query.includes('...on PullRequest')).map(query => JSON.parse(/nodes\(ids:(\[[^\]]*\])/.exec(query)[1]));
+  assert.deepEqual(batches.map(batch => batch.length), [100, 10]);
+  assert.equal(new Set(batches.flat()).size, 110);
+});
+
 
 test('next lists stackable Ready issues with their base PR apart from blocked ones', t => {
   const { checkout, run } = fixture(t);

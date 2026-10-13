@@ -403,6 +403,14 @@ function api(argv, input, stdout, stderr, exit) {
     const ids = JSON.parse(/nodes\(ids:(\[[^\]]*\])/.exec(query)[1]);
     data = { nodes: ids.map(id => ({ projectItems: { nodes: fs.existsSync('add-exists-unreadable') ? [] : [{ id: `PI-${id}`, project: { id: 'P1' } }] } })) };
   }
+  else if (query.includes('nodes(ids:') && query.includes('...on PullRequest')) {
+    const prs = JSON.parse(fs.readFileSync('search.json')).flatMap(issue => (issue.closedByPullRequestsReferences?.nodes ?? [])
+      .map((pr, index) => ({ ...pr, id: pr.id ?? `PR-${issue.number}-${index}` })));
+    data = { nodes: JSON.parse(/nodes\(ids:(\[[^\]]*\])/.exec(query)[1]).map(id => {
+      const pr = prs.find(pr => pr.id === id);
+      return fs.existsSync('pr-feedback-unreadable') || !pr ? null : { id, comments: pr.comments ?? { nodes: [] }, reviews: pr.reviews ?? { nodes: [] } };
+    }) };
+  }
   else if (query.includes('nodes(ids:')) {
     // The PRs that close predecessors, read by id: deliveries.json maps an id to its closedByPullRequestsReferences; an id it lacks is unreadable.
     const deliveries = JSON.parse(fs.readFileSync('deliveries.json'));
@@ -480,6 +488,10 @@ function api(argv, input, stdout, stderr, exit) {
     const blocked = / is:blocked$/.test(argv.find(arg => arg.startsWith('q=')));
     const nodes = (fs.existsSync('search.json') ? JSON.parse(fs.readFileSync('search.json')) : [])
       .filter(issue => issue.blockedBy.nodes.some(predecessor => predecessor?.state === 'OPEN') === blocked);
+    for (const issue of nodes) for (const [index, pr] of (issue.closedByPullRequestsReferences?.nodes ?? []).entries()) {
+      pr.id ??= `PR-${issue.number}-${index}`;
+      if (!query.includes('reviews(last:5)')) { delete pr.comments; delete pr.reviews; }
+    }
     data = { viewer: { login: 'worker' }, search: { issueCount: nodes.length + Number(fs.existsSync('truncate')), pageInfo: { hasNextPage: false }, nodes } };
   }
   else {
