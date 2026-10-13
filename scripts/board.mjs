@@ -1647,7 +1647,11 @@ function reviews(stallMinutes = 20, now = Date.now(), prNumber = number, pr = re
       continue;
     }
     lines.push(`sonar: ${open} open issue${open === 1 ? '' : 's'}`, ...found);
-    if (open) lines.push(`blocker: ${open} open Sonar issue${open === 1 ? '' : 's'} on this head; fix them or justify each as a false positive`);
+    if (open) {
+      failed = true;
+      reasons.push(`${open} open Sonar issue${open === 1 ? '' : 's'}`);
+      lines.push(`blocker: ${reasons.at(-1)} on this head; fix them or justify each as a false positive`);
+    }
     // A failure notice after the green check contradicts it (#570). It names no revision and is mostly about an older commit
     // whose analysis Sonar dropped (#2452): shown, never a blocker; the green check of the head decides.
     // ponytail: matched by time and wording; name the revision once Sonar puts it in the comment.

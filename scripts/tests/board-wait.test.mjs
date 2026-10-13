@@ -26,6 +26,35 @@ test('wait ends at once on merge conflicts of a non-draft PR and ignores every o
   assert.equal(reviews({ ...readied, mergeStateStatus: 'BEHIND' }), 0, 'BEHIND is no conflict');
 });
 
+test('wait rejects current-head Sonar issues, accepts zero, and preserves pending and head guards (#598)', t => {
+  const { checkout, run, pr, look } = reviewsFixture(t);
+  const sonar = { __typename: 'CheckRun', name: 'SonarCloud Code Analysis', status: 'COMPLETED', conclusion: 'SUCCESS',
+    summary: '[4 New issues]', detailsUrl: 'https://sonarcloud.io/dashboard?id=test_example&pullRequest=7',
+    checkSuite: { app: { slug: 'sonarqubecloud' } } };
+  // reviewsFixture inherits the environment; no token must trigger a real Sonar request.
+  const token = process.env.SONAR_TOKEN;
+  process.env.SONAR_TOKEN = '';
+  t.after(() => { if (token === undefined) delete process.env.SONAR_TOKEN; else process.env.SONAR_TOKEN = token; });
+  for (const [changes, expected] of [[{}, 1], [{ summary: '[0 New issues]' }, 0], [{ status: 'IN_PROGRESS', conclusion: null }, 4]]) {
+    look(pr({ contexts: [{ ...sonar, ...changes }] }));
+    const result = run('wait', '7', '--max-minutes', '0.01');
+    assert.equal(result.status, expected, result.stdout + result.stderr);
+    if (expected === 1) {
+      assert.match(result.stdout, /^FAILED: 4 open Sonar issues$/m);
+      assert.match(result.stdout, /^sonar: 4 open issues$/m);
+      assert.match(result.stdout, /^blocker: 4 open Sonar issues on this head/m);
+    } else if (expected === 4) {
+      assert.match(result.stdout, /^waiting: check SonarCloud Code Analysis$/m);
+      assert.doesNotMatch(result.stdout, /^FAILED|^DONE/m);
+    }
+  }
+  writeFileSync(join(checkout, 'pr.json'), JSON.stringify(pr({ contexts: [sonar] })));
+  const oldHead = run('wait', '7', '--head', 'b'.repeat(40), '--max-minutes', '0.01');
+  assert.equal(oldHead.status, 4, oldHead.stdout + oldHead.stderr);
+  assert.match(oldHead.stdout, /^waiting: PR still shows head abcdef1, expected bbbbbbb$/m);
+  assert.doesNotMatch(oldHead.stdout, /^FAILED|^DONE/m);
+});
+
 test('wait --head keeps waiting while the PR still shows the previous head, and a closed PR ends it', t => {
   const { checkout, run, runBriefly, pr } = reviewsFixture(t);
   const [old, pushed] = ['a', 'b'].map(letter => letter.repeat(40));
