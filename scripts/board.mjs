@@ -546,8 +546,10 @@ const prFeedback = `comments(last:5){nodes{${feedbackNode}}} reviews(last:5){nod
 const handoffHeading = /^## Übergabe\s*$/m, replyLine = /^Agent:[ \t]*(claude|codex)\b/im;
 
 function loadPrFeedback(issues) {
-  const prs = issues.flatMap(issue => issue.closedByPullRequestsReferences?.nodes ?? []);
-  assert.ok(prs.every(pr => typeof pr.id === 'string' && pr.id), 'PR feedback ids are unreadable');
+  const linked = issues.flatMap(issue => issue.closedByPullRequestsReferences?.nodes ?? []);
+  assert.ok(linked.every(pr => typeof pr?.id === 'string' && pr.id), 'PR feedback ids are unreadable');
+  assert.ok(linked.every(pr => ['OPEN', 'CLOSED', 'MERGED'].includes(pr.state)), 'PR feedback states are unreadable');
+  const prs = linked.filter(pr => pr.state === 'OPEN');
   const ids = [...new Set(prs.map(pr => pr.id))];
   const feedback = new Map();
   for (let from = 0; from < ids.length; from += 100) {

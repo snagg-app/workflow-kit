@@ -35,6 +35,25 @@ test('next batches feedback beyond 100 actual PRs without losing a later mention
   assert.equal(new Set(batches.flat()).size, 110);
 });
 
+test('next rejects null PRs before filtering and reads no feedback for closed PRs', t => {
+  const { checkout, run, queries } = fixture(t);
+  const list = prs => writeFileSync(join(checkout, 'search.json'), JSON.stringify([{ ...issue('Human review'), issueFieldValues: { nodes: [] },
+    closedByPullRequestsReferences: { totalCount: prs.length, nodes: prs } }]));
+  list([null]);
+  const invalid = run('next');
+  assert.notEqual(invalid.status, 0);
+  assert.match(invalid.stderr, /PR feedback ids are unreadable/);
+  queries();
+  list([{ id: 'PRX', state: 'UNKNOWN' }]);
+  assert.match(run('next').stderr, /PR feedback states are unreadable/, 'Unknown state must not be silently treated as closed');
+  queries();
+  list(['CLOSED', 'MERGED'].map((state, index) => ({ id: `PR${index}`, number: index + 100, state, body: '', repository: { nameWithOwner: 'test/example' } })));
+  writeFileSync(join(checkout, 'pr-feedback-unreadable'), '');
+  const closed = run('next');
+  assert.equal(closed.status, 0, closed.stdout + closed.stderr);
+  assert.ok(queries().every(query => !query.includes('...on PullRequest')), 'Closed/merged PRs cause no feedback lookup');
+});
+
 
 test('next lists stackable Ready issues with their base PR apart from blocked ones', t => {
   const { checkout, run } = fixture(t);

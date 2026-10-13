@@ -489,6 +489,7 @@ function api(argv, input, stdout, stderr, exit) {
     const nodes = (fs.existsSync('search.json') ? JSON.parse(fs.readFileSync('search.json')) : [])
       .filter(issue => issue.blockedBy.nodes.some(predecessor => predecessor?.state === 'OPEN') === blocked);
     for (const issue of nodes) for (const [index, pr] of (issue.closedByPullRequestsReferences?.nodes ?? []).entries()) {
+      if (!pr) continue;
       pr.id ??= `PR-${issue.number}-${index}`;
       if (!query.includes('reviews(last:5)')) { delete pr.comments; delete pr.reviews; }
     }
