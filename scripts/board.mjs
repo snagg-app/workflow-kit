@@ -3042,5 +3042,7 @@ try {
   process.exitCode = 2;
 } finally {
   // Waiting commands already print their quota with the verdict; all other commands need the same evidence, also on failure.
-  if (quota && (process.exitCode === 2 || !['reviews', 'wait', 'handoff', 'merge', 'quota-wait'].includes(command))) console.error(quotaLine());
+  const alreadyPrintedQuota = ['reviews', 'wait', 'quota-wait'].includes(command)
+    || (process.exitCode === 4 && ['handoff', 'merge'].includes(command));
+  if (quota && (process.exitCode === 2 || !alreadyPrintedQuota)) console.error(quotaLine());
 }
