@@ -513,6 +513,10 @@ function api(argv, input, stdout, stderr, exit) {
 function pr(argv, input, stdout, stderr, exit) {
   fs.appendFileSync('merges', argv.slice(2).join(' ') + '\n');
   fs.appendFileSync('calls', 'merge\n');
+  if (fs.existsSync('merge-head-changed')) fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), headRefOid: 'b'.repeat(40) }));
+  if (argv[argv.indexOf('--match-head-commit') + 1] !== JSON.parse(fs.readFileSync('pr.json')).headRefOid) {
+    stderr('gh: Head branch was modified\n'); exit(1);
+  }
   if (fs.existsSync('merge-fails')) { stderr('gh: Head branch was modified\n'); exit(1); }
   // merge-403: the refusal of a PR with stacked children; the file holds gh's text, empty means the GraphQL text seen on GitHub (#321).
   if (fs.existsSync('merge-403')) {

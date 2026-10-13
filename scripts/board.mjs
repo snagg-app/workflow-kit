@@ -2032,13 +2032,14 @@ function selfReviewReasons(bodyHtml, checks) {
  * review result only when it holds. Its own reasons include the self-review section of the PR body ("selfReview" of the project file).
  * `extra` adds the caller's own further reasons (it runs only once the shared gate holds).
  * `prior` are reasons the caller found before (the issue side of handoff): they are listed with the PR's, in one run.
+ * `reviewed` is only merge's just-returned poll proof; a branch update replaces it, while handoff always reads a fresh gate.
  * GitHub computes the merge state late: an undetermined one is read again a few times (`--interval` seconds apart, at
  * 1 point each) before it counts as waiting.
  */
 const mergeStates = ['CLEAN', 'BLOCKED', 'BEHIND', 'UNSTABLE', 'HAS_HOOKS'], mergeReads = 4;
-function finishedPr(prNumber, action, expectedHead, extra = () => [], prior = []) {
+function finishedPr(prNumber, action, expectedHead, extra = () => [], prior = [], reviewed) {
   const checks = selfReviewChecks();
-  const pr = readPr(prNumber);
+  const pr = reviewed?.pr ?? readPr(prNumber);
   if (checks.length) assert.equal(typeof pr.bodyHTML, 'string', 'The rendered PR body is unreadable');
   assert.equal(typeof pr.isDraft, 'boolean', 'PR draft state is unreadable');
   const blockers = reasons => reasons.map(reason => `blocker: ${reason}`);
@@ -2049,7 +2050,7 @@ function finishedPr(prNumber, action, expectedHead, extra = () => [], prior = []
     process.exitCode = 1;
     return;
   }
-  const result = reviews(stallOption(), Date.now(), prNumber, pr, undefined, undefined, action === 'handoff');
+  const result = reviewed ?? reviews(stallOption(), Date.now(), prNumber, pr, undefined, undefined, action === 'handoff');
   console.log(result.lines.join('\n'));
   if (!result.done || result.failed) {
     process.exitCode = result.failed || prior.length ? 1 : 3;
@@ -2215,9 +2216,9 @@ function stackReasons(viewer) {
 /** The merge gate: handoff's PR gate plus the stack rule. Merging an upper layer of a stack merges every open layer below it too
  * (GitHub: "merge the top pull request, every pull request below it comes with it"), so without `--stack` the lower layer goes first, by itself;
  * with it (`viewer` set) every layer must hold its own gate and the top merges them all. */
-const mergeGate = viewer => finishedPr(number, 'merge', undefined, () => viewer ? stackReasons(viewer) : readStacks()
+const mergeGate = (viewer, reviewed) => finishedPr(number, 'merge', undefined, () => viewer ? stackReasons(viewer) : readStacks()
   .flatMap(({ pull_requests: members = [] }) => members.slice(0, Math.max(0, members.findIndex(member => member.number === number)))
-    .filter(member => member.state === 'open').map(member => `PR #${member.number} below it in its stack is still open: merge it first, merging this layer would merge it too`)));
+    .filter(member => member.state === 'open').map(member => `PR #${member.number} below it in its stack is still open: merge it first, merging this layer would merge it too`)), [], reviewed);
 
 /**
  * `stack-sync TOP` (#412): from the bottom layer up, merges the base of each layer of TOP's native stack into it and pushes it
@@ -2372,7 +2373,7 @@ async function merge() {
   }
   const look = () => reviews(stallOption());
   // Like `wait`: look again until CI and the reviewers have finished (or --max-minutes runs out: exit 4); the gate then decides once.
-  const polled = await poll(look);
+  let polled = await poll(look);
   if (!polled) return;
   // The new head's CI (and any reviewer that answers the push) decides, so the gate runs again; one update per run.
   const update = async ({ baseRefName, headRefOid: before }, why) => {
@@ -2381,14 +2382,16 @@ async function merge() {
     const updated = updateBranch(before, baseRefName);
     if (!updated) return false;
     console.log(`updated: head ${before.slice(0, 7)} -> ${updated.slice(0, 7)}; waiting for CI`);
-    return Boolean(await poll(look));
+    polled = await poll(look);
+    return Boolean(polled);
   };
   // A red check from "updateBranchChecks" as the only reason asks for the base (#383): that is the update, not a FAILED.
   // Any other red check on a head the base has left behind may come from the old merge state (#425): the base is merged once and the new CI decides; a second red is FAILED.
   const stale = !stack && polled.failed && !polled.baseOnly && polled.reasons.every(reason => reason.startsWith('check ')) ? baseMovement(polled.pr) : null;
   const forCheck = !stack && (polled.baseOnly || stale);
   if (forCheck && !await update(polled.pr, stale ? `${polled.pr.baseRefName} gained ${stale.behind} commits since the merge-base; ${polled.reasons.join('; ')}` : polled.reasons.join('; '))) return;
-  const result = mergeGate(viewer);
+  // The successful poll just checked this head; an update above replaces that proof before the atomic head-bound merge.
+  const result = mergeGate(viewer, polled);
   if (!result) return;
   assert.match(result.pr.headRefOid, /^[0-9a-f]{40}$/, 'The PR head is not a full object id');
   const moved = stack ? baseMovement({ ...result.pr, baseRefName: stackTrunk }) : null;
@@ -2552,7 +2555,7 @@ function mergeState() {
 }
 
 /** What the last query cost and what is left, so a driver sees the shared quota without a command of its own. */
-const quotaLine = () => quota && `quota: ${quota.remaining} left, ${spent} points used by this run, ${graphqlCalls} GraphQL calls, resets ${quota.resetAt}`;
+const quotaLine = () => quota && `quota: ${quota.remaining} left, ${spent} reported GraphQL wrapper points, ${graphqlCalls} wrapper calls, resets ${quota.resetAt}`;
 
 /**
  * Right after a push GitHub still reports the previous head, so a plain `wait` can end DONE for it. With `--head SHA`
