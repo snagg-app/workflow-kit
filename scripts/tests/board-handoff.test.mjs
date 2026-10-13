@@ -120,6 +120,7 @@ test('handoff blocks unlinked, unsafe and unreadable delivery before writing Hum
   writeIssue({ ...ready, closedByPullRequestsReferences: { totalCount: 3, nodes: [ownLink(7),
     { number: 6, state: 'CLOSED', repository: { nameWithOwner: 'test/example' } },
     { number: 5, state: 'MERGED', repository: { nameWithOwner: 'test/example' } }] } });
+  writeFileSync(join(checkout, 'quota-left'), '4999');
   for (const baseRefName of ['main', 'release/0.1.1']) {
     writeFileSync(join(checkout, 'handoff-fixture'), '');
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr({ baseRefName,
@@ -127,6 +128,7 @@ test('handoff blocks unlinked, unsafe and unreadable delivery before writing Hum
     const result = run('handoff', '1', '7');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.match(result.stdout, /HANDOFF #1 PR #7 head abcdef1234/);
+    assert.match(result.stderr, /^quota: \d+ left, [1-9]\d* reported GraphQL wrapper points, [1-9]\d* wrapper calls, resets .+$/m);
     assert.equal(readFileSync(join(checkout, 'stored'), 'utf8'), 'Human review');
   }
 });

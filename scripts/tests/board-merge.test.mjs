@@ -56,10 +56,12 @@ test('merge merges the checked head by its full id only when no review is runnin
   assert.equal(run('merge', '7', '--stall', '0').status, 2, 'A bad option is rejected');
   assert.equal(run('merge', '7', '8').status, 2, 'A stray argument is rejected');
 
+  writeFileSync(join(checkout, 'quota-left'), '4999');
   const merged = run('merge', '7');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.equal(readFileSync(merges, 'utf8'), `merge 7 --repo test/example --merge --match-head-commit ${oid}\n`, 'gh gets the full head id');
   assert.match(merged.stdout, new RegExp(`^MERGED #7 head ${oid} merge commit f{40}$`, 'm'));
+  assert.match(merged.stderr, /^quota: \d+ left, [1-9]\d* reported GraphQL wrapper points, [1-9]\d* wrapper calls, resets .+$/m);
 
   for (const flag of ['merge-fails', 'merge-noop']) {
     rmSync(merges);
