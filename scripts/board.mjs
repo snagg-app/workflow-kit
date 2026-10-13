@@ -71,7 +71,7 @@ let value = command === 'ready' && typed === '--local' && Number.isSafeInteger(n
 // wait, reviews and handoff sleep until the reset instead of failing when it runs out or falls below their reserve;
 // every other command stops with the reset time.
 const sleepers = { wait: 300, reviews: 50, handoff: 50, done: 50, 'quota-wait': 300 };
-let quota, spent = 0; // the latest { remaining, resetAt } a response reported, and the points this run has used
+let quota, spent = 0, graphqlCalls = 0; // the latest quota, this run's reported cost and actual request count
 // `wait` gives up at this time (--max-minutes), before the 10-minute limit of an agent's shell tool would push it into the background.
 let deadline = Infinity;
 const startedAt = Date.now();
@@ -106,17 +106,17 @@ function graphql(query, variables = {}, tolerate, beforeSend) {
     if (command in sleepers && quota?.remaining < sleepers[command] && Date.parse(quota.resetAt) > Date.now()) sleepUntilReset(quota.resetAt);
     try {
       beforeSend?.();
+      graphqlCalls++;
       // stderr piped: a tolerated refusal ("already exists") is no failure, and a real one reaches the error message.
       const response = execFileSync(gh.file, args, { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, stdio: 'pipe' });
       const { headers, body } = splitResponse(response);
       const { data, errors } = JSON.parse(body);
       quota = quotaOf(headers) ?? quota;
+      spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
       if (errors?.length) {
         const message = errors.map(({ type, message }) => `${type ?? ''} ${message ?? ''}`).join('\n').trim();
         if (!(tolerate?.test(message) && data)) throw Object.assign(new Error(message), { stdout: response, stderr: message });
       }
-      // A mutation reports no cost; GitHub charges it one point.
-      spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
       return data;
     } catch (error) {
       const text = `${error.stderr}${error.stdout}`, { headers, body } = splitResponse(error.stdout);
@@ -538,12 +538,29 @@ function ownWork(rows, login, session) {
     && row.assignees.nodes.some(assignee => assignee.login.toLowerCase() === login.toLowerCase()) && ownPr(row, session));
 }
 
-// Feedback after a handoff (#554): the newest comments and reviews of the issue and its open PRs, read with the searches of `next` and `check`.
-// A review carries its inline threads; the page costs about 7 more points (one per 100 assumed connection nodes), so no thread connection.
+// Feedback after a handoff (#554): issue comments ride along with the searches; PR feedback is read by actual ids,
+// so two connections per PR do not multiply every search slot by ten hypothetical PRs.
 const feedbackNode = 'createdAt url body';
 const issueFeedback = `comments(last:10){nodes{${feedbackNode}}}`;
 const prFeedback = `comments(last:5){nodes{${feedbackNode}}} reviews(last:5){nodes{${feedbackNode}}}`;
 const handoffHeading = /^## Übergabe\s*$/m, replyLine = /^Agent:[ \t]*(claude|codex)\b/im;
+
+function loadPrFeedback(issues) {
+  const linked = issues.flatMap(issue => issue.closedByPullRequestsReferences?.nodes ?? []);
+  assert.ok(linked.every(pr => typeof pr?.id === 'string' && pr.id), 'PR feedback ids are unreadable');
+  assert.ok(linked.every(pr => ['OPEN', 'CLOSED', 'MERGED'].includes(pr.state)), 'PR feedback states are unreadable');
+  const prs = linked.filter(pr => pr.state === 'OPEN');
+  const ids = [...new Set(prs.map(pr => pr.id))];
+  const feedback = new Map();
+  for (let from = 0; from < ids.length; from += 100) {
+    const batch = ids.slice(from, from + 100);
+    const { nodes } = graphql(`query{nodes(ids:${JSON.stringify(batch)}){...on PullRequest{id ${prFeedback}}}}`);
+    assert.ok(nodes?.length === batch.length && nodes.every((pr, index) => pr?.id === batch[index]
+      && Array.isArray(pr.comments?.nodes) && Array.isArray(pr.reviews?.nodes)), 'PR feedback is unreadable; retry the read');
+    for (const current of nodes) feedback.set(current.id, current);
+  }
+  for (const pr of prs) Object.assign(pr, feedback.get(pr.id));
+}
 
 /**
  * What happened on a ticket since the agent's last word, or undefined. The agent's word is the "## Übergabe" handoff or a comment with an "Agent: claude|codex" line,
@@ -569,12 +586,13 @@ function assignedIssues(login) {
   for (let after; ;) {
     const { search } = graphql(`query($q:String!,$after:String){search(query:$q,type:ISSUE_ADVANCED,first:30,after:$after){
       issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{number title assignees(first:10){nodes{login}} ${issueFeedback}
-      closedByPullRequestsReferences(first:10){nodes{state body ${prFeedback}}}
+      closedByPullRequestsReferences(first:10){nodes{state body id}}
       projectItems(first:100){nodes{project{id} status:fieldValueByName(name:"Status"){...on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}}`,
     { q: `repo:${project.repository} is:issue is:open assignee:${login}`, ...(after && { after }) });
     rows.push(...search.nodes);
     if (!search.pageInfo.hasNextPage) {
       assert.ok(rows.length >= search.issueCount, `Search returned ${rows.length} of ${search.issueCount} issues of ${login}; the own work would be incomplete`);
+      loadPrFeedback(rows);
       return rows;
     }
     assert.ok(search.pageInfo.endCursor && search.pageInfo.endCursor !== after, 'Search pagination did not advance');
@@ -794,7 +812,7 @@ function sweep() {
 function next() {
   // Advanced issue search understands -is:blocked (open native predecessors). Separate searches keep blocked issues
   // from crowding unblocked ones out of the 1,000-result search cap; read every page of both before sorting. A page costs by its size, not by its hits
-  // (4 lists per issue), so it is short: a repository with few open issues pays one point per search.
+  // so it is short. PR feedback is loaded separately, once per actual unique PR.
   // The open PRs (state, update time, merge state) and the update times tell abandoned work from live work (#400); the viewer finds the own.
   const nodes = [];
   let login;
@@ -803,7 +821,7 @@ function next() {
       issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{number title body updatedAt assignees(first:10){nodes{login}} ${issueFeedback}
       blockedBy(first:100){totalCount nodes{${predecessorFields}}}
       issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}
-      closedByPullRequestsReferences(first:10){nodes{number state body updatedAt mergeStateStatus headRefName repository{nameWithOwner} ${prFeedback}}}
+      closedByPullRequestsReferences(first:10){nodes{number state body updatedAt mergeStateStatus headRefName repository{nameWithOwner} id}}
       projectItems(first:100){nodes{project{id} updatedAt status:fieldValueByName(name:"Status"){...on ProjectV2ItemFieldSingleSelectValue{name}}${baseField()}
         priority:fieldValueByName(name:"Priority"){...on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}}`,
     { q: `repo:${project.repository} is:issue is:open ${blocking}`, ...(after && { after }) });
@@ -817,6 +835,7 @@ function next() {
     assert.ok(search.pageInfo.endCursor && search.pageInfo.endCursor !== after, 'Search pagination did not advance');
     after = search.pageInfo.endCursor;
   }
+  loadPrFeedback(nodes);
   // The Priority field's option order is the ranking, whatever the scale (High/Low, P0/P1, …).
   const rank = selectField('Priority').choices.map(choice => choice.name);
   const order = priority => rank.includes(priority) ? rank.indexOf(priority) : rank.length;
@@ -2015,13 +2034,14 @@ function selfReviewReasons(bodyHtml, checks) {
  * review result only when it holds. Its own reasons include the self-review section of the PR body ("selfReview" of the project file).
  * `extra` adds the caller's own further reasons (it runs only once the shared gate holds).
  * `prior` are reasons the caller found before (the issue side of handoff): they are listed with the PR's, in one run.
+ * `reviewed` is only merge's just-returned poll proof; a branch update replaces it, while handoff always reads a fresh gate.
  * GitHub computes the merge state late: an undetermined one is read again a few times (`--interval` seconds apart, at
  * 1 point each) before it counts as waiting.
  */
 const mergeStates = ['CLEAN', 'BLOCKED', 'BEHIND', 'UNSTABLE', 'HAS_HOOKS'], mergeReads = 4;
-function finishedPr(prNumber, action, expectedHead, extra = () => [], prior = []) {
+function finishedPr(prNumber, action, expectedHead, extra = () => [], prior = [], reviewed) {
   const checks = selfReviewChecks();
-  const pr = readPr(prNumber);
+  const pr = reviewed?.pr ?? readPr(prNumber);
   if (checks.length) assert.equal(typeof pr.bodyHTML, 'string', 'The rendered PR body is unreadable');
   assert.equal(typeof pr.isDraft, 'boolean', 'PR draft state is unreadable');
   const blockers = reasons => reasons.map(reason => `blocker: ${reason}`);
@@ -2032,7 +2052,7 @@ function finishedPr(prNumber, action, expectedHead, extra = () => [], prior = []
     process.exitCode = 1;
     return;
   }
-  const result = reviews(stallOption(), Date.now(), prNumber, pr, undefined, undefined, action === 'handoff');
+  const result = reviewed ?? reviews(stallOption(), Date.now(), prNumber, pr, undefined, undefined, action === 'handoff');
   console.log(result.lines.join('\n'));
   if (!result.done || result.failed) {
     process.exitCode = result.failed || prior.length ? 1 : 3;
@@ -2198,9 +2218,9 @@ function stackReasons(viewer) {
 /** The merge gate: handoff's PR gate plus the stack rule. Merging an upper layer of a stack merges every open layer below it too
  * (GitHub: "merge the top pull request, every pull request below it comes with it"), so without `--stack` the lower layer goes first, by itself;
  * with it (`viewer` set) every layer must hold its own gate and the top merges them all. */
-const mergeGate = viewer => finishedPr(number, 'merge', undefined, () => viewer ? stackReasons(viewer) : readStacks()
+const mergeGate = (viewer, reviewed) => finishedPr(number, 'merge', undefined, () => viewer ? stackReasons(viewer) : readStacks()
   .flatMap(({ pull_requests: members = [] }) => members.slice(0, Math.max(0, members.findIndex(member => member.number === number)))
-    .filter(member => member.state === 'open').map(member => `PR #${member.number} below it in its stack is still open: merge it first, merging this layer would merge it too`)));
+    .filter(member => member.state === 'open').map(member => `PR #${member.number} below it in its stack is still open: merge it first, merging this layer would merge it too`)), [], reviewed);
 
 /**
  * `stack-sync TOP` (#412): from the bottom layer up, merges the base of each layer of TOP's native stack into it and pushes it
@@ -2355,7 +2375,7 @@ async function merge() {
   }
   const look = () => reviews(stallOption());
   // Like `wait`: look again until CI and the reviewers have finished (or --max-minutes runs out: exit 4); the gate then decides once.
-  const polled = await poll(look);
+  let polled = await poll(look);
   if (!polled) return;
   // The new head's CI (and any reviewer that answers the push) decides, so the gate runs again; one update per run.
   const update = async ({ baseRefName, headRefOid: before }, why) => {
@@ -2364,14 +2384,16 @@ async function merge() {
     const updated = updateBranch(before, baseRefName);
     if (!updated) return false;
     console.log(`updated: head ${before.slice(0, 7)} -> ${updated.slice(0, 7)}; waiting for CI`);
-    return Boolean(await poll(look));
+    polled = await poll(look);
+    return Boolean(polled);
   };
   // A red check from "updateBranchChecks" as the only reason asks for the base (#383): that is the update, not a FAILED.
   // Any other red check on a head the base has left behind may come from the old merge state (#425): the base is merged once and the new CI decides; a second red is FAILED.
   const stale = !stack && polled.failed && !polled.baseOnly && polled.reasons.every(reason => reason.startsWith('check ')) ? baseMovement(polled.pr) : null;
   const forCheck = !stack && (polled.baseOnly || stale);
   if (forCheck && !await update(polled.pr, stale ? `${polled.pr.baseRefName} gained ${stale.behind} commits since the merge-base; ${polled.reasons.join('; ')}` : polled.reasons.join('; '))) return;
-  const result = mergeGate(viewer);
+  // The successful poll just checked this head; an update above replaces that proof before the atomic head-bound merge.
+  const result = mergeGate(viewer, polled);
   if (!result) return;
   assert.match(result.pr.headRefOid, /^[0-9a-f]{40}$/, 'The PR head is not a full object id');
   const moved = stack ? baseMovement({ ...result.pr, baseRefName: stackTrunk }) : null;
@@ -2535,7 +2557,7 @@ function mergeState() {
 }
 
 /** What the last query cost and what is left, so a driver sees the shared quota without a command of its own. */
-const quotaLine = () => quota && `quota: ${quota.remaining} left, ${spent} points used by this run, resets ${quota.resetAt}`;
+const quotaLine = () => quota && `quota: ${quota.remaining} left, ${spent} reported GraphQL wrapper points, ${graphqlCalls} wrapper calls, resets ${quota.resetAt}`;
 
 /**
  * Right after a push GitHub still reports the previous head, so a plain `wait` can end DONE for it. With `--head SHA`
@@ -3018,4 +3040,7 @@ try {
   const message = String(error.stderr || error.message).trim();
   console.log(oneLine ? `ERROR - ${message.replace(/\s*\n\s*/g, ' ')}` : `${command === 'check' ? 'UNKNOWN' : 'ERROR'}\n- ${message}`);
   process.exitCode = 2;
+} finally {
+  // Waiting commands already print their quota with the verdict; all other commands need the same evidence, also on failure.
+  if (quota && (process.exitCode === 2 || !['reviews', 'wait', 'handoff', 'merge', 'quota-wait'].includes(command))) console.error(quotaLine());
 }

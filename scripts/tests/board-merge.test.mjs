@@ -86,7 +86,7 @@ test('merge takes a Refs PR beside the closing PR of its issue through the gate 
 
 /** A checkout whose PR 7 is ready to merge from the branch `claude/7-topic` of this repository; `calls` is what merge did, in order. */
 function mergeFixture(t) {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, queries } = fixture(t);
   const [first, second] = ['abcdef1', '1234567'].map(prefix => prefix + '0'.repeat(33));
   const commit = handoffPr().commits.nodes[0].commit;
   const headOf = (oid, changes) => ({ headRefOid: oid, commits: { nodes: [{ commit: { ...commit, oid, ...changes } }] } });
@@ -99,8 +99,24 @@ function mergeFixture(t) {
   const calls = () => existsSync(join(checkout, 'calls')) ? readFileSync(join(checkout, 'calls'), 'utf8').trim().split('\n') : [];
   const flag = name => writeFileSync(join(checkout, name), '');
   const json = (name, data) => writeFileSync(join(checkout, name), JSON.stringify(data));
-  return { checkout, run, show, calls, flag, json, first, second, headOf };
+  return { checkout, run, queries, show, calls, flag, json, first, second, headOf };
 }
+
+test('merge reuses its immediate successful poll gate and still refuses a racing head', t => {
+  const { checkout, run, queries, show, flag, first } = mergeFixture(t);
+  show();
+  const merged = run('merge', '7');
+  assert.equal(merged.status, 0, merged.stdout + merged.stderr);
+  assert.equal(queries().filter(query => query.includes('reviewThreads(first:100)')).length, 1, 'One full gate, not an immediate duplicate');
+  assert.match(merged.stdout, /^MERGED #7 /m, 'Merge read-back remains required');
+  show();
+  flag('merge-head-changed');
+  const refused = run('merge', '7');
+  assert.equal(refused.status, 2, refused.stdout + refused.stderr);
+  assert.equal(JSON.parse(readFileSync(join(checkout, 'pr.json'))).state, 'OPEN', 'The platform refuses a head that changed after the gate');
+  assert.match(readFileSync(join(checkout, 'merges'), 'utf8'), new RegExp(`--match-head-commit ${first}`));
+  assert.doesNotMatch(refused.stdout, /^MERGED/m);
+});
 
 test('merge refuses a PR body without the Selbstprüfung section the project asks for', t => {
   const { checkout, run, show, calls } = mergeFixture(t);
