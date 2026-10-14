@@ -190,6 +190,15 @@ test('a native stack selects its tip for new work and the immediate lower layer 
   assert.equal(atTip.status, 4, atTip.stdout + atTip.stderr);
   assert.match(atTip.stdout, /^stack base: PR #1345 in stack #88 \(branch branch-1345, base branch-1318\)/m);
 
+  // An ordinary upper claim is not a member yet: resume resolves the same current lower tip.
+  writeIssue(issueWith(basePredecessor));
+  writeFileSync(join(checkout, 'stacks-reads.json'), JSON.stringify([[], JSON.parse(readFileSync(join(checkout, 'stacks.json'), 'utf8'))]));
+  const deferred = checkWithSession();
+  assert.equal(deferred.status, 4, deferred.stdout + deferred.stderr);
+  assert.match(deferred.stdout, /^stack base: PR #1345 in stack #88 \(branch branch-1345, base branch-1318\)/m);
+  rmSync(join(checkout, 'stacks-reads.json'));
+  writeIssue(issue('Ready', [basePredecessor]));
+
   // GitHub retargets the next open layer to the trunk after merging the bottom layer.
   setStack([bottom, middle], { pull_requests: [member(bottom, { state: 'closed', merged_at: '2026-10-12T20:38:11Z' }), member(middle)] });
   middle.baseRefName = 'release/0.1.1';

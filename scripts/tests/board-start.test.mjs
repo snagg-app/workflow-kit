@@ -88,6 +88,40 @@ test('start takes a Ready issue to a Draft PR that closes it, and the same call 
   assert.equal(JSON.parse(text('pr.json')).body, 'Closes #1\nAgent: claude, Session: S2\nMehr');
 });
 
+test('start resumes its empty ordinary upper claim before linking a native stack (#606)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  git(checkout, 'switch', '-q', '-c', 'lower');
+  writeFileSync(file('lower.txt'), 'lower source');
+  git(checkout, 'add', 'lower.txt');
+  git(checkout, 'commit', '-q', '-m', 'lower source');
+  git(checkout, 'push', '-q', 'origin', 'lower');
+  const lowerHead = git(checkout, 'rev-parse', 'HEAD');
+  git(checkout, 'switch', '-q', 'main');
+  const lower = { number: 5, state: 'OPEN', isDraft: false, isCrossRepository: false,
+    repository: { nameWithOwner: 'test/example' }, baseRefName: 'main', headRefName: 'lower', headRefOid: lowerHead };
+  const blocked = predecessor('OPEN', null, [lower], { repository: { nameWithOwner: 'test/example' } });
+  writeIssue(issue('Ready', [blocked]));
+  let result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(checkout, 'diff', '--name-only', 'origin/lower', 'HEAD'), '', 'empty claim, no placeholder source diff');
+  assert.equal(text('stacks.json'), '', 'the empty claim is not added to a native stack');
+  const developed = text('develops'), created = text('created-pr');
+  const current = { number: 7, state: 'OPEN', body: 'Closes #1\nAgent: claude, Session: S1\n',
+    headRefName: 'claude/1-fixture', repository: { nameWithOwner: 'test/example' } };
+  writeIssue({ ...JSON.parse(text('issue.json')), closedByPullRequestsReferences: { totalCount: 1, nodes: [current] } });
+  result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(text('created-pr'), created, 'resume keeps the same claim');
+  assert.equal(text('develops'), developed, 'resume keeps the same branch');
+  assert.equal(text('stored'), 'In progress');
+
+  // A different session still cannot use the unlinked claim; no stack fallback weakens ownership.
+  result = run('start', '1', '--session', 'S2');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(text('created-pr'), created);
+  assert.equal(text('develops'), developed);
+});
+
 for (const retained of ['remote', 'local', 'other repository']) test(`start leaves a closed foreign Codex session ${retained} branch untouched (#588)`, t => {
   const { checkout, run, writeIssue, git, file, text, env } = startFixture(t);
   env.CODEX_THREAD_ID = 'S2';
