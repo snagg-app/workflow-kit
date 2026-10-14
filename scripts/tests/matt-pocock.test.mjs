@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { adaptCodeReview } from '../code-review-failure-paths.mjs';
 import { skipWithoutSubmodules } from './fixtures.mjs';
 
 const skip = skipWithoutSubmodules();
@@ -31,7 +32,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
   git(fixture, 'add', '.gitmodules');
   git(fixture, 'update-index', '--add', '--cacheinfo', `160000,${revision},.vendor/matt-pocock-skills`);
   mkdirSync(join(fixture, 'scripts'));
-  for (const name of ['setup-skills.mjs', 'setup-matt-pocock.mjs', 'checkout-root.mjs', 'provider-links.mjs'])
+  for (const name of ['setup-skills.mjs', 'setup-matt-pocock.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'provider-links.mjs'])
     copyFileSync(join(kit, 'scripts', name), join(fixture, 'scripts', name));
   for (const name of ['setup-ponytail.mjs', 'setup-impeccable.mjs'])
     write(join(fixture, 'scripts', name), 'import {writeFileSync} from "node:fs"; writeFileSync("other-generator-ran", "");\n');
@@ -56,6 +57,8 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
     .replace(' marked as closing the spec and tickets.', ' marked as closing the tickets, never the spec (only a human closes a spec: `AGENT_RULES.md`, Hard rules).'));
   expected.set('chief-of-staff/SKILL.md', expected.get('chief-of-staff/SKILL.md').replace('All work should be done in subagents. Protect your context window.\n',
     'All work should be done in subagents. Protect your context window.\n\nNo agent closes a spec or sets it to Done, a subagent and you included: only a human accepts a spec (`AGENT_RULES.md`, Hard rules).\n'));
+  // code-review gains the Failure-paths axis (#608); adaptCodeReview throws when upstream moves a replaced passage.
+  expected.set('code-review/SKILL.md', adaptCodeReview(expected.get('code-review/SKILL.md')));
   assert.match(expected.get('implement-spec/SKILL.md'), /closing the tickets, never the spec/, 'upstream still has the sentence implement-spec adapts');
   assert.match(expected.get('chief-of-staff/SKILL.md'), /No agent closes a spec/, 'upstream still has the paragraph chief-of-staff adapts');
   write(join(consumer, '.agents/skills/ask-matt/LOCAL.md'), 'Keep my local work\n');

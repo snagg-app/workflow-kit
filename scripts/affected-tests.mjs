@@ -38,7 +38,7 @@ export const TABLE = [
   [/^\.github\/hooks\/impeccable\.json$/, ['impeccable-hooks.test.mjs']],
   [/^scripts\/(update-impeccable\.mjs|impeccable\/)|^\.vendor\/impeccable$/, ['impeccable-update.test.mjs']],
   [/^scripts\/setup-impeccable\.mjs$/, ['impeccable-update.test.mjs', 'matt-pocock.test.mjs']],
-  [/^scripts\/(setup-matt-pocock|setup-skills)\.mjs$/, ['matt-pocock.test.mjs', 'setup.test.mjs']],
+  [/^scripts\/(setup-matt-pocock|setup-skills|code-review-failure-paths)\.mjs$/, ['matt-pocock.test.mjs', 'setup.test.mjs']],
   [/^\.github\/skills\/|^\.vendor\/matt-pocock-skills$/, ['matt-pocock.test.mjs']],
   [/^scripts\/check-submodule-sources\.mjs$|^\.gitmodules$/, ['check-submodule-sources.test.mjs']],
   [/^\.github\/workflows\/renovate-regenerate\.yml$|^renovate\.json$/, ['renovate-regenerate.test.mjs']],

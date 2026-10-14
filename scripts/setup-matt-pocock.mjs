@@ -5,6 +5,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot } from './checkout-root.mjs';
+import { adaptCodeReview } from './code-review-failure-paths.mjs';
 import { checkDirectory, localDirectory, materialize, moveAside } from './provider-links.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -27,7 +28,8 @@ const adapt = (skill, path, content) => path !== 'SKILL.md' ? content
   : skill === 'retro' ? content.replace(/^disable-model-invocation: true\n/m, '')
     : skill === 'implement' ? content.replace(implementTests[0], implementTests[1])
       : skill === 'implement-spec' ? content.replace(specPr[0], specPr[1])
-        : skill === 'chief-of-staff' ? content.replace(specRule[0], specRule[1]) : content;
+        : skill === 'chief-of-staff' ? content.replace(specRule[0], specRule[1])
+          : skill === 'code-review' ? adaptCodeReview(content) : content;
 
 function cleanSource() {
   assert.equal(git('-C', source, 'status', '--porcelain', '--untracked-files=all').trim(), '',
