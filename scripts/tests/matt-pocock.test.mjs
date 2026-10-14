@@ -31,7 +31,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
   git(fixture, 'add', '.gitmodules');
   git(fixture, 'update-index', '--add', '--cacheinfo', `160000,${revision},.vendor/matt-pocock-skills`);
   mkdirSync(join(fixture, 'scripts'));
-  for (const name of ['setup-skills.mjs', 'setup-matt-pocock.mjs', 'checkout-root.mjs', 'provider-links.mjs'])
+  for (const name of ['setup-skills.mjs', 'setup-matt-pocock.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'provider-links.mjs'])
     copyFileSync(join(kit, 'scripts', name), join(fixture, 'scripts', name));
   for (const name of ['setup-ponytail.mjs', 'setup-impeccable.mjs'])
     write(join(fixture, 'scripts', name), 'import {writeFileSync} from "node:fs"; writeFileSync("other-generator-ran", "");\n');
@@ -87,7 +87,12 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
       assert.equal(readFileSync(join(destination, manifest.license), 'utf8'), readFileSync(join(source, 'LICENSE'), 'utf8').replaceAll('\r\n', '\n'));
       for (const [path, content] of expected) {
         assert.ok(lstatSync(join(destination, path)).isFile(), `${provider}/${path} is a real file`);
-        assert.equal(readFileSync(join(destination, path), 'utf8'), content, `${provider}/${path}`);
+        const actual = readFileSync(join(destination, path), 'utf8');
+        if (path === 'code-review/SKILL.md') {
+          assert.match(actual, /\*\*Failure-paths sub-agent prompt\*\* should include:/);
+          assert.match(actual, /Issue all three sub-agent calls together/);
+          assert.match(actual, /`## Failure paths`/);
+        } else assert.equal(actual, content, `${provider}/${path}`);
       }
       for (const skill of Object.keys(manifest.skills)) {
         assert.ok(lstatSync(join(destination, skill)).isDirectory(), `${provider}/${skill} is a real directory`);
