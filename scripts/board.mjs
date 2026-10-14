@@ -381,8 +381,9 @@ function stackBase(open, currentPrNumber) {
     const stacks = rest(`repos/${project.repository}/stacks?pull_request=${filterNumber}`);
     assert.ok(Array.isArray(stacks), 'The native stack list is unreadable');
     if (!stacks.length) {
-      if (currentPrNumber) refused.push(`PR #${currentPrNumber} is not linked in an open native stack`);
-      else if (deliveries.length > 1) refused.push('the blocker PRs are not proven members of one native stack');
+      // The empty start claim stays unlinked until its first source diff (#606); handoff still requires native membership.
+      if (currentPrNumber) return stackBase(open);
+      if (deliveries.length > 1) refused.push('the blocker PRs are not proven members of one native stack');
       else return { pr: deliveries[0], refused, unknown };
     } else {
       assert.equal(stacks.length, 1, `PR #${filterNumber} belongs to an ambiguous number of native stacks`);
@@ -2803,7 +2804,7 @@ function start() {
   assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');
   // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
   if (project.setup) try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and PR stay: fix it and run start again`); }
-  console.log(`START #${number} session ${session} branch ${branch} base ${base} PR #${pr}${stacked && stacked.state !== 'MERGED' ? ` (stack: link it above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests)` : ''}`);
+  console.log(`START #${number} session ${session} branch ${branch} base ${base} PR #${pr}${stacked && stacked.state !== 'MERGED' ? ` (stack: keep the empty claim unlinked; after the first source diff, link it above PR #${stacked.number} before done, docs/CONTRIBUTING.md#stacked-pull-requests)` : ''}`);
 }
 
 /**

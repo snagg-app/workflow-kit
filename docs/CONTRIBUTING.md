@@ -266,7 +266,13 @@ existing issue, PR and chat progress for coordination.
    base: … branch B` in the check output). When a predecessor PR is already in a native
    stack, the check names the current top PR and its stack number; the branch comes from that top, as in [Delivery](#delivery).
    On a base PR into `release/X.Y.Z` the stack's trunk is that release branch; that is allowed.
-2. **PR and stack.** `start` creates your PR as Draft with base `B`.
+2. **PR and stack.** `start` creates your PR as Draft with base `B`. Keep this empty claim
+   outside the native stack until its first real file diff has been pushed: GitHub's lower-layer
+   merge rebases native upper branches and can close an empty upper claim (#606).
+   A proof-only task needs no placeholder source change; its empty Draft stays unlinked.
+   `start` can resume this ordinary claim; `done` still requires a native stack before handing
+   off a changed upper layer whose predecessor is open. After the first source push, run
+   `start` again for the current predecessor and tip, confirm the open PR's file diff, then link:
    If `B` is already the tip of a native stack, append your PR with
    `gh stack link STACK_NUMBER YOUR_PR` (the number is shown by the check; extension
    `gh extension install github/gh-stack`). Without the extension, call
@@ -300,6 +306,11 @@ existing issue, PR and chat progress for coordination.
    show nothing but what the base branch gained meanwhile, then a plain `git push` and `git branch -D
    backup/<branch>`. After that check the base branch and CI on the new head. On a release branch the base PR's issue stays open after the merge, so the check keeps saying STACKABLE ("already merged"): your layer is then a plain PR on the release branch, and `done` skips the stack checks. If the base PR is closed
    without merge, your layer stops: run `start` again and report; don't retarget your PR on your own.
+   If it merged while your ordinary empty claim was still unlinked, run `start` again and
+   read the predecessor's merged PR and trunk back. Only your still-open ordinary claim may
+   be retargeted to that proven trunk (check its session, branch, head and native issue link,
+   then read them back after the change); no stack is needed after the predecessor merged.
+   Do not reopen a closed PR from timing alone: the close event does not prove provider intent.
 6. **Handoff.** Your layer may go to Human review before the base PR is merged. `board.mjs done`
    then requires your PR to come from this repository, to be linked with the base PR as a stack on GitHub
    (the Stacks API read-back from step 2, not just an aligned branch chain; other layers may sit between the
