@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.14/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.14/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }
@@ -68,7 +68,7 @@
           },
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.14/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
+            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
             "timeout": 5
           }
         ]

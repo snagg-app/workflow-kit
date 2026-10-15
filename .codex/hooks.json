@@ -43,9 +43,9 @@
           },
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.14/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
+            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
             "timeout": 5,
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if not exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.14\\impeccable.exe\" (echo {\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE"
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if not exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" (echo {\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE"
           }
         ]
       },
@@ -113,8 +113,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.14/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.14\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.14\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }
@@ -126,8 +126,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.14/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.14\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.14\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }
