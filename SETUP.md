@@ -10,7 +10,7 @@ Git status, board, CI, update bots and agent configuration. Confirm the target, 
 differ from this checkout. Resolve only missing choices in one compact round:
 
 - **Repository:** a new one from
-  [project-template](https://github.com/vaultdex/project-template), or an existing
+  [project-template](https://github.com/snagg-app/project-template), or an existing
   one? Get the exact OWNER/REPO and local path. For a new one, also the owner, name
   and visibility; recommend private.
 - **Board:** an existing GitHub Project number under the same owner, or a copy of
@@ -28,7 +28,7 @@ the user's budget decision first.
 ## 2. Repository
 
 For a new repository run
-`gh repo create OWNER/REPO --template vaultdex/project-template --private`, then
+`gh repo create OWNER/REPO --template snagg-app/project-template --private`, then
 clone it with `--recurse-submodules`.
 
 With a working kit and `.github/workflow-project.json`, follow

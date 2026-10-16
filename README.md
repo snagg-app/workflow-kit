@@ -3,7 +3,7 @@
 Contribution workflow, GitHub Project setup and agent skills: Ponytail,
 Impeccable, Matt Pocock's complete collection, Vercel's `find-skills` and the kit's own
 `spec-review` (`/spec-review <spec>`: spec against code, open work becomes sub-issues).
-Maintained by Vaultdex under MIT. Pinned upstream submodules and the
+Maintained by Snagg under MIT. Pinned upstream submodules and the
 [find-skills snapshot](.agents/skills/find-skills/NOTICE.md) retain their licenses,
 notices and reviewed adaptations in generated skills.
 
@@ -16,7 +16,7 @@ Needs Git, Node 26 and, for the board commands, an authenticated `gh`. Kit comma
 act on the Git checkout they run in; from the project root:
 
 ```sh
-git submodule add https://github.com/vaultdex/workflow-kit.git .vendor/workflow-kit  # first time only
+git submodule add https://github.com/snagg-app/workflow-kit.git .vendor/workflow-kit  # first time only
 git submodule update --init --recursive
 node .vendor/workflow-kit/scripts/init-project.mjs --existing  # kit hooks, .gitignore and .ignore
 node .vendor/workflow-kit/scripts/setup-skills.mjs             # skills for every agent
