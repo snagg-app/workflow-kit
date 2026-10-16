@@ -140,7 +140,7 @@ literal absolute path (`git -C F:/…/<worktree>/.vendor/workflow-kit …`); a r
 1. `git submodule update --init .vendor/workflow-kit`
 2. `git -C <abs>/.vendor/workflow-kit fetch origin main`
 3. `git -C <abs>/.vendor/workflow-kit checkout -b claude/ISSUE-slug origin/main`
-4. Edit, commit and push inside `.vendor/workflow-kit`; open the PR against `vaultdex/workflow-kit`.
+4. Edit, commit and push inside `.vendor/workflow-kit`; open the PR against `snagg-app/workflow-kit`.
 
 `<abs>` is the literal absolute path of your worktree. Run every board command for the kit issue with
 `node .vendor/workflow-kit/scripts/board.mjs --cwd <abs>/.vendor/workflow-kit …`; without `--cwd`, status and fields land

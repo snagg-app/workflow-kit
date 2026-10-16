@@ -1,18 +1,18 @@
-name: Notify Vaultdex
-# A push to main starts Vaultdex's kit-pin.yml (repository_dispatch kit-main), so the pin PR opens within
-# minutes instead of waiting for Renovate (vaultdex/Vaultdex#1780). VAULTDEX_DISPATCH_TOKEN: fine-grained,
-# vaultdex/Vaultdex only, Contents read and write. Without the secret the run fails visibly.
+name: Notify Snagg
+# A push to main sends the existing kit-main event to Snagg (vaultdex/Vaultdex#1780).
+# VAULTDEX_DISPATCH_TOKEN: fine-grained, snagg-app/Snagg only, Contents read and write.
+# Without the secret the run fails visibly.
 on:
   push:
     branches: [main]
 permissions: {}
 jobs:
   dispatch:
-    name: Start Vaultdex kit pin
-    if: github.repository == 'vaultdex/workflow-kit'
+    name: Start Snagg kit pin
+    if: github.repository == 'snagg-app/workflow-kit'
     runs-on: ubuntu-slim
     timeout-minutes: 2
     steps:
       - env:
           GH_TOKEN: ${{ secrets.VAULTDEX_DISPATCH_TOKEN }}
-        run: gh api repos/vaultdex/Vaultdex/dispatches -f event_type=kit-main
+        run: gh api repos/snagg-app/Snagg/dispatches -f event_type=kit-main

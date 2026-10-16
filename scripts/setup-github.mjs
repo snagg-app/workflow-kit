@@ -28,7 +28,7 @@ const number = requestedNumber ?? saved?.number;
 if (number) assert.match(String(number), /^\d+$/, 'Recorded project number must be numeric');
 const project = number
   ? JSON.parse(gh('project', 'view', String(number), '--owner', owner, '--format', 'json'))
-  : JSON.parse(gh('project', 'copy', '5', '--source-owner', 'vaultdex', '--target-owner', owner, '--title', name, '--format', 'json'));
+  : JSON.parse(gh('project', 'copy', '5', '--source-owner', 'snagg-app', '--target-owner', owner, '--title', name, '--format', 'json'));
 const saveProject = () => {
   mkdirSync(dirname(marker), { recursive: true });
   // Keep project-owned settings such as "start"; only the board binding is rewritten.

@@ -54,7 +54,7 @@ the skills directly. Repository workflow, validation and security rules remain a
 ## Update
 
 Updates arrive through repository changes. See
-[checkout usage and updates](https://github.com/vaultdex/workflow-kit/blob/main/README.md#install-or-update-in-a-project).
+[checkout usage and updates](https://github.com/snagg-app/workflow-kit/blob/main/README.md#install-or-update-in-a-project).
 Regenerate local links and cloud files together; retain patches and MIT attribution.
 
 ## More

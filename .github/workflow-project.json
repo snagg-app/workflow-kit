@@ -1,9 +1,9 @@
 {
-  "repository": "vaultdex/workflow-kit",
-  "owner": "vaultdex",
+  "repository": "snagg-app/workflow-kit",
+  "owner": "snagg-app",
   "number": 5,
   "id": "PVT_kwDOE1inYs4BkIaa",
-  "url": "https://github.com/orgs/vaultdex/projects/5",
+  "url": "https://github.com/orgs/snagg-app/projects/5",
   "optionalReviewers": [
     "coderabbitai"
   ],
