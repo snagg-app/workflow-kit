@@ -11,7 +11,7 @@ const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = projectRoot();
 const source = join(kit, '.vendor/ponytail');
 const state = join(root, '.workflow-kit');
-const providers = ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'];
+const providers = ['.agents', '.claude'];
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 const gitTool = externalTool('git', root, kit, process.cwd());
 const git = (...args) => execFileSync(gitTool.file, args, { cwd: root, env: gitTool.env, encoding: 'utf8' });
@@ -56,7 +56,7 @@ try {
   for (const directory of providers.map(p => join(root, p, 'skills')))
     for (const entry of readdirSync(directory).filter(name => skillName.test(name)))
       if (!skills.includes(entry)) moveAside(root, join(directory, entry));
-  console.log(`Ponytail ${revision.slice(0, 7)}: committed skills for six providers and hook sources refreshed.`);
+  console.log(`Ponytail ${revision.slice(0, 7)}: committed Codex and Claude Code skills and hook sources refreshed.`);
 } finally {
   assert.equal(dirname(stage), state);
   assert.ok(!lstatSync(stage).isSymbolicLink());

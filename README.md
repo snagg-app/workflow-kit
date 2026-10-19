@@ -19,7 +19,7 @@ act on the Git checkout they run in; from the project root:
 git submodule add https://github.com/snagg-app/workflow-kit.git .vendor/workflow-kit  # first time only
 git submodule update --init --recursive
 node .vendor/workflow-kit/scripts/init-project.mjs --existing  # kit hooks, .gitignore and .ignore
-node .vendor/workflow-kit/scripts/setup-skills.mjs             # skills for every agent
+node .vendor/workflow-kit/scripts/setup-skills.mjs             # skills for Codex and Claude Code
 ```
 
 Without `--existing`, `init-project` also creates the starter files (AGENTS.md,
@@ -51,15 +51,21 @@ git submodule status .vendor/workflow-kit              # must show <kit-commit> 
 Then run the two generators above. A generator run that changes nothing after an
 update proves nothing about the new kit; check the status line first.
 
+The kit supports only Codex and Claude Code. Projects from earlier kit versions keep
+their copies for Antigravity, Cursor, OpenCode, Pi and Copilot: `init-project` removes
+only the kit's handlers from `.cursor/hooks.json` and `.github/hooks/*.json`, and the
+kit never deletes other project files. Delete `.agent/`, `.cursor/`, `.opencode/`,
+`.pi/`, `.github/skills/`, `.github/agents/` and `.github/hooks/` by hand (keep files
+of your own), or leave them unused.
+
 ### Generated files and ownership
 
 The kit owns hook handlers pointing into `~/.ponytail/vaultdex/` or
 `~/.impeccable/vaultdex/` and the kit init handler (`git ls-files -s -- .vendor/workflow-kit` followed by
 `git submodule update --init --checkout`; keep personal hooks elsewhere), and upstream skills, agents and
 commands by name. Generated discovery files are ordinary committed files in
-`.agent`, `.agents`, `.claude`, `.github`, `.opencode` and `.pi`, plus
-`.codex/agents`. Equal files stay untouched; changed content and old links move to
-`.workflow-kit/replaced/`. Foreign hooks and settings stay.
+`.agents` and `.claude`, plus `.codex/agents`. Equal files stay untouched; changed
+content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
 A fresh clone/worktree discovers these files without generation, links or dependency
 installation. Generate only during kit installation/update. An update PR bumps the
@@ -77,7 +83,7 @@ in Git explicitly, including on Windows and with `core.filemode=false`:
 git add --chmod=+x -- ":(glob)**/skills/impeccable/scripts/impeccable" ":(glob)**/skills/git-guardrails-claude-code/scripts/block-dangerous-git.sh"
 ```
 
-The clone test verifies all twelve executable Git entries. In Linux CI, regenerate,
+The clone test verifies all four executable Git entries. In Linux CI, regenerate,
 then run
 `git add --intent-to-add --all && git diff --exit-code HEAD`: any diff, including a new
 file, means committed outputs were stale.
@@ -95,9 +101,8 @@ node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs  # Impeccable UI 
 Agents run these installers themselves when the install hint appears, without
 asking ([agent rules](AGENT_RULES.md#hooks)); trust stays personal. Review and trust
 project hooks in each agent, then start a new session:
-`/hooks` in Codex CLI or Claude Code, the hooks view in the Codex app settings,
-Settings → Hooks in Cursor, `.github/hooks` for Copilot. Missing snapshots produce
-a SessionStart install hint. Session and subagent starts also run
+`/hooks` in Codex CLI or Claude Code, the hooks view in the Codex app settings.
+Missing snapshots produce a SessionStart install hint. Session and subagent starts also run
 `git submodule update --init .vendor/workflow-kit` when the kit checkout is missing (fresh
 worktree) or not at the commit the gitlink pins (a base merge moves the pin, not the checkout); a kit at its pin stays untouched,
 a kit with local changes, unpublished commits or a checked-out branch is not moved (the fast-forward then runs with `submodule.recurse=false`), and both that case and a failure print a hint. Before that, the same handler

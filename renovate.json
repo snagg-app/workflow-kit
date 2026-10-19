@@ -27,11 +27,10 @@
         "fileFilters": [
           "scripts/impeccable/**",
           "docs/impeccable.md",
-          "templates/.codex/hooks.json", "templates/.claude/settings.json", "templates/.github/hooks/impeccable.json",
-          ".codex/hooks.json", ".claude/settings.json", ".github/hooks/impeccable.json",
-          ".agent/skills/impeccable/**", ".agents/skills/impeccable/**", ".claude/skills/impeccable/**",
-          ".github/skills/impeccable/**", ".opencode/skills/impeccable/**", ".pi/skills/impeccable/**",
-          ".codex/agents/impeccable*", ".claude/agents/impeccable*", ".github/agents/impeccable*", ".opencode/commands/impeccable*"
+          "templates/.codex/hooks.json", "templates/.claude/settings.json",
+          ".codex/hooks.json", ".claude/settings.json",
+          ".agents/skills/impeccable/**", ".claude/skills/impeccable/**",
+          ".codex/agents/impeccable*", ".claude/agents/impeccable*"
         ]
       }
     },

@@ -12,9 +12,9 @@ const handlers = (file, key, marker = 'ls-files -s -- .vendor/workflow-kit') => 
   const hooks = Object.values(JSON.parse(readFileSync(join(templates, file), 'utf8')).hooks).flat().flatMap(group => group.hooks ?? [group]);
   return hooks.filter(hook => hook[key]?.includes(marker)).map(hook => hook[key]);
 };
-// The init handlers of every agent: Claude, Codex, Cursor (shell part of its polyglot) and Copilot.
-const posix = [['.claude/settings.json', 'command'], ['.codex/hooks.json', 'command'], ['.cursor/hooks.json', 'command'], ['.github/hooks/workflow-kit.json', 'bash']];
-const windows = [['.codex/hooks.json', 'commandWindows'], ['.github/hooks/workflow-kit.json', 'powershell']];
+// The init handlers of every agent: Claude and Codex.
+const posix = [['.claude/settings.json', 'command'], ['.codex/hooks.json', 'command']];
+const windows = [['.codex/hooks.json', 'commandWindows']];
 const shell = process.platform === 'win32' ? { posix: 'sh', windows: 'powershell.exe' } : { posix: '/bin/sh', windows: 'pwsh' };
 
 // Every handler runs in its own temporary directory with its own repositories, so the variants run side by side.

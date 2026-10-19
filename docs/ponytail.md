@@ -35,13 +35,8 @@ Codex sessions; these commands are not standalone CMD snippets.
 | Host | Events |
 | --- | --- |
 | Codex, Claude Code | SessionStart, UserPromptSubmit, SubagentStart |
-| Copilot | sessionStart, userPromptSubmitted, subagentStart |
-| Cursor | sessionStart, beforeSubmitPrompt |
 
-Cursor's existing always-on Ponytail rule takes precedence. Its sessionStart hook
-uses one Windows/POSIX command: a Bash/PowerShell
-[polyglot](https://shogo82148.github.io/blog/2021/12/30/polyglot-of-bash-and-powershell/),
-and `launch.cmd` is a cmd/sh polyglot.
+`launch.cmd` is a cmd/sh polyglot.
 
 Mode is stored per Git checkout and host in the Ponytail config directory.
 `/ponytail lite|full|ultra|off` switches it, and `/ponytail default <mode>` saves a

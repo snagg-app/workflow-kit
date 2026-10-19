@@ -70,10 +70,12 @@ for (const name of templates.filter(name => !isHooks(name))) {
   if (!existing && !existsSync(safe(name))) write(name, text(join(kit, 'templates', name)));
 }
 const hookTemplates = new Map(templates.filter(isHooks).map(name => [name, JSON.parse(text(join(kit, 'templates', name)))]));
+// Cursor and Copilot are no longer supported: without a template, their files only lose the kit's handlers.
 const githubHooks = existsSync(join(root, '.github/hooks')) ? readdirSync(join(root, '.github/hooks')).map(file => `.github/hooks/${file}`) : [];
 for (const name of new Set([...hookTemplates.keys(), '.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json', ...githubHooks]))
   if (isHooks(name) && (hookTemplates.has(name) || existsSync(safe(name)))) mergeHooks(name, hookTemplates.get(name));
 
+// Includes providers the kit no longer supports: their old ignore lines are still removed.
 const providers = ['.agent', '.agents', '.claude', '.opencode', '.pi'];
 // Remove only exact obsolete patterns emitted by earlier kit versions; project ignores stay.
 const legacy = new Set(['/.agents/hooks/', ...providers.map(p => `/${p}/skills/ponytail*/`), '/.agents/hooks',
