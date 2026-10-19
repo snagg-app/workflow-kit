@@ -15,7 +15,7 @@ differ from this checkout. Resolve only missing choices in one compact round:
   and visibility; recommend private.
 - **Board:** an existing GitHub Project number under the same owner, or a copy of
   the kit's template board?
-- **Tools:** which agents (Codex, Claude Code, Cursor, Copilot, OpenCode/Pi) and
+- **Tools:** which agents (Codex, Claude Code) and
   reviewers (CodeRabbit, Codex), and which of them are optional
   (`"optionalReviewers"`, see [section 3](#3-board-and-labels))? Which updater: the existing Renovate or
   Dependabot, never both? Optional Sonar?

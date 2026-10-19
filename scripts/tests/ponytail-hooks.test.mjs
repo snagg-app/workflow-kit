@@ -69,14 +69,12 @@ public class Shim { public static void Main() { System.IO.File.WriteAllText(Syst
   }
   const hostile = { ...env, PONYTAIL_MARKER: marker, PATH: [checkout, bin, '.', process.env.PATH].join(path.delimiter) };
   const input = JSON.stringify({ prompt: '/ponytail lite' });
-  // Cursor on Windows pipes its payload through PowerShell's $input.
-  const cursor = (shell, command) => shell.executable.endsWith('powershell.exe') ? `$input | & { $input | ${command}\n }` : command;
   const execute = (shell, command, extra = {}) => exec(shell.executable, [...shell.args, command],
     { cwd: path.join(checkout, 'frontend'), env: { ...hostile, ...extra }, input, timeout: hookTimeout });
-  const manifests = ['.codex/hooks.json', '.claude/settings.json', '.github/hooks/ponytail.json', '.cursor/hooks.json'];
+  const manifests = ['.codex/hooks.json', '.claude/settings.json'];
   const handlers = manifest => Object.entries(JSON.parse(readFileSync(path.join(root, manifest), 'utf8')).hooks)
     .flatMap(([event, groups]) => groups.flatMap(group => group.hooks || [group]).map(handler => ({ event, handler })))
-    .filter(({ handler }) => /ponytail/.test(handler.command || handler.bash || ''));
+    .filter(({ handler }) => /ponytail/.test(handler.command || ''));
   const missing = { HOME: path.join(temp, 'missing'), USERPROFILE: path.join(temp, 'missing') };
   // The handlers only read the installed snapshot, so every launcher runs side by side.
   const trials = [];
@@ -84,15 +82,14 @@ public class Shim { public static void Main() { System.IO.File.WriteAllText(Syst
     const start = event.toLowerCase() === 'sessionstart';
     for (const shell of shells) {
       const powershell = shell.executable.endsWith('powershell.exe');
-      if (powershell && !handler.powershell && !['.codex/hooks.json', '.cursor/hooks.json'].includes(manifest)) continue;
-      const native = powershell ? handler.commandWindows ?? handler.powershell ?? handler.command : handler.command ?? handler.bash;
-      const command = manifest === '.cursor/hooks.json' ? cursor(shell, native) : native;
+      // Claude Code runs its hooks through Bash, also on Windows.
+      if (powershell && manifest !== '.codex/hooks.json') continue;
+      const command = powershell ? handler.commandWindows ?? handler.command : handler.command;
       trials.push((async () => {
         const result = await execute(shell, command);
         assert.equal(result.status, 0, `${manifest} ${event}: ${result.stderr}`);
         if (manifest !== '.claude/settings.json' && result.stdout) assert.doesNotThrow(() => JSON.parse(result.stdout), `${manifest} ${event}: host JSON`);
-        // Without a snapshot only SessionStart speaks (the install hint). Cursor's prompt hook just errors.
-        if (manifest === '.cursor/hooks.json' && !start) return;
+        // Without a snapshot only SessionStart speaks (the install hint).
         const absent = await execute(shell, command, missing);
         assert.equal(absent.status, 0, `${manifest} ${event} without snapshot: ${absent.stderr}`);
         assert.equal(Boolean(absent.stdout.trim()), start, `${manifest} ${event} without snapshot`);
@@ -104,10 +101,11 @@ public class Shim { public static void Main() { System.IO.File.WriteAllText(Syst
 
   // A failing installed hook stays a failure through every launcher.
   const activate = path.join(env.HOME, '.ponytail/vaultdex', version, '.agents/hooks/ponytail-activate.js');
-  const [{ handler: cursorStart }] = handlers('.cursor/hooks.json');
+  const [{ handler: claudeStart }] = handlers('.claude/settings.json');
   writeFileSync(activate, 'process.exit(7);');
   if (windows) assert.equal((await execute(shells[0], handlers('.codex/hooks.json')[0].handler.commandWindows)).status, 7, 'Codex preserves launcher failure');
-  for (const shell of shells) assert.equal((await execute(shell, cursor(shell, cursorStart.command))).status, 7, shell.executable);
+  for (const shell of shells.filter(shell => !shell.executable.endsWith('powershell.exe')))
+    assert.equal((await execute(shell, claudeStart.command)).status, 7, shell.executable);
 });
 
 test('adapted hooks preserve explicit host and checkout state and drain stdout on EOF or stuck stdin', async t => {
@@ -140,7 +138,7 @@ test('adapted hooks preserve explicit host and checkout state and drain stdout o
   const otherCheckout = path.join(temp, 'other-checkout');
   mkdirSync(path.join(otherCheckout, '.git'), { recursive: true });
   assert.equal(activate(otherCheckout, 'claude', {}, 'continue'), '', 'Other checkout has no mode');
-  for (const host of ['codex', 'copilot']) {
+  for (const host of ['codex', 'claude']) {
     activate(checkout, host);
     for (const hook of ['mode-tracker', 'subagent']) for (const eof of [true, false]) {
       const output = await new Promise((resolve, reject) => {
@@ -159,14 +157,12 @@ test('adapted hooks preserve explicit host and checkout state and drain stdout o
         const input = JSON.stringify(hook === 'mode-tracker' ? { prompt: '/ponytail lite' } : { agentName: 'worker' });
         if (eof) child.stdin.end(input); else child.stdin.write(input);
       });
-      const parsed = JSON.parse(output);
-      if (host === 'codex') {
+      if (host === 'codex' || hook === 'subagent') {
+        const parsed = JSON.parse(output);
         assert.equal(parsed.hookSpecificOutput.hookEventName, hook === 'mode-tracker' ? 'UserPromptSubmit' : 'SubagentStart');
-        assert.ok(parsed.hookSpecificOutput.additionalContext.endsWith('lite:' + rules), `${hook} eof=${eof}: complete rules`);
-      } else {
-        assert.equal(Boolean(parsed.additionalContext), hook === 'subagent', 'Copilot receives supported subagent context');
-        if (hook === 'subagent') assert.equal(parsed.additionalContext, 'lite:' + rules, `Copilot eof=${eof}: complete rules`);
-      }
+        if (host === 'codex') assert.ok(parsed.hookSpecificOutput.additionalContext.endsWith('lite:' + rules), `${hook} eof=${eof}: complete rules`);
+        else assert.equal(parsed.hookSpecificOutput.additionalContext, 'lite:' + rules, `Claude eof=${eof}: complete subagent rules`);
+      } else assert.equal(output, 'PONYTAIL MODE CHANGED — level: lite', `Claude eof=${eof}: mode confirmation only`);
     }
   }
 });

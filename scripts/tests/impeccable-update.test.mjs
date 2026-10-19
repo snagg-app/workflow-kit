@@ -26,8 +26,8 @@ const checksum = async url => {
   return `${file.hash}  ${file.name}\n`;
 };
 const metadata = ['scripts/impeccable/VERSION', 'scripts/impeccable/SHA256SUMS', 'docs/impeccable.md',
-  'templates/.codex/hooks.json', 'templates/.claude/settings.json', 'templates/.github/hooks/impeccable.json'];
-const providers = ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'];
+  'templates/.codex/hooks.json', 'templates/.claude/settings.json'];
+const providers = ['.agents', '.claude'];
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'impeccable update '));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -51,7 +51,7 @@ function fixture(t) {
   }
   for (const provider of providers)
     writeFileSync(join(root, provider, 'skills/impeccable/scripts/VERSION'), '0.1.5\n');
-  for (const directory of ['.codex/agents', '.claude/agents', '.github/agents', '.opencode/commands']) {
+  for (const directory of ['.codex/agents', '.claude/agents']) {
     const file = readdirSync(join(root, directory)).find(name => name.startsWith('impeccable'));
     assert.ok(file, `Existing companion in ${directory}`);
     writeFileSync(join(root, directory, file), 'outdated generated companion\n');

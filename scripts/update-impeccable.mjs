@@ -7,10 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot } from './checkout-root.mjs';
 import { checkDirectory } from './provider-links.mjs';
 
-const providers = ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'];
+const providers = ['.agents', '.claude'];
 const assets = ['impeccable-darwin-arm64', 'impeccable-darwin-x64',
   'impeccable-linux-arm64', 'impeccable-linux-x64', 'impeccable-windows-x64.exe'];
-const hooks = ['.codex/hooks.json', '.claude/settings.json', '.github/hooks/impeccable.json'];
+const hooks = ['.codex/hooks.json', '.claude/settings.json'];
 const kitRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const text = file => readFileSync(file, 'utf8').replaceAll('\r\n', '\n');
 const download = async url => {

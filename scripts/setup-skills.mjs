@@ -16,7 +16,7 @@ const kit = dirname(scripts), root = projectRoot();
 for (const skill of ['find-skills', 'spec-review']) {
   const source = join(kit, '.agents/skills', skill);
   checkDirectory(kit, source);
-  for (const provider of ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'])
+  for (const provider of ['.agents', '.claude'])
     materialize(root, join(root, provider, 'skills', skill), source);
 }
 console.log('Skills generated for commit. Hook installation and personal trust are separate explicit steps.');

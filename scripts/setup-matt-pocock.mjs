@@ -11,7 +11,7 @@ import { checkDirectory, localDirectory, materialize, moveAside } from './provid
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = projectRoot();
 const source = join(kit, '.vendor/matt-pocock-skills');
-const providers = ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'];
+const providers = ['.agents', '.claude'];
 const gitTool = externalTool('git', root, kit, process.cwd());
 const git = (...args) => execFileSync(gitTool.file, args, { cwd: root, env: gitTool.env, encoding: 'utf8' });
 const text = path => readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
@@ -112,7 +112,7 @@ try {
   for (const provider of providers)
     for (const name of [...names, 'MATT-POCOCK-LICENSE.md', 'MATT-POCOCK-SOURCES.json'])
       materialize(root, join(root, provider, 'skills', name), join(stage, name));
-  console.log(`Matt Pocock ${revision.slice(0, 7)}: ${skills.length} complete skill trees published to six providers.`);
+  console.log(`Matt Pocock ${revision.slice(0, 7)}: ${skills.length} complete skill trees published for Codex and Claude Code.`);
 } finally {
   assert.equal(dirname(stage), state);
   assert.ok(!lstatSync(stage).isSymbolicLink());

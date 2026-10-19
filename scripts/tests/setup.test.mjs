@@ -32,7 +32,7 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   }
   assert.deepEqual(readdirSync(elsewhere), ['.git'], '--cwd acts on the named checkout, not the working directory');
   // Only discovery files enter the commit; no ignored staging bundles or upstream submodules.
-  execFileSync('git', ['-C', fixture, 'add', '.gitattributes', '.agent', '.agents', '.claude', '.github', '.codex', '.opencode', '.pi']);
+  execFileSync('git', ['-C', fixture, 'add', '.gitattributes', '.agents', '.claude', '.codex']);
   const executablePaths = ['**/skills/impeccable/scripts/impeccable', '**/skills/git-guardrails-claude-code/scripts/block-dangerous-git.sh']
     .map(path => `:(glob)${path}`);
   // The documented commit step preserves modes even on Windows/core.filemode=false.
@@ -41,11 +41,11 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   const clone = temporary(t, 'workflow-kit clone ');
   execFileSync('git', ['clone', '--quiet', '--no-local', fixture, clone]);
   const executableEntries = execFileSync('git', ['-C', clone, 'ls-files', '--stage', '--', ...executablePaths], { encoding: 'utf8' }).trim().split('\n');
-  assert.equal(executableEntries.length, 12);
+  assert.equal(executableEntries.length, 4);
   assert.ok(executableEntries.every(entry => entry.startsWith('100755 ')), 'Git clone preserves every Unix executable mode even with core.filemode=false');
   const skills = readdirSync(join(fixture, '.agents/skills')).filter(name => lstatSync(join(fixture, '.agents/skills', name)).isDirectory());
   assert.ok(skills.includes('ponytail') && skills.includes('impeccable') && skills.includes('tdd') && skills.includes('find-skills'));
-  for (const provider of ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'])
+  for (const provider of ['.agents', '.claude'])
     for (const skill of skills) {
       const path = join(provider, 'skills', skill);
       assert.ok(lstatSync(join(clone, path)).isDirectory(), path);
@@ -54,6 +54,8 @@ test('generated skills and hook sources survive a plain clone without setup', { 
         for (const file of ['SKILL.md', 'LICENSE', 'NOTICE.md'])
           assert.deepEqual(readFileSync(join(clone, path, file)), readFileSync(join(kit, '.agents/skills/find-skills', file)));
     }
+  for (const retired of ['.agent', '.cursor', '.github', '.opencode', '.pi'])
+    assert.equal(existsSync(join(fixture, retired)), false, `No output for unsupported agents: ${retired}`);
   assert.ok(lstatSync(join(clone, '.agents/hooks/ponytail-activate.js')).isFile());
   assert.ok(lstatSync(join(clone, '.codex/agents/impeccable_finish_reviewer.toml')).isFile());
   assert.equal(existsSync(join(clone, '.workflow-kit')), false);

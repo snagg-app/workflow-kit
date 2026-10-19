@@ -13,7 +13,7 @@ const root = projectRoot();
 const source = join(kit, ".vendor/impeccable");
 const state = join(root, ".impeccable");
 const security = join(kit, "scripts/impeccable");
-const providers = [".agent", ".agents", ".claude", ".github", ".opencode", ".pi"];
+const providers = [".agents", ".claude"];
 const skills = providers.map((provider) => `${provider}/skills/impeccable`);
 const text = (path) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
 // Resolve installed Git once; neither it nor child commands may come from checkout/PATH-relative entries.
@@ -21,7 +21,7 @@ const gitTool = externalTool("git", root, kit, process.cwd());
 const git = (...args) => execFileSync(gitTool.file, args, { cwd: root, env: gitTool.env, encoding: "utf8" });
 
 function companionFiles(base) {
-  return [".claude/agents", ".github/agents", ".codex/agents", ".opencode/commands"]
+  return [".claude/agents", ".codex/agents"]
     .flatMap((directory) => existsSync(join(base, directory))
       ? readdirSync(join(base, directory)).filter((name) => /^impeccable[-_.][\w.-]+$/.test(name))
         .map((name) => `${directory}/${name}`) : []);
@@ -77,19 +77,18 @@ try {
       "Upstream engine changed: review VERSION, SHA256SUMS and fixed hook definitions together");
     generateSkill(skill, join(next, skill));
   }
-  for (const directory of [".claude/agents", ".github/agents", ".opencode/commands"])
-    copyTracked(directory, join(next, directory));
+  copyTracked(".claude/agents", join(next, ".claude/agents"));
   copyTracked(".agents/skills/impeccable/agents", join(next, ".codex/agents"));
   const revision = git("-C", source, "rev-parse", "HEAD").trim();
   // Reject redirected ancestors before replacing output or inspecting existing companion files.
-  for (const directory of [".claude/agents", ".github/agents", ".codex/agents", ".opencode/commands"])
+  for (const directory of [".claude/agents", ".codex/agents"])
     checkDirectory(root, join(root, directory));
   const fresh = companionFiles(next), stale = companionFiles(root).filter((file) => !fresh.includes(file));
   for (const file of [...skills, ...stale, ...fresh]) localDirectory(root, dirname(join(root, file)));
   checkDirectory(root, join(root, ".workflow-kit/replaced"));
   for (const file of [...skills, ...fresh]) materialize(root, join(root, file), join(next, file));
   for (const file of stale) moveAside(root, join(root, file));
-  console.log(`Impeccable ${revision.slice(0, 7)}: committed skills for six providers and companions refreshed.\n`
+  console.log(`Impeccable ${revision.slice(0, 7)}: committed Codex and Claude Code skills and companions refreshed.\n`
     + `Hook engine ${version} requires explicit installation with install-impeccable-hooks.mjs and personal trust.`);
 } finally {
   // Only this invocation's generated staging, confined to state.

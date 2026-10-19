@@ -45,13 +45,17 @@ test('kit handlers are replaced; foreign handlers, groups and settings stay; rer
 });
 
 test('retired hook files lose only kit handlers', t => {
+  // Copilot (.github/hooks) and Cursor (.cursor/hooks.json) are no longer supported; their kit handlers retire.
   const f = fixture(t), mixed = join(f.root, '.github/hooks/old.json'), owned = join(f.root, '.github/hooks/gone.json');
+  const cursor = join(f.root, '.cursor/hooks.json');
   json(mixed, { version: 1, hooks: { sessionStart: [kitHook('old'), foreign] } });
   json(owned, { version: 1, hooks: { sessionStart: [kitHook('old')] } });
+  json(cursor, { version: 1, hooks: { sessionStart: [kitHook('old')], beforeSubmitPrompt: [kitHook('old')] } });
   json(join(f.root, '.github/workflow-kit.json'), { files: {}, hooks: {} });
   succeeds(f.run('--existing'));
   assert.deepEqual(read(mixed), { version: 1, hooks: { sessionStart: [foreign] } });
   assert.equal(existsSync(owned), false);
+  assert.equal(existsSync(cursor), false);
   assert.equal(existsSync(join(f.root, '.github/workflow-kit.json')), false, 'The old ownership receipt is retired');
 });
 
@@ -116,8 +120,8 @@ test('--cwd names the project to initialize, not the working directory', t => {
 test('writes stay inside the owning checkout', t => {
   const f = fixture(t), outside = join(f.base, 'outside');
   mkdirSync(outside);
-  symlinkSync(outside, join(f.root, '.cursor'), 'junction');
-  f.template('.cursor/hooks.json', { version: 1, hooks: { sessionStart: [kitHook('new')] } });
+  symlinkSync(outside, join(f.root, '.codex'), 'junction');
+  f.template('.codex/hooks.json', { hooks: { SessionStart: [{ hooks: [kitHook('new')] }] } });
   assert.notEqual(f.run('--existing').status, 0);
   assert.equal(existsSync(join(outside, 'hooks.json')), false);
   const other = join(f.base, 'other');

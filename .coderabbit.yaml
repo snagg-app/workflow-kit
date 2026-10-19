@@ -8,7 +8,6 @@ reviews:
     drafts: false
   path_filters:
     - "!**/.vendor/**"
-    - "!.github/skills/**"
   path_instructions:
     - path: "**"
       instructions: >-
