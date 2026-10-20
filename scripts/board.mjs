@@ -2993,12 +2993,17 @@ async function done() {
   const prepare = !file && !findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
   if (skipReason) console.log(`LOCAL TESTS SKIPPED ${sha}: ${skipReason}`);
   else if (!isTested()) {
+    // The green steps of this head are kept (--resume): after a red step the next call runs only the open ones.
+    const steps = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-steps'));
     try {
-      execFileSync(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
-    } catch { return fail('the targeted tests of the changed files failed (output above); fix them, push, then run done again'); }
+      execFileSync(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--resume', steps, '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
+    } catch { return fail('the targeted tests of the changed files failed (output above; green steps of this head are kept); fix the cause, then run done again (a push starts all steps anew)'); }
     writeFileSync(tested, sha);
   }
+  const took = (name, since) => console.log(`done: ${name} took ${((Date.now() - since) / 1000).toFixed(1)} s`);
+  const readyStart = Date.now();
   ready(prNumber, sha);
+  took('ready', readyStart);
   if (process.exitCode) return;
   value = String(prNumber);
   delivered = [value];
@@ -3006,7 +3011,9 @@ async function done() {
   if (partial) postBacklink(number, pull.html_url);
   // A head prepared after an earlier handoff has no handoff yet: it leaves Human review.
   else if (status !== 'Automated review' && (prepare || status !== 'Human review')) set('Status', 'Automated review');
-  const result = await poll(() => reviewsForHead(prNumber));
+  console.log('done: waiting for CI and reviews');
+  const waitStart = Date.now(), result = await poll(() => reviewsForHead(prNumber));
+  took('CI and reviews', waitStart);
   if (!result) return;
   if (result.failed) {
     process.exitCode = outcome(result)[1];
