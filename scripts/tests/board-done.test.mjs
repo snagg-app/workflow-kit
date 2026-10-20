@@ -504,9 +504,9 @@ for (const action of ['push', 'delete']) test(`done refuses a live remote ${acti
   assert.equal(text('stored'), 'In progress');
 });
 
-test('done refuses to push from a branch that tracks main or release/** and changes nothing (#646)', t => {
+test('done refuses to push from a checkout on main or release/** and changes nothing (#646)', t => {
   const { run, git, text, file, checkout } = delivery(t, handoffFixture);
-  git('branch', '--set-upstream-to=origin/release/0.1.1');
+  git('switch', '-C', 'release/0.1.1');
   writeFileSync(join(checkout, '.git/hooks/pre-push'), `#!/bin/sh\necho push >> "${checkout.replaceAll('\\', '/')}/pushes"\n`, { mode: 0o755 });
   const result = run('done', '1', 'result.md');
   assert.equal(existsSync(join(checkout, 'pushes')), false, 'no push attempt');

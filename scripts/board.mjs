@@ -2989,12 +2989,10 @@ async function done() {
   const issue = readIssue(), found = currentIssuePr(issue);
   let prNumber = given ?? found.number;
   if (prNumber === undefined && !found.unknown && !process.argv.includes('--refs')) prNumber = openFirstPr(issue);
-  // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch.
+  // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch; the later push names that branch, so an upstream on the base is harmless (#651).
   const checkedOut = prNumber === undefined ? '' : git('branch', '--show-current');
-  let upstream = '';
-  if (prNumber !== undefined) try { upstream = git('rev-parse', '--abbrev-ref', '@{upstream}').replace(/^origin\//, ''); } catch { /* no upstream */ }
-  if (onBase(checkedOut) || onBase(upstream)) {
-    console.log(`FAILED\nblocker: ${onBase(checkedOut) ? `the checkout is on ${checkedOut}` : `${checkedOut} tracks ${upstream}`}; nothing is pushed to main or release/**. Fix: git switch -c <agent>/${number}-<slug> --no-track (keeps your commits), or git branch --unset-upstream, then run done again`);
+  if (onBase(checkedOut)) {
+    console.log(`FAILED\nblocker: the checkout is on ${checkedOut}; nothing is pushed to main or release/**. Fix: git switch -c <agent>/${number}-<slug> --no-track (keeps your commits), then run done again`);
     process.exitCode = 1;
     return;
   }
