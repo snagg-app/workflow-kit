@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, issue, test } from './board-fixture.mjs';
 
@@ -28,4 +28,18 @@ test('next ranks by the Priority order of the Project, not by a cached one', t =
   const result = run('next');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.ok(result.stdout.indexOf('#2 [High]') >= 0 && result.stdout.indexOf('#2 [High]') < result.stdout.indexOf('#1 [Low]'), result.stdout);
+});
+
+test('stale ids in the cache are read again at the write, for every field of one call', t => {
+  const { checkout, env, queries, run, writeIssue } = fixture(t);
+  env.BOARD_FIELD_CACHE = '';
+  // Both options carry an id GitHub no longer knows.
+  writeFileSync(join(checkout, '.git', 'board-project-fields.json'), JSON.stringify({ project: 'P1', fields: [
+    { id: 'F2', name: 'Priority', options: [{ id: 'old-High', name: 'High' }] },
+    { id: 'F3', name: 'Size', options: [{ id: 'old-XS', name: 'XS' }] }] }));
+  writeIssue(issue());
+  const result = run('field', '1', 'Size', 'XS', 'Priority', 'High');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(checkout, 'stored-values.json'), 'utf8')), { F3: 'XS', F2: 'High' }, 'both fields are written with the fresh ids');
+  assert.equal(queries().filter(query => query.includes('fields(first:100)')).length, 1, 'the definitions are read again once, not per field');
 });

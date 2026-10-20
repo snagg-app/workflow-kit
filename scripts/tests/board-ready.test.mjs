@@ -14,7 +14,7 @@ test('ready --local takes the head of the checkout and still needs the PR to sho
   const quick = ['--attempts', '2', '--interval', '0.01'];
   const mutations = () => existsSync(join(checkout, 'mutations')) ? readFileSync(join(checkout, 'mutations'), 'utf8').split('\n').filter(Boolean).length : 0;
   const prepare = changes => {
-    for (const file of ['mutations', 'pr-reads.json', 'ready-noop', 'fail']) rmSync(join(checkout, file), { force: true });
+    for (const file of ['mutations', 'pr-rest-reads.json', 'ready-noop', 'fail']) rmSync(join(checkout, file), { force: true });
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify({ id: 'PR7', number: 7, state: 'OPEN', isDraft: true, isCrossRepository: false,
       headRefOid: PUSHED, headRepository: { nameWithOwner: 'test/example' }, ...changes }));
   };
@@ -48,10 +48,10 @@ test('ready marks a Draft PR ready only for the expected pushed commit and never
   const quick = ['--attempts', '3', '--interval', '0.01'];
   const mutations = () => existsSync(join(checkout, 'mutations')) ? readFileSync(join(checkout, 'mutations'), 'utf8').split('\n').filter(Boolean).length : 0;
   const prepare = (changes = {}, reads) => {
-    for (const file of ['mutations', 'pr-reads.json', 'ready-noop', 'fail']) rmSync(join(checkout, file), { force: true });
+    for (const file of ['mutations', 'pr-rest-reads.json', 'ready-noop', 'fail']) rmSync(join(checkout, file), { force: true });
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify({ id: 'PR7', number: 7, state: 'OPEN', isDraft: true, isCrossRepository: false,
       headRefOid: NEW, headRepository: { nameWithOwner: 'test/example' }, ...changes }));
-    if (reads) writeFileSync(join(checkout, 'pr-reads.json'), JSON.stringify(reads));
+    if (reads) writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify(reads));
   };
   // The verdict and the write count carry the behavior; the diagnostic wording is free to change.
   const refused = (changes, reads, label) => {

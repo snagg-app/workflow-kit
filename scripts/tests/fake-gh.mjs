@@ -222,8 +222,8 @@ function api(argv, input, stdout, stderr, exit) {
         fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), ...overlay }));
       }
       const pr = JSON.parse(fs.readFileSync('pr.json'));
-      stdout(JSON.stringify({ number: pr.number, html_url: pr.url, state: pr.state === 'OPEN' ? 'open' : 'closed', merged: pr.state === 'MERGED', draft: pr.isDraft, changed_files: pr.changedFiles, body: pr.body, updated_at: pr.updatedAt ?? 'u',
-        mergeable_state: String(pr.mergeStateStatus).toLowerCase(), head: { sha: pr.headRefOid, ref: pr.headRefName, repo: { full_name: pr.headRepository?.nameWithOwner } }, base: { ref: pr.baseRefName, sha: pr.baseRefOid } }));
+      stdout(JSON.stringify({ node_id: pr.id, number: pr.number, html_url: pr.url, state: pr.state === 'OPEN' ? 'open' : 'closed', merged: pr.state === 'MERGED', draft: pr.isDraft, changed_files: pr.changedFiles, body: pr.body, updated_at: pr.updatedAt ?? 'u',
+        mergeable_state: String(pr.mergeStateStatus).toLowerCase(), head: { sha: pr.headRefOid, ref: pr.headRefName, repo: { id: pr.isCrossRepository ? 2 : 1, full_name: pr.headRepository?.nameWithOwner } }, base: { ref: pr.baseRefName, sha: pr.baseRefOid, repo: { id: 1 } } }));
       exit(0);
     }
     if (parts[3] === 'commits' && parts[5] === 'statuses') {
@@ -282,6 +282,11 @@ function api(argv, input, stdout, stderr, exit) {
     const headers = ['HTTP/2.0 200 OK', 'Content-Type: application/json; charset=utf-8', ...remaining === undefined ? [] : [`X-Ratelimit-Remaining: ${remaining}`, `X-Ratelimit-Reset: ${reset}`]];
     stdout(argv.includes('-i') ? `${headers.join('\r\n')}\r\n\r\n${body}` : body);
   };
+  // An option id from a stale field cache (the id starts with "old-"): GitHub does not know it.
+  if (query.startsWith('mutation') && argv.some(arg => arg.startsWith('option=old-'))) {
+    stderr('gh: Could not resolve to a node with the global id of \'old\'\n');
+    exit(1);
+  }
   if (query.startsWith('mutation') && query.includes('updateProjectV2ItemFieldValue') && fs.existsSync('status-quota-retry')) {
     fs.unlinkSync('status-quota-retry');
     fs.writeFileSync('issues-sub_issues.json', JSON.stringify([{ number: 3, state: 'open' }]));
@@ -442,12 +447,20 @@ function api(argv, input, stdout, stderr, exit) {
     const index = cursor ? Number(cursor.slice(6)) : 0;
     const reviewThreads = { pageInfo: { hasNextPage: index + 1 < pages.length, endCursor: String(index + 1) },
       nodes: pages[index].map(isResolved => ({ isResolved, comments: { nodes: [{ url: 'thread-' + index }] } })) };
+    // The review read carries the first page of the native links; the scenarios that change something "after the links were read"
+    // (changed-issue.json, prAfterLinks) now change it after this read.
+    const linkPages = pr.linkPages ?? [[]];
+    const closingIssuesReferences = { totalCount: pr.linkTotal ?? linkPages.flat().length,
+      pageInfo: { hasNextPage: 1 < linkPages.length, endCursor: '1' }, nodes: linkPages[0].map(id => id === null ? null : { id, number: Number(String(id).replace(/\D/g, '')) }) };
+    if (query.includes('readyEvents')) {
+      if (fs.existsSync('changed-issue.json')) fs.copyFileSync('changed-issue.json', 'issue.json');
+      if (pr.prAfterLinks) fs.writeFileSync('pr.json', JSON.stringify(pr.prAfterLinks));
+    }
     data = query.includes('readyEvents')
-      ? { repository: { pullRequest: { ...pr, reviewThreads } } }
+      ? { repository: { pullRequest: { ...pr, reviewThreads, closingIssuesReferences } } }
       : { repository: { pullRequest: { reviewThreads } } };
   }
   else if (query.includes('closingIssuesReferences')) {
-    if (fs.existsSync('fail-links')) exit(1);
     const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};
     let pr = stackPrs[Number(argv.find(arg => arg.startsWith('number='))?.slice(7))] ?? JSON.parse(fs.readFileSync('pr.json'));
     if (pr.linkPending !== undefined) {
@@ -460,7 +473,7 @@ function api(argv, input, stdout, stderr, exit) {
     if (fs.existsSync('changed-issue.json')) fs.copyFileSync('changed-issue.json', 'issue.json');
     if (pr.prAfterLinks) fs.writeFileSync('pr.json', JSON.stringify(pr.prAfterLinks));
     data = { repository: { pullRequest: { state: pr.state, isDraft: pr.isDraft,
-      headRefOid: pr.changedHead ?? pr.headRefOid,
+      headRefOid: pr.headRefOid,
       closingIssuesReferences: { totalCount: pr.linkTotal ?? pages.flat().length,
         pageInfo: { hasNextPage: index + 1 < pages.length, endCursor: String(index + 1) },
         nodes: pages[index].map(id => id === null ? null : { id, number: Number(String(id).replace(/\D/g, '')) }) } } } };

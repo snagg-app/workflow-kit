@@ -68,7 +68,6 @@ test('handoff blocks unlinked, unsafe and unreadable delivery before writing Hum
     [handoffPr({ linkPages: [['I1']], linkTotal: 2 }), ready, 2],
     [handoffPr({ linkPages: [[null]], linkTotal: 1 }), ready, 2],
     [handoffPr({ linkPages: [['I1', 'I1']] }), ready, 2],
-    [handoffPr({ changedHead: 'new-head' }), ready, 2],
     [handoffPr({ isDraft: true }), ready, 1],
     [handoffPr({ isDraft: null }), ready, 2],
     [handoffPr({ state: 'MERGED' }), ready, 1],
@@ -95,7 +94,7 @@ test('handoff blocks unlinked, unsafe and unreadable delivery before writing Hum
   }
   writeIssue(ready);
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr()));
-  for (const failure of ['fail', 'fail-viewer', 'fail-links']) {
+  for (const failure of ['fail', 'fail-viewer']) {
     writeFileSync(join(checkout, failure), '');
     assert.equal(run('handoff', '1', '7').status, 2, 'An API read failure is unknown, never a handoff');
     assert.equal(existsSync(mutations), false);

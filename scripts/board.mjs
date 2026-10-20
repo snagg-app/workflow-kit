@@ -1316,6 +1316,7 @@ const prQuery = suites => `query($owner:String!,$name:String!,$number:Int!){repo
   convertEvents:timelineItems(last:1,itemTypes:[CONVERT_TO_DRAFT_EVENT]){nodes{...on ConvertToDraftEvent{createdAt}}}
   latestOpinionatedReviews(first:100){totalCount nodes{state author{login}}}
   reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved comments(first:1){nodes{url}}}}
+  closingIssuesReferences(first:100){totalCount pageInfo{hasNextPage endCursor} nodes{id}}
   commits(last:1){nodes{commit{oid committedDate checkSuites(first:${suites}){totalCount nodes{createdAt status conclusion app{slug} workflowRun{databaseId workflow{id}} checkRuns(first:1){totalCount}}}
     statusCheckRollup{contexts(first:100){totalCount nodes{__typename
       ...on CheckRun{name status conclusion title summary detailsUrl startedAt completedAt checkSuite{databaseId createdAt app{slug} workflowRun{databaseId event workflow{id name}}}}
@@ -1849,7 +1850,8 @@ function reviews(stallMinutes = 20, now = Date.now(), prNumber = number, pr = re
 function connectedIssues(pr, draftAllowed = false) {
   const ids = new Set();
   for (let after; ;) {
-    const current = graphql(`query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){
+    // The PR read of the review (prQuery) carries the first page of the links; only a further page is a query of its own.
+    const current = !after && pr.closingIssuesReferences ? pr : graphql(`query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){
       pullRequest(number:$number){state isDraft headRefOid closingIssuesReferences(first:100,after:$after){totalCount
         pageInfo{hasNextPage endCursor} nodes{id}}}}}`, { owner, name, number: pr.number, ...(after && { after }) })
       .repository.pullRequest;
@@ -1936,15 +1938,15 @@ function bodyReplace() {
 /** Connect the issue natively to the PR (what a closing keyword does only on the default branch), post the backlink comment `status` requires, and read both back. */
 const link = () => linkIssue(number, Number(value), process.argv.includes('--refs'));
 /** `refsOnly` (link --refs): the PR only names the issue, so no native link; the backlink comment alone (#510). */
-function linkIssue(issueNumber, prNumber, refsOnly) {
-  const issue = readIssue(false, issueNumber);
+function linkIssue(issueNumber, prNumber, refsOnly, known) {
+  const issue = known ?? readIssue(false, issueNumber);
   assert.ok(issue?.id, 'Issue identity is unreadable');
   // The backlink comment belongs on an open issue (the guard requires one); refuse before any write instead of half-way.
   assert.equal(issue.state, 'OPEN', `#${issueNumber} is not an open issue`);
   assert.ok(refsOnly || !isSpec(issue), specRefusal(issueNumber, `a PR must not close it, so it is not linked natively (use "Refs #${issueNumber}": link ${issueNumber} PR --refs)`));
-  const { pullRequest: pr } = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
-    pullRequest(number:$number){id number state url headRefOid}}}`, { owner, name, number: prNumber }).repository;
-  assert.ok(pr?.id && pr.number === prNumber && pr.state === 'OPEN', `#${prNumber} is not an open pull request of ${project.repository}`);
+  const pull = rest(`repos/${project.repository}/pulls/${prNumber}`);
+  const pr = { id: pull.node_id, number: pull.number, state: pull.state === 'open' ? 'OPEN' : 'CLOSED', url: pull.html_url, headRefOid: pull.head.sha };
+  assert.ok(pr.id && pr.number === prNumber && pr.state === 'OPEN', `#${prNumber} is not an open pull request of ${project.repository}`);
   // Already connected is a success without a write; a Draft PR can be connected too.
   if (!refsOnly && !connectedIssues(pr, true).has(issue.id)) {
     graphql('mutation($issue:ID!,$pr:ID!){addCloseIssueReferences(input:{issueId:$issue,pullRequestIds:[$pr]}){clientMutationId}}',
@@ -2564,11 +2566,13 @@ function readyOptionsBounded() {
 /** Mark a Draft PR ready only for the explicitly expected pushed commit; stale metadata is waited out, never trusted. */
 function ready(prNumber = number, sha = value) {
   const attempts = numberOption('--attempts', 6), interval = numberOption('--interval', 5);
+  // Reads go over REST (no GraphQL points); the head wait and the read-back after the write still guard against a lagging answer.
   const read = () => {
-    const pr = graphql(readyQuery, { owner, name, number: prNumber }).repository.pullRequest;
-    assert.ok(pr?.id && pr.number === prNumber, 'The PR is unreadable');
-    assert.equal(typeof pr.isDraft, 'boolean', 'PR draft state is unreadable');
-    return pr;
+    const pull = rest(`repos/${project.repository}/pulls/${prNumber}`);
+    assert.ok(pull?.node_id && pull.number === prNumber, 'The PR is unreadable');
+    assert.equal(typeof pull.draft, 'boolean', 'PR draft state is unreadable');
+    return { id: pull.node_id, state: pull.state === 'open' ? 'OPEN' : pull.merged ? 'MERGED' : 'CLOSED', isDraft: pull.draft, headRefOid: pull.head.sha,
+      isCrossRepository: pull.head.repo?.id !== pull.base.repo.id, headRepository: { nameWithOwner: pull.head.repo?.full_name } };
   };
   const refuse = (...reasons) => {
     console.log(['FAILED', ...reasons.map(reason => `blocker: ${reason}`)].join('\n'));
@@ -2860,7 +2864,7 @@ function start() {
     if (git('rev-list', '--count', `origin/${base}..HEAD`) === '0') git('commit', '--allow-empty', '--only', '-m', `Arbeit an #${number} beginnen`);
     git('push', '--set-upstream', 'origin', branch);
     pr = JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes #${number}\n${claimLine}\n`)).number;
-    linkIssue(number, pr);
+    linkIssue(number, pr, false, fresh);
   } else if (!ownPr(issue, session)) {
     // A stale PR of another session is taken over: the claim line in its body names this session from now on.
     const path = `repos/${project.repository}/pulls/${pr}`, body = rest(path).body ?? '';
