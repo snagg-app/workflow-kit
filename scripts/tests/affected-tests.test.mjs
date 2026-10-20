@@ -109,6 +109,16 @@ test('--resume skips the green steps of the same head after a red one', async t 
   assert.ok(again.stdout.includes(`skip (green for this head): ${ok}`) && again.stdout.includes(`run: ${bad}`), again.stdout);
 });
 
+test('--resume does not skip another selection of the same size at the same head', async t => {
+  const script = fileURLToPath(new URL('../affected-tests.mjs', import.meta.url));
+  const { NODE_TEST_CONTEXT, ...outside } = process.env;
+  const cwd = fileURLToPath(new URL('../..', import.meta.url)), steps = join(temporary(t, 'affected-tests-'), 'steps');
+  const ask = file => run(process.execPath, [script, '--run', '--resume', steps, file], { cwd, env: outside });
+  assert.equal((await ask('scripts/quota-sample.mjs')).status, 0);
+  const other = await ask('scripts/check-submodule-sources.mjs');
+  assert.ok(other.stdout.includes('run: node --test (2 files)') && !other.stdout.includes('skip'), other.stdout);
+});
+
 test('a project entry without a command is refused', t => {
   const project = temporary(t, 'affected-tests-');
   mkdirSync(join(project, '.github'));

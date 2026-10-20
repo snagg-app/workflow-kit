@@ -97,11 +97,11 @@ export function projectCommands(files, map) {
 
 let lastOutput = '';
 
-/** Says whether the test files named in the red output belong to the diff: a red file outside it is not this change's doing. */
+/** Says only whether the test files named in the red output are in the diff; the cause is for the reader to judge. */
 function redHint(changed) {
   const named = [...new Set((lastOutput.match(/scripts[\\/]tests[\\/][\w.-]+\.test\.mjs/g) ?? []).map(file => file.replaceAll('\\', '/')))];
   if (!named.length) return 'the output names no test file; read it above';
-  return named.map(file => `${file} ${changed.includes(file) ? 'is in your diff' : 'is NOT in your diff: probably not caused by this change (check the base), then --skip-local-tests REASON'}`).join('; ');
+  return named.map(file => `${file} ${changed.includes(file) ? 'is in your diff' : 'is not in your diff'}`).join('; ');
 }
 
 /**
@@ -138,13 +138,14 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
     const done = new Set(saved === head ? green : []);
     const step = (label, command, args, options, texts) => {
       if (process.exitCode) return;
-      if (done.has(label)) return console.log(`skip (green for this head): ${label}`);
+      const key = `${label} ${args.join(' ')}`; // the chosen files are part of the step: another selection of the same size is another step
+      if (done.has(key)) return console.log(`skip (green for this head): ${label}`);
       const status = quiet(values.verbose, command, args, options, { ...texts, label });
-      if (status === 0) { done.add(label); if (values.resume) writeFileSync(values.resume, [head, ...done].join('\n')); }
+      if (status === 0) { done.add(key); if (values.resume) writeFileSync(values.resume, [head, ...done].join('\n')); }
       else process.exitCode = status;
     };
     if (selected.length) step(`node --test (${selected.length} files)`, process.execPath, ['--test', ...selected], { cwd: kit }, { summary: /^ℹ (tests|pass|fail) /, noise: /^(start: |✔ )/ });
     for (const command of commands) step(command, command, [], { cwd: root, shell: true, env: { ...process.env, AFFECTED_BASE: values.base } }, { ok: `ok: ${command}` });
-    if (process.exitCode) console.error(`red step;${redHint(inKit ? kitFiles : given.length ? given : changedFiles(values.base, root))}`);
+    if (process.exitCode) console.error(`red step; ${redHint(inKit ? kitFiles : given.length ? given : changedFiles(values.base, root))}`);
   }
 }

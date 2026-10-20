@@ -3000,10 +3000,11 @@ async function done() {
     } catch { return fail('the targeted tests of the changed files failed (output above; green steps of this head are kept); fix the cause, then run done again (a push starts all steps anew)'); }
     writeFileSync(tested, sha);
   }
-  const stepStart = Date.now(), took = name => console.log(`done: ${name} took ${((Date.now() - stepStart) / 1000).toFixed(1)} s`);
+  const took = (name, since) => console.log(`done: ${name} took ${((Date.now() - since) / 1000).toFixed(1)} s`);
+  const readyStart = Date.now();
   ready(prNumber, sha);
+  took('ready', readyStart);
   if (process.exitCode) return;
-  took('ready');
   value = String(prNumber);
   delivered = [value];
   const status = projectStatus(issue);
@@ -3012,8 +3013,8 @@ async function done() {
   else if (status !== 'Automated review' && (prepare || status !== 'Human review')) set('Status', 'Automated review');
   console.log('done: waiting for CI and reviews');
   const waitStart = Date.now(), result = await poll(() => reviewsForHead(prNumber));
+  took('CI and reviews', waitStart);
   if (!result) return;
-  console.log(`done: CI and reviews took ${((Date.now() - waitStart) / 1000).toFixed(1)} s`);
   if (result.failed) {
     process.exitCode = outcome(result)[1];
     return console.log([outcome(result)[0], ...result.lines, quotaLine()].filter(Boolean).join('\n'));
