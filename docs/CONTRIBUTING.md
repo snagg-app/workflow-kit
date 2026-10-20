@@ -37,17 +37,18 @@ claim and resume. Memory, an existing branch or Ready status does not replace it
 | BLOCKED | An open predecessor that is not STACKABLE (no open PR, only a Draft PR, a fork PR, several PRs, another repository), a predecessor closed as not planned or duplicate (needs a recorded decision), a closed issue, status Backlog or Done, an unmet `Wartet bis` condition, or work of another session (see Claims). |
 | UNKNOWN | API error, incomplete dependency data (including the PR list of an open predecessor), an inaccessible predecessor, an unset or unknown status, the issue is missing from the Project, or an unreadable `Wartet bis` line. Retry the read; never read it as "no blockers". |
 
-**Claims.** The Draft PR that `start` opens is the claim: its body carries `Agent: claude|codex, Session: ID` (anywhere in a line, not quoted in
-code; `Agent: codex` alone is a claim of an unknown session). The check (`start ISSUE --session ID`) reads it with the one issue query. Whatever
-the claims say, the check reports BLOCKED while an open PR closes the issue (a Draft too) or a branch `<agent>/<issue number>-…` exists, unless an
-open PR names `--session` (the own session resumes its own PR and branch); without `--session` nothing proves it. A PR of another session names its
+**Claims.** `start` posts the claim as an issue comment with `Agent: claude|codex, Session: ID` and `Basis: BRANCH`; the Draft PR that the first `done`
+opens carries the line in its body and decides from then on (anywhere in a line, not quoted in code; in a PR body `Agent: codex` alone is a claim of an unknown
+session). The check (`start ISSUE --session ID`) reads it with the one issue query. Whatever the claims say, the check reports BLOCKED while an open PR closes
+the issue (a Draft too), a claim comment of another session stands or a branch `<agent>/<issue number>-…` exists, unless the claim names `--session`
+(the own session resumes its own claim, PR and branch); without `--session` nothing proves it. A PR of another session names its
 agent and session in the BLOCKED line. A handover is that line edited to the new session (by the earlier session or the human handing over).
 Work without activity (issue, Project status, open PR) for `staleHours` (project file, default 6) has expired: with `--session`, the check notes the
-stale PR instead of BLOCKED, and `start` writes the new session into its claim line; the assignees stay. A branch without an open PR holds only
+stale claim instead of BLOCKED, and `start` writes the new session into its claim line (PR) or posts a new claim comment; the assignees stay. A branch without an open PR holds only
 while it has own commits against the base and its newest commit is younger than `staleHours` (one REST compare per branch); then BLOCKED names its
 agent and the commit age; an empty or older branch is a note (#504). `next` lists no issue that the check blocks for a PR or branch. A new start
 is BLOCKED with `finish #N first` while the own session has an issue in In progress or Automated review (stacking on that work is allowed).
-Two sessions that check within seconds, before either has a PR, are not caught. Assignment stays no lock; the check only reports, and `field` and `done` do not read claims.
+Two sessions that check within seconds, before either has posted its claim, are not caught. Assignment stays no lock; the check only reports, and `field` and `done` do not read claims.
 
 **Offene PRs und Sub-Issues.** Nur Information, kein neues Verdict und keine Erlaubnis zur Übernahme. Die Prüfung nennt die offenen PRs mit
 Closing-Link auf das Issue und die Session aus ihrem Claim, etwa `open PR: #123 (Session S1)`.
@@ -228,7 +229,7 @@ beim Erstellen, bei jeder Body-Änderung und bei Claim-, Übergabe- und Statusko
 from your local `main`. It reuses your existing branch and PR for the same
 issue. If creation fails, check the remote branches and issue links before retrying.
 
-**PR body.** `start` opens the Draft PR with `Closes #N` and the claim line `Agent: …, Session: …` (keep that line); for each further issue the PR fully delivers, write `Closes #N` (cross-repo:
+**PR body.** The first `done` opens the Draft PR with `Closes #N` and the claim line `Agent: …, Session: …` (keep that line); for each further issue the PR fully delivers, write `Closes #N` (cross-repo:
 `Closes OWNER/REPO#N`) for each issue the PR fully delivers, and `Refs #N` for
 related work. Closing keywords work only in PRs into the default branch. Partial
 delivery never closes an issue; split the undeliverable part first
@@ -266,16 +267,13 @@ layers or create a wait/summary issue solely for stack depth or merge-queue prog
 Keep real planning and product work as issues; use native dependencies and stacks plus
 existing issue, PR and chat progress for coordination.
 
-1. **Branch.** `start` creates the issue-linked branch from the head of the base PR's branch (`stack
-   base: … branch B` in the check output). When a predecessor PR is already in a native
+1. **Branch.** `start` only claims and names the base `B` (the base PR's branch, `stack
+   base: … branch B` in the check output); you branch from its head and the first `done` pushes it. When a predecessor PR is already in a native
    stack, the check names the current top PR and its stack number; the branch comes from that top, as in [Delivery](#delivery).
    On a base PR into `release/X.Y.Z` the stack's trunk is that release branch; that is allowed.
-2. **PR and stack.** `start` creates your PR as Draft with base `B`. Keep this empty claim
-   outside the native stack until its first real file diff has been pushed: GitHub's lower-layer
-   merge rebases native upper branches and can close an empty upper claim (#606).
-   A proof-only task needs no placeholder source change; its empty Draft stays unlinked.
-   `start` can resume this ordinary claim; `done` still requires a native stack before handing
-   off a changed upper layer whose predecessor is open. After the first source push, run
+2. **PR and stack.** The first `done` creates your PR as Draft with base `B` (from the claim's
+   `Basis:` line) and does not add it to the native stack; `done` still requires a native stack
+   before handing off a changed upper layer whose predecessor is open. Run
    `start` again for the current predecessor and tip, confirm the open PR's file diff, then link:
    If `B` is already the tip of a native stack, append your PR with
    `gh stack link STACK_NUMBER YOUR_PR` (the number is shown by the check; extension
