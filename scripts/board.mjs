@@ -100,7 +100,7 @@ function sleepUntilReset(resetAt) {
 function graphql(query, variables = {}, tolerate, beforeSend) {
   // Organization-linked Priority fields live on the issue and need this preview header.
   const args = ['api', 'graphql', '-i', '-H', 'GraphQL-Features: issue_fields', '-f',
-    `query=${query.startsWith('query') ? `${query.slice(0, query.lastIndexOf('}'))} rateLimit{cost}}` : query}`];
+    `query=${query.startsWith('query') ? `${query.slice(0, query.lastIndexOf('}'))} rateLimit{cost remaining resetAt}}` : query}`];
   for (const [key, val] of Object.entries(variables)) args.push(typeof val === 'number' ? '-F' : '-f', `${key}=${val}`);
   for (let sleeps = 0; ; sleeps++) {
     if (command in sleepers && quota?.remaining < sleepers[command] && Date.parse(quota.resetAt) > Date.now()) sleepUntilReset(quota.resetAt);
@@ -111,7 +111,9 @@ function graphql(query, variables = {}, tolerate, beforeSend) {
       const response = execFileSync(gh.file, args, { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, stdio: 'pipe' });
       const { headers, body } = splitResponse(response);
       const { data, errors } = JSON.parse(body);
-      quota = quotaOf(headers) ?? quota;
+      // The body's rateLimit is what a real `{rateLimit{remaining}}` query returns (#625); the headers were seen 4400 points too high.
+      const { remaining, resetAt } = data?.rateLimit ?? {};
+      quota = (Number.isFinite(remaining) && resetAt ? { remaining, resetAt } : quotaOf(headers)) ?? quota;
       spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
       if (process.env.BOARD_TRACE) console.error(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? '~1' : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
       if (errors?.length) {

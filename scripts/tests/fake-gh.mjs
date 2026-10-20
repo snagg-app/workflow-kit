@@ -520,7 +520,7 @@ function api(argv, input, stdout, stderr, exit) {
     if (fs.existsSync('issue-next.json')) fs.renameSync('issue-next.json', 'issue.json');
   }
   // A query reports its cost (one point), a mutation none.
-  answer(JSON.stringify({ data: data && query.startsWith('query') ? { ...data, rateLimit: { cost: 1 } } : data }));
+  answer(JSON.stringify({ data: data && query.startsWith('query') ? { ...data, rateLimit: { cost: 1, ...fs.existsSync('quota-body') && { remaining: Number(fs.readFileSync('quota-body', 'utf8')), resetAt: new Date(Date.now() + 3000).toISOString() } } } : data }));
 }
 
 /** gh pr merge …: records the call; merge-fails is gh refusing, merge-noop a merge that never shows. */
