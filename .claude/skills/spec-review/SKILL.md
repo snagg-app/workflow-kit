@@ -24,7 +24,7 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
 
 1. **Read the plan.** Spec body (to a file when large), comments, sub-issues with state
    (`gh api --paginate "repos/{owner}/{repo}/issues/SPEC/sub_issues?per_page=100" --jq '.[]|[.number,.state,.title]'`) and their merged PRs.
-   The review ref is the remote branch those PRs merged into, after `git fetch`.
+   The review ref is the remote branch those PRs merged into, after `git fetch`; note its commit.
    Done when every acceptance point and planned decision is listed.
 
 2. **Architecture pass.** Read [`improve-codebase-architecture`](../improve-codebase-architecture/SKILL.md) and run its
@@ -54,7 +54,11 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
    A ticket or acceptance point about a provider interface names the capability in general terms ("a source may create
    variants", an adapter contract capability) and the provider only as the first source or adapter, never as the subject.
 
-6. **Report on the spec.** One comment on the spec in plain language, written to a file and posted with
+6. **Report on the spec.** The branch and the sub-issues move during a run (other agents merge and file). Before
+   writing, `git fetch` again and re-read the sub-issues: when the review ref moved past the noted commit or a
+   sub-issue appeared, re-check every point whose files `git diff --name-only OLD NEW` lists and every new sub-issue,
+   then note the new commit. The report names the commit it checked.
+   One comment on the spec in plain language, written to a file and posted with
    `gh issue comment SPEC --body-file FILE` (also the addendum in step 8): verdict table with proofs, gap tickets from
    step 5, path of the HTML report, and the questions from step 4 that step 7 settles.
 
@@ -70,7 +74,8 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
    a load-bearing reason gets the ADR offer of `improve-codebase-architecture` step 3. Done when the frontier is empty
    and the user confirmed.
 
-8. **Agreed work to tickets.** Right after step 7, each answer that asks for follow-up work gets its ticket the way
+8. **Agreed work to tickets.** Right after step 7, repeat the freshness check of step 6 and narrow or drop agreed
+   work that the new commits or sub-issues already did. Then each answer that asks for follow-up work gets its ticket the way
    step 5 does, including its duplicate check right before each `board.mjs new` (last 24 hours, title words and spec
    reference; a match is linked with `board.mjs sub SPEC N`); the body states the decision with date and source, and "after the release" goes into its target
    release. Adjust the spec's text and acceptance point to the decisions (`board.mjs body`) and add a short addendum
