@@ -2564,11 +2564,13 @@ function readyOptionsBounded() {
 /** Mark a Draft PR ready only for the explicitly expected pushed commit; stale metadata is waited out, never trusted. */
 function ready(prNumber = number, sha = value) {
   const attempts = numberOption('--attempts', 6), interval = numberOption('--interval', 5);
+  // Reads go over REST (no GraphQL points); the head wait and the read-back after the write still guard against a lagging answer.
   const read = () => {
-    const pr = graphql(readyQuery, { owner, name, number: prNumber }).repository.pullRequest;
-    assert.ok(pr?.id && pr.number === prNumber, 'The PR is unreadable');
-    assert.equal(typeof pr.isDraft, 'boolean', 'PR draft state is unreadable');
-    return pr;
+    const pull = rest(`repos/${project.repository}/pulls/${prNumber}`);
+    assert.ok(pull?.node_id && pull.number === prNumber, 'The PR is unreadable');
+    assert.equal(typeof pull.draft, 'boolean', 'PR draft state is unreadable');
+    return { id: pull.node_id, state: pull.state === 'open' ? 'OPEN' : pull.merged ? 'MERGED' : 'CLOSED', isDraft: pull.draft, headRefOid: pull.head.sha,
+      isCrossRepository: pull.head.repo?.id !== pull.base.repo.id, headRepository: { nameWithOwner: pull.head.repo?.full_name } };
   };
   const refuse = (...reasons) => {
     console.log(['FAILED', ...reasons.map(reason => `blocker: ${reason}`)].join('\n'));
