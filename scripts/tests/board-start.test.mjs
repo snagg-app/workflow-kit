@@ -166,6 +166,21 @@ test('start --takeover continues the PR branch of another agent, whatever its pr
   assert.equal(existsSync(file('develops')), false, 'no branch of its own');
 });
 
+test('start --takeover finds a PR that only says "Refs #N" and writes the claim line itself (#649)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  const body = 'Refs #1\nMehr';
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
+  writeFileSync(file('pr.json'), JSON.stringify({ ...JSON.parse(text('pr.json')), body, headRefName: 'claude/1-fixture' }));
+  writeFileSync(file('open-prs.json'), JSON.stringify([{ number: 7, body, updated_at: new Date().toISOString(), head: { ref: 'claude/1-fixture' } }]));
+  writeFileSync(file('branches.json'), JSON.stringify(['claude/1-fixture']));
+  writeIssue({ ...issue('In progress'), updatedAt: new Date().toISOString(), branches: [{ name: 'claude/1-fixture' }] });
+
+  const result = run('start', '1', '--session', 'S2', '--takeover');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');
+  assert.equal(JSON.parse(text('pr.json')).body, `${body}\nAgent: claude, Session: S2\n`);
+});
+
 test('start --takeover without an open PR stops before it writes anything and names a merged PR (#564)', t => {
   const { run, writeIssue, file } = startFixture(t);
   writeIssue({ ...issue('Ready'), closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'MERGED', repository: { nameWithOwner: 'test/example' } }] } });

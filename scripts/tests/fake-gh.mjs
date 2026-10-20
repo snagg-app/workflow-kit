@@ -143,6 +143,8 @@ function api(argv, input, stdout, stderr, exit) {
     if (parts[3] === 'pulls' && parts.length === 4) {
       // The open PRs on a base branch (dependents.json: PRs with base.ref, the default is none).
       const base = new URLSearchParams(path.split('?')[1]).get('base');
+      // Without base: all open PRs (open-prs.json, REST shape; the default is none).
+      if (!base) { stdout(fs.existsSync('open-prs.json') ? fs.readFileSync('open-prs.json') : '[]'); exit(0); }
       stdout(JSON.stringify((fs.existsSync('dependents.json') ? JSON.parse(fs.readFileSync('dependents.json')) : []).filter(pr => pr.base.ref === base)));
       exit(0);
     }
