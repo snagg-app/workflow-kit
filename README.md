@@ -166,7 +166,7 @@ and then work in that directory, their relative paths (changed files given to `a
 - `--help` or `-h` (any command) prints the usage and exits 0 without calling GitHub. A writing command (`start`, `done`, `field`, `new`,
   `block`, `sub`, `body`, `body-replace`, `merge`, `sweep`) refuses any flag (`--flag` or `-f`) and any extra word it does not
   take with the usage line (exit 2) before it reads or writes anything. `field` takes further words of its own.
-- `start ISSUE [--session ID]`: everything from Ready to a Draft PR, each write read back; a repeated call resumes (a step already
+- `start ISSUE [--session ID]`: everything from Ready to the claim (assignment, In progress, claim comment), each write read back; a repeated call resumes (a step already
   done is skipped). The session is `--session`, else the `agent-<id>` of a Claude Code worktree, else `CODEX_THREAD_ID`, else
   `CLAUDE_CODE_SESSION_ID`. It starts with the execution check of the issue, printed (exit 0 STARTABLE, 1 BLOCKED, 2 UNKNOWN, 4 STACKABLE:
   only an open predecessor PR holds the issue, see [Stacked pull requests](docs/CONTRIBUTING.md#stacked-pull-requests)); BLOCKED and
@@ -176,19 +176,17 @@ and then work in that directory, their relative paths (changed files given to `a
   when the value is no branch name, `origin/<base>` is unknown locally or git cannot answer, or `HEAD` does not descend from
   `origin/<base>` (that last one only for an issue with no branch yet and no stack); no fetch, never a verdict. Then `start`:
   sets `submodule.recurse true` and `push.recurseSubmodules no` in the clone (only with a `.gitmodules`), assigns the authenticated user,
-  sets In progress, creates the
-  issue-linked branch (`gh issue develop`) on the base (the base PR's branch of a stack, else the Project base field, else the default
-  branch) or continues the branch claimed by your session's open PR. A closed PR or shared agent prefix proves no ownership;
-  a fresh start uses a name free of linked remote and local branches, adding the session ID when occupied. An allowed takeover continues
-  the open PR's branch. Then it runs `git fetch origin` and `git switch`, brings the kit to its pin, and, for an
-  issue without an open PR, pushes an empty first commit and opens the Draft PR (`Closes #N` and the claim line `Agent: claude|codex, Session: ID`)
-  with its native link. Last it runs the optional `"setup"` shell command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`, run like a `push` command, in the checkout, with `BRANCH`);
-  if it fails, `start` ends with an error and the output, claim, status and PR stay, and `start` again resumes. The Draft PR is the claim: an open PR of the issue holds it for every session whose ID its body does not name. Keep the claim
+  sets In progress and posts the claim comment (`Agent: claude|codex, Session: ID` and `Basis: BRANCH`, the base: the base PR's branch of a stack,
+  else the Project base field, else the default branch). It creates no branch and no PR: the first `done` pushes your branch
+  (`<agent>/<number>-<title>`, or the checkout's own branch of that shape) and opens the Draft PR (`Closes #N` and the claim line) with its native link.
+  An issue that already has an open PR (a takeover, a resume) continues on that PR's branch (`git switch`). Then it runs `git fetch origin`, brings the kit to its pin, and
+  last the optional `"setup"` shell command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`, run like a `push` command, in the checkout, with `BRANCH`);
+  if it fails, `start` ends with an error and the output, claim and status stay, and `start` again resumes. The claim holds the issue for every session whose ID it does not name; once the PR exists, its body line is the claim. Keep the claim
   line when you rewrite the PR body. It ends with
-  `START #N session … branch … base … PR #…`; for a stack it names the PR to link above. Abandoned work (below, `next`) is taken over
-  with the same call: `start` writes the new session into the claim line of its PR. A handover is the same edit of the claim line by hand. A new start is BLOCKED with `finish #N first` while you have an own unfinished issue (a resume or a stack on its work is not).
+  `START #N session … base … (claim only …)`, or `… branch … base … PR #…` with an existing PR; for a stack it names the PR to link above. Abandoned work (below, `next`) is taken over
+  with the same call: `start` writes the new session into the claim line of its PR, or posts a new claim comment. A handover is the same edit of the claim line by hand. A new start is BLOCKED with `finish #N first` while you have an own unfinished issue (a resume or a stack on its work is not).
 - `done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N] [--skip-local-tests REASON]`: everything from the last push to Human review. PR defaults to the one open PR
-  that closes the issue; name it for a partial PR (`Refs #N`, no closing link) or with `--refs` (the PR only names the issue, whether or not another PR closes it: only the PR gate runs, and the issue status, assignment and acceptance boxes stay untouched). In order, each step only if still open, so a repeated call after a push or a wait is the same call:
+  that closes the issue; without one, own commits on top of the claimed base get their branch and Draft PR first (no commit: the FILE-only path of an exploration); name it for a partial PR (`Refs #N`, no closing link) or with `--refs` (the PR only names the issue, whether or not another PR closes it: only the PR gate runs, and the issue status, assignment and acceptance boxes stay untouched). In order, each step only if still open, so a repeated call after a push or a wait is the same call:
   0. The PR base is fetched; an untested head (once per push, not on a repeated call that only waits) that does not contain it gets it merged and pushed, so the tests see what will be merged. A project with [`"doneBaseMerge": "overlap"`](SETUP.md#3-board-and-labels) merges only for shared changed paths or a Git-detected conflict; unrelated base changes leave the head intact. A conflict ends in `FAILED` naming the files, the merge aborted: resolve it, push, call `done` again.
      Without HANDOFF_FILE and without a handoff comment for the (merged) head, `done` only prepares: steps 1 to 5 run (tests, ready, status Automated review, the wait), then it ends with `PREPARED` (exit 0), without ticking the boxes, handoff comment or Human review. Run the final proof then, and `done ISSUE FILE` takes over the same head (its tests are not repeated; a head pushed since is tested again).
   1. The targeted tests of the changed files (`affected-tests.mjs --run`, once per head, in the foreground). Each step prints a `run:` line and its duration. The green steps of a head are kept: after a red step the next `done` skips them and a red test file says whether it is in your diff; a push starts all steps anew.

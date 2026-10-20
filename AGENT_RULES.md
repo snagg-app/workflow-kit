@@ -102,11 +102,11 @@ work between them:
    [execution check](docs/CONTRIBUTING.md#execution-check) first: BLOCKED or UNKNOWN stop and write
    nothing, except a specifically authorized, documented exception; STACKABLE (only an open
    predecessor PR holds the issue) continues as a [stacked PR](docs/CONTRIBUTING.md#stacked-pull-requests).
-   Then it assigns you, sets In progress, creates the issue-linked branch on the right base,
-   switches to it, brings the kit to its pin, opens the Draft PR that closes the issue and reads
-   every step back. The Draft PR is the claim: its body carries `Agent: claude|codex, Session: ID`
-   (keep that line when you rewrite the body), and an open PR of another session blocks unless a
-   handover edits the line to yours. Abandoned work (no push, comment or status
+   Then it assigns you, sets In progress, posts the claim comment (`Agent: claude|codex, Session: ID`
+   and the base), brings the kit to its pin and reads every step back. No branch and no PR yet:
+   work on a branch from the printed base; the first `done` opens the branch and the Draft PR that
+   closes the issue (its body carries the claim line: keep it when you rewrite the body). A claim of
+   another session (comment or open PR) blocks unless it is stale or a handover/`--takeover` rewrites it. Abandoned work (no push, comment or status
    change for `staleHours`, default 6, or a Human-review PR with conflicts) is taken over by
    the same call, which writes your session into the line. `board.mjs next --session ID` lists your
    unfinished issues first, and `start` of another issue says `finish #N first` until they are handed
@@ -127,7 +127,7 @@ work between them:
    (exit 0) without handoff comment, ticking or Human review. Run the proof, then `done ISSUE FILE` for the same head.
 
 A documented blocker exception keeps the current status and failed verdict: claim by hand (assign,
-Draft PR with the claim line), skip the guarded transition and edit only its permitted scope. If prerequisites
+claim comment with the claim line), skip the guarded transition and edit only its permitted scope. If prerequisites
 change, stop affected edits and run `start` again. Subagents implement bounded assignments; only the
 driver runs `start` and `done`.
 
