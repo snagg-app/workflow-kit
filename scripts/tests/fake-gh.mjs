@@ -309,6 +309,8 @@ function api(argv, input, stdout, stderr, exit) {
   }
   // Every query that reached GitHub, one JSON string per line: what a test reads to count queries and see what they ask for.
   fs.appendFileSync('queries', JSON.stringify(query) + '\n');
+  // The repository each issue or PR query named ("issue owner=a/name=b"): what a test reads to see where the issue was looked up.
+  fs.appendFileSync('repositories', `${/\b(issue|pullRequest)\(number/.exec(query)?.[1]} ${argv.filter(arg => /^(owner|name)=/.test(arg)).join('/')}\n`);
   // resource-limit (a number): GitHub refuses a request that names more issues than that; resource-stuck (a node id): and every request that names this issue.
   if (fs.existsSync('resource-limit') || fs.existsSync('resource-stuck')) {
     const named = new Set([...query.matchAll(/(?:contentId|itemId|issueId):"(?:PI-)?([^"]*)"/g)].map(match => match[1]));

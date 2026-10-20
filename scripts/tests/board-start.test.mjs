@@ -87,6 +87,17 @@ test('start takes over a stale PR of another session: its claim line names the n
   assert.equal(JSON.parse(text('pr.json')).body, 'Closes #1\nAgent: claude, Session: S2\nMehr');
 });
 
+test('start --issue-repo claims the issue of the other repository, only start and done take the option', t => {
+  const { run, writeIssue, text } = startFixture(t);
+  writeIssue(issue('Ready'));
+  const result = run('--issue-repo', 'test/kit', 'start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^test\/kit#1 Fixture$/m);
+  const asked = text('repositories').split('\n');
+  assert.ok(asked.includes('issue owner=test/name=kit') && !asked.includes('issue owner=test/name=example'), 'the issue is looked up in the other repository only');
+  assert.equal(run('--issue-repo', 'test/kit', 'check', '1').status, 2);
+});
+
 test('done opens the branch and the Draft PR with the first push (#643)', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
   writeIssue(issue('Ready'));
