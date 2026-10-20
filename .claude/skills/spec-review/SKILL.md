@@ -51,6 +51,8 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
    A match, open or closed, is linked with `board.mjs sub SPEC N` instead of creating the issue. When `new` refuses because an open issue has the same title, link that
    issue instead (`board.mjs sub SPEC N`). No ticket carries an open decision; `needs-human-input` is only for
    work a human must do. Architecture candidates never get a ticket here.
+   A ticket or acceptance point about a provider interface names the capability in general terms ("a source may create
+   variants", an adapter contract capability) and the provider only as the first source or adapter, never as the subject.
 
 6. **Report on the spec.** One comment on the spec in plain language, written to a file and posted with
    `gh issue comment SPEC --body-file FILE` (also the addendum in step 8): verdict table with proofs, gap tickets from
