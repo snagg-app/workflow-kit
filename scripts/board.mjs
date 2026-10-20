@@ -260,7 +260,7 @@ function idleMs(issue) {
   const times = [issue.updatedAt, projectItem(issue)?.updatedAt, ...prs.map(pr => pr.updatedAt)].map(time => Date.parse(time)).filter(Number.isFinite);
   return times.length ? Date.now() - Math.max(...times) : undefined;
 }
-const openPr = issue => issue.closedByPullRequestsReferences?.nodes.find(pr => pr?.state === 'OPEN' && pr.repository.nameWithOwner.toLowerCase() === project.repository.toLowerCase());
+const openPr = issue => openPrs(issue).find(pr => pr.repository.nameWithOwner.toLowerCase() === project.repository.toLowerCase());
 /** The open PRs that use this branch as their base: a PR with such a dependent is a lower layer of a stack. */
 function dependentPrs(branch) {
   const dependents = rest(`repos/${project.repository}/pulls?state=open&base=${encodeURIComponent(branch)}&per_page=100`);
@@ -278,7 +278,19 @@ const conflictLine = pr => {
 const conflicting = issue => projectItem(issue)?.status?.name === 'Human review' && openPr(issue)?.mergeStateStatus === 'DIRTY';
 /** Abandoned: no activity for staleHours, or a Human-review PR with conflicts (it is not mergeable, so nobody finishes it). Work on such an issue has expired. */
 const isStale = (issue, idle = idleMs(issue)) => idle > staleHours * 3_600_000 || conflicting(issue);
-const openPrs = issue => (issue.closedByPullRequestsReferences?.nodes ?? []).filter(pr => pr?.state === 'OPEN');
+// A PR that only says "Refs #N" is no native closer; `start --takeover` finds it (#649) and holds it here for the rest of the run.
+let adoptedPr;
+const openPrs = issue => {
+  const open = (issue.closedByPullRequestsReferences?.nodes ?? []).filter(pr => pr?.state === 'OPEN');
+  return adoptedPr && !open.some(pr => pr.number === adoptedPr.number) ? [...open, adoptedPr] : open;
+};
+/** The open PR of this repository that names the issue with "Refs #N" or sits on a branch `<agent>/N-…`. ponytail: the newest 100 open PRs only. */
+function refsPr() {
+  const ref = `${issueProject === project ? '' : issueProject.repository}#${number}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const found = rest(`repos/${project.repository}/pulls?state=open&per_page=100`).find(pr =>
+    new RegExp(`^[\\w.-]+/${number}-`).test(pr.head.ref) || new RegExp(`(?<![\\w/])Refs:?\\s+${ref}(?!\\d)`, 'i').test(pr.body ?? ''));
+  return found && { number: found.number, state: 'OPEN', body: found.body ?? '', headRefName: found.head.ref, updatedAt: found.updated_at, repository: { nameWithOwner: project.repository } };
+}
 const workBranches = issue => (issue.branches ?? []).map(branch => branch.name).filter(name => new RegExp(`^[\\w.-]+/${issue.number}-`).test(name));
 
 /** Why native predecessors still hold an issue: open, closed without delivery, or unreadable. */
@@ -2897,6 +2909,7 @@ function start() {
   const issue = readIssue();
   assert.ok(!isSpec(issue), specRefusal(number, 'start is refused; agents leave specs untouched'));
   const takeover = process.argv.includes('--takeover');
+  if (takeover && !openPr(issue)) adoptedPr = refsPr();
   // --takeover without an open PR, a claim or a foreign assignee has nothing to take over (#564): refuse before anything is written.
   // A foreign assignee or claim without a PR yet is what --takeover takes over then (#572).
   if (takeover && !openPr(issue) && !commentClaims(issue).length && !foreignAssignees(issue).length) {
