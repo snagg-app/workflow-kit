@@ -118,6 +118,10 @@ the label `spec`; a spec created another way gets both by hand.
 - **Abhängigkeiten und Wiederaufnahme.** Prerequisites with evidence and the next
   action, or „keine bekannt“.
 
+An issue about a provider interface names the capability in general terms ("a source may create
+variants", a capability of the adapter contract) and the provider only as the first source or
+adapter; "Provider X may create variants" invites provider logic in shared code.
+
 Small tasks stay short. Move answers and decisions from comments into the body,
 naming their source. See the [examples](task-writing-examples.md).
 
