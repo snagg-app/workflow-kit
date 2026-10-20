@@ -230,10 +230,10 @@ index 3680e2e..432a6ba 100644
 +  // Silent fail — stdout closed/EPIPE at hook exit must not surface as a hook failure
 +}
 diff --git a/hooks/ponytail-mode-tracker.js b/hooks/ponytail-mode-tracker.js
-index 161a726..1cf96fa 100644
+index bb4381d..c9c83c4 100644
 --- a/hooks/ponytail-mode-tracker.js
 +++ b/hooks/ponytail-mode-tracker.js
-@@ -158,21 +158,19 @@ function finish() {
+@@ -187,21 +187,19 @@ function finish() {
  }
  
  process.stdin.on('data', chunk => { input += chunk; });
@@ -404,36 +404,35 @@ index f2d9fe2..f94d4ca 100644
 +// Keep fallback alive for stuck stdin; normal EOF cancels it.
 +const fallback = setTimeout(finishInput, 1000);
 diff --git a/skills/ponytail/SKILL.md b/skills/ponytail/SKILL.md
-index b76922f..4c1ae6c 100644
+index d64edd3..4c1ae6c 100644
 --- a/skills/ponytail/SKILL.md
 +++ b/skills/ponytail/SKILL.md
 @@ -6,7 +6,6 @@ description: >
    fixing, refactoring, reviewing, choosing dependencies) and when the user says
    "ponytail", "be lazy", "simplest solution", "yagni", or complains about
    over-engineering or bloat. Levels: lite, full (default), ultra.
--argument-hint: "[lite|full|ultra]"
+-argument-hint: "[lite|full|ultra|off]"
  license: MIT
  ---
  
 diff --git a/skills/ponytail-debt/SKILL.md b/skills/ponytail-debt/SKILL.md
-index 0ae3e9a..bbc4bf5 100644
+index 3124f52..bbc4bf5 100644
 --- a/skills/ponytail-debt/SKILL.md
 +++ b/skills/ponytail-debt/SKILL.md
-@@ -40,6 +40,6 @@ End with `<N> markers, <M> with no trigger.` Nothing found: `No shortcut debt. C
+@@ -40,5 +40,6 @@ End with `<N> markers, <M> with no trigger.` Nothing found: `No shortcut debt. C
  
  ## Boundaries
  
 -Reads and reports only, changes nothing. To persist it, ask and it writes the
--ledger to a file (e.g. `PONYTAIL-DEBT.md`). One-shot. "stop ponytail-debt" or
--"normal mode" to revert.
+-ledger to a file (e.g. `PONYTAIL-DEBT.md`). One-shot.
 +Reads and reports only, changes nothing. Track durable findings as issues under
 +the repository's CONTRIBUTING.md, not in a second ledger file. One-shot.
 +"stop ponytail-debt" or "normal mode" to revert.
 diff --git a/skills/ponytail-help/SKILL.md b/skills/ponytail-help/SKILL.md
-index 6bf1824..f3ac1b5 100644
+index 5d09772..3dc9a4c 100644
 --- a/skills/ponytail-help/SKILL.md
 +++ b/skills/ponytail-help/SKILL.md
-@@ -31,39 +31,31 @@ Level sticks until changed or session end.
+@@ -31,44 +31,31 @@ Level sticks until changed or session end.
  | **ponytail-gain** | `/ponytail-gain` | Measured-impact scoreboard: less code, less cost, more speed. |
  | **ponytail-help** | `/ponytail-help` | This card. |
  
@@ -451,9 +450,14 @@ index 6bf1824..f3ac1b5 100644
 +Say "stop ponytail" or "normal mode". With hooks, `/ponytail off` also works;
 +resume with `/ponytail` (off enables the default level; an active mode reports its level).
  
--## Configure Default Mode
+-## Band (Claude Code)
 +## Checkout scope
  
+-`/ponytail band` hides the band above the prompt, the same command brings it back.
+-`/ponytail band on` and `/ponytail band off` set it directly. The level stays.
+-
+-## Configure Default Mode
+-
 -Default mode = `full`, auto-active every session. Change it:
 -
 -**Environment variable** (highest priority):
