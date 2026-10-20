@@ -2831,7 +2831,8 @@ const localBranchExists = name => {
  */
 function openFirstPr(issue) {
   const claim = commentClaims(issue).at(-1);
-  if (!claim) return;
+  // A merged PR (squash: its commits are not in the base) means the work is delivered: the FILE-only path reports it.
+  if (!claim || issue.closedByPullRequestsReferences?.nodes.some(pr => pr?.state === 'MERGED')) return;
   git('fetch', 'origin');
   const base = /^Basis:[ \t]*(\S+)[ \t]*$/m.exec(claim.input)?.[1] ?? (baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch));
   if (git('rev-list', '--count', `origin/${base}..HEAD`) === '0') return;
