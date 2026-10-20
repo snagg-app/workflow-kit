@@ -1469,6 +1469,7 @@ const readPr = prNumber => {
 };
 // The token goes only to these hosts, whatever URL a check run names.
 const sonarHosts = ['https://sonarcloud.io', 'https://sonarqube.us'];
+class SonarOtherPr extends Error {}
 const sonarListed = 10; // findings printed per analysis; the count says how many more
 /**
  * OPEN and CONFIRMED issues of the pull request analysis a SonarCloud check run points at. The anonymous API reports 0
@@ -1478,8 +1479,10 @@ const sonarListed = 10; // findings printed per analysis; the count says how man
 function sonarIssues(detailsUrl, prNumber, summary) {
   const target = new URL(detailsUrl ?? 'invalid:');
   const key = target.searchParams.get('id');
-  assert.ok(sonarHosts.includes(target.origin) && key && target.searchParams.get('pullRequest') === String(prNumber),
-    `The SonarCloud check does not link PR #${prNumber}'s analysis (${detailsUrl}); open issues are unreadable`);
+  const unlinked = `The SonarCloud check does not link PR #${prNumber}'s analysis (${detailsUrl}); open issues are unreadable`;
+  assert.ok(sonarHosts.includes(target.origin) && key && target.searchParams.get('pullRequest'), unlinked);
+  // Sync PRs with the same head share one analysis, and it links one of them (#640): `merge` answers with a branch update.
+  if (target.searchParams.get('pullRequest') !== String(prNumber)) throw new SonarOtherPr(unlinked);
   if (!process.env.SONAR_TOKEN) {
     // The check run's own summary names the count ("[0 New issues](…)"); only that is a readable number, else total is null.
     const count = /\[(\d+) New issues?\]/.exec(summary ?? '')?.[1];
@@ -2438,7 +2441,7 @@ function runPush(branch, merged) {
  * thread). A single PR is merged as it is, whatever the base gained since (#552); only a red check can ask for the base first (below).
  * Then exactly the checked head: `--match-head-commit` needs the full object id, and it also refuses a push that lands after the check, so
  * no recheck window is left to close. Repeated once only for "Base branch was modified" (#638: gate again, then merge again); any other refusal by gh ends as ERROR, except the stack refusal of a PR with stacked children (#321),
- * which goes once to merge-async with the same head and is read back until merged. Afterwards the head branch goes (see deleteHeadBranch).
+ * which goes once to merge-async with the same head and is read back until merged. A Sonar check that links the analysis of another PR (sync PRs with one head, #640) gets the base merged once, like a red check. Afterwards the head branch goes (see deleteHeadBranch).
  * `--stack`: PR is the top of a native stack. Every layer holds its own gate first (stackReasons), CI and reviewers count for the top head
  * only (it contains all layers), then the top alone goes to merge-async: GitHub merges every layer below it too, bottom first, and shows each as merged (#389).
  * A moved trunk under files the stack changes is the driver's to merge into the top layer (update-branch would only merge the layer below).
@@ -2458,22 +2461,30 @@ async function merge() {
   }
   const look = () => reviewsForHead(); // an unchanged REST marker answers from the last full read, like `wait`
   // Like `wait`: look again until CI and the reviewers have finished (or --max-minutes runs out: exit 4); the gate then decides once.
-  let polled = await poll(look);
-  if (!polled) return;
+  let polled, didUpdate = false;
   // The new head's CI (and any reviewer that answers the push) decides, so the gate runs again; one update per run.
   const update = async ({ baseRefName, headRefOid: before }, why) => {
     assert.match(before, /^[0-9a-f]{40}$/, 'The PR head is not a full object id');
     console.log(`update: ${why}; merging ${baseRefName} into the PR branch first`);
     const updated = updateBranch(before, baseRefName);
     if (!updated) return false;
+    didUpdate = true;
     console.log(`updated: head ${before.slice(0, 7)} -> ${updated.slice(0, 7)}; waiting for CI`);
     polled = await poll(look);
     return Boolean(polled);
   };
+  try {
+    polled = await poll(look);
+  } catch (error) {
+    // Two sync PRs with one head share the Sonar analysis, which links the other PR (#640): a new head gets its own analysis.
+    if (stack || !(error instanceof SonarOtherPr)) throw error;
+    if (!await update(readPr(number), 'the SonarCloud check links the analysis of another PR')) return;
+  }
+  if (!polled) return;
   // A red check from "updateBranchChecks" as the only reason asks for the base (#383): that is the update, not a FAILED.
   // Any other red check on a head the base has left behind may come from the old merge state (#425): the base is merged once and the new CI decides; a second red is FAILED.
-  const stale = !stack && polled.failed && !polled.baseOnly && polled.reasons.every(reason => reason.startsWith('check ')) ? baseMovement(polled.pr) : null;
-  const forCheck = !stack && (polled.baseOnly || stale);
+  const stale = !stack && !didUpdate && polled.failed && !polled.baseOnly && polled.reasons.every(reason => reason.startsWith('check ')) ? baseMovement(polled.pr) : null;
+  const forCheck = !stack && !didUpdate && (polled.baseOnly || stale);
   if (forCheck && !await update(polled.pr, stale ? `${polled.pr.baseRefName} gained ${stale.behind} commits since the merge-base; ${polled.reasons.join('; ')}` : polled.reasons.join('; '))) return;
   // The successful poll just checked this head; an update above replaces that proof before the atomic head-bound merge.
   const result = mergeGate(viewer, polled);

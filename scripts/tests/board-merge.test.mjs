@@ -211,6 +211,20 @@ test('merge merges the base for a red check from updateBranchChecks, but only wh
   assert.deepEqual(calls(), []);
 });
 
+test('merge merges the base when the Sonar analysis of the head links another PR, then merges (#640)', t => {
+  const { run, show, calls, json, first, second, headOf } = mergeFixture(t);
+  const token = process.env.SONAR_TOKEN;
+  process.env.SONAR_TOKEN = '';
+  t.after(() => { if (token === undefined) delete process.env.SONAR_TOKEN; else process.env.SONAR_TOKEN = token; });
+  const sonar = pullRequest => ({ statusCheckRollup: { contexts: { totalCount: 1, nodes: [{ __typename: 'CheckRun', name: 'SonarCloud Code Analysis', status: 'COMPLETED', conclusion: 'SUCCESS',
+    summary: '[0 New issues]', detailsUrl: `https://sonarcloud.io/dashboard?id=test_example&pullRequest=${pullRequest}`, checkSuite: { app: { slug: 'sonarqubecloud' } } }] } } });
+  show(headOf(first, sonar(9)));
+  json('pr-reads.json', [{}, {}, {}, headOf(second, sonar(7))]);
+  const merged = run('merge', '7', '--interval', '0');
+  assert.equal(merged.status, 0, merged.stdout + merged.stderr);
+  assert.deepEqual(calls(), [`update-branch ${first}`, 'merge', 'delete claude/7-topic']);
+});
+
 test('merge merges the base once for any red check when the base moved, and a second red or an unmoved base is FAILED, a refused update is ERROR or the manual way (#425)', t => {
   const { checkout, run, show, calls, flag, json, first, second, headOf } = mergeFixture(t);
   const red = { statusCheckRollup: { contexts: { totalCount: 1, nodes: [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }] } } };
