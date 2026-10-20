@@ -342,6 +342,19 @@ test('done merges a base the branch is behind, pushes it and tests the merged he
   assert.match(text('affected-tests-calls'), /--run/);
 });
 
+test('done pushes the merged base to its own branch although the upstream is the base (#651)', t => {
+  const { run, head, git, checkout, file, json } = delivery(t, handoffFixture);
+  moveBase(git, checkout);
+  git('update-ref', 'refs/remotes/origin/release/0.1.1', head);
+  git('branch', '--set-upstream-to=origin/release/0.1.1');
+  showPr(file, json, { isDraft: false });
+  assert.equal(run('done', '1', 'result.md').status, 1);
+  const merged = git('rev-parse', 'HEAD');
+  assert.notEqual(merged, head);
+  assert.match(git('ls-remote', 'origin', 'refs/heads/work'), new RegExp(`^${merged}`), 'the merge is pushed to the branch');
+  assert.equal(git('rev-parse', '--abbrev-ref', '@{u}'), 'origin/work');
+});
+
 // The origin answers the fetch of `done` by a script that fails `message` the first `fails` times (stderr like git's), then serves the real upload-pack; it counts its calls.
 function flakyFetch(git, checkout, fails, message) {
   writeFileSync(join(checkout, 'upload-pack.sh'), `echo x >> attempts\n[ "$(wc -l < attempts)" -le ${fails} ] && { echo "${message}" >&2; exit 1; }\nexec git upload-pack "$1"\n`);
@@ -491,9 +504,9 @@ for (const action of ['push', 'delete']) test(`done refuses a live remote ${acti
   assert.equal(text('stored'), 'In progress');
 });
 
-test('done refuses to push from a branch that tracks main or release/** and changes nothing (#646)', t => {
+test('done refuses to push from a checkout on main or release/** and changes nothing (#646)', t => {
   const { run, git, text, file, checkout } = delivery(t, handoffFixture);
-  git('branch', '--set-upstream-to=origin/release/0.1.1');
+  git('switch', '-C', 'release/0.1.1');
   writeFileSync(join(checkout, '.git/hooks/pre-push'), `#!/bin/sh\necho push >> "${checkout.replaceAll('\\', '/')}/pushes"\n`, { mode: 0o755 });
   const result = run('done', '1', 'result.md');
   assert.equal(existsSync(join(checkout, 'pushes')), false, 'no push attempt');
