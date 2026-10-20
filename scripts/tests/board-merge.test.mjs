@@ -265,7 +265,9 @@ test('merge gives both CI waits around a base update one shared --max-minutes de
   writeFileSync(config, JSON.stringify({ ...plain, updateBranchChecks: ['Restart CI after retarget'] }));
   // The restart check fails only when the deadline (0.3 s) is reached; the new head's CI is still running, then green.
   show(headOf(first, check(null, 'IN_PROGRESS')));
-  json('pr-reads.json', [{}, headOf(first, check('FAILURE')), headOf(second, check(null, 'IN_PROGRESS', 'CI')), headOf(second, check(null, 'IN_PROGRESS', 'CI')), headOf(second)]);
+  // Each answer carries its own update time: merge reads GraphQL again only when REST shows a change, as it does in life.
+  json('pr-reads.json', [{ updatedAt: 'u1' }, { ...headOf(first, check('FAILURE')), updatedAt: 'u2' }, { ...headOf(second, check(null, 'IN_PROGRESS', 'CI')), updatedAt: 'u3' },
+    { ...headOf(second, check(null, 'IN_PROGRESS', 'CI')), updatedAt: 'u4' }, { ...headOf(second), updatedAt: 'u5' }]);
   const waiting = run('merge', '7', '--interval', '0.4', '--max-minutes', '0.005');
   assert.equal(waiting.status, 4, waiting.stdout + waiting.stderr);
   assert.deepEqual(calls(), [`update-branch ${first}`], 'the second wait has no time left of its own: nothing is merged');

@@ -4,7 +4,7 @@
 // working directory decides the project, and a driver in another project would read and write the wrong board.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -113,6 +113,7 @@ function graphql(query, variables = {}, tolerate, beforeSend) {
       const { data, errors } = JSON.parse(body);
       quota = quotaOf(headers) ?? quota;
       spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
+      if (process.env.BOARD_TRACE) console.error(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? '~1' : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
       if (errors?.length) {
         const message = errors.map(({ type, message }) => `${type ?? ''} ${message ?? ''}`).join('\n').trim();
         if (!(tolerate?.test(message) && data)) throw Object.assign(new Error(message), { stdout: response, stderr: message });
@@ -838,6 +839,7 @@ function next() {
   }
   loadPrFeedback(nodes);
   // The Priority field's option order is the ranking, whatever the scale (High/Low, P0/P1, …).
+  dropFieldsCache(); // the ranking is the option order: never from the cache
   const rank = selectField('Priority').choices.map(choice => choice.name);
   const order = priority => rank.includes(priority) ? rank.indexOf(priority) : rank.length;
   const ready = nodes.map(issue => ({ ...issue, item: projectItem(issue) }))
@@ -882,11 +884,43 @@ function next() {
 }
 
 /** A single-select Project field with its options in configured order. The definitions are read once per run, however many fields are looked up. */
-let projectFields;
-function selectField(fieldName) {
-  projectFields ??= graphql(`query($id:ID!){node(id:$id){...on ProjectV2{fields(first:100){nodes{...on ProjectV2SingleSelectField{
+let projectFields, fieldsCached = false, fieldsRefreshed = false; // refreshed: ids resolved before it may be stale
+// Field and option ids change rarely: kept in the clone's Git directory (shared by its worktrees) and read again only when a name
+// or option is missing from them or a write with them fails (writeOption). One read costs a point; every run used to pay it.
+const fieldsCache = () => {
+  assert.notEqual(process.env.BOARD_FIELD_CACHE, '0', 'field cache switched off'); // the board tests change definitions between calls
+  // Read from the files, not `git rev-parse`: a worktree's `.git` is a file naming its directory, whose `commondir` names the shared one.
+  let dir = join(projectDirectory, '.git');
+  if (statSync(dir).isFile()) dir = resolve(projectDirectory, readFileSync(dir, 'utf8').replace(/^gitdir:\s*/, '').trim());
+  if (existsSync(join(dir, 'commondir'))) dir = resolve(dir, readFileSync(join(dir, 'commondir'), 'utf8').trim());
+  return join(dir, 'board-project-fields.json');
+};
+function dropFieldsCache() {
+  fieldsRefreshed = true;
+  projectFields = undefined;
+  fieldsCached = false;
+  if (process.env.BOARD_FIELD_CACHE !== '0') rmSync(fieldsCache(), { force: true });
+}
+function loadFields() {
+  try {
+    const cached = JSON.parse(readFileSync(fieldsCache(), 'utf8'));
+    if (cached.project === project.id && Array.isArray(cached.fields)) return { fields: cached.fields, cached: true };
+  } catch { /* no usable cache: read the definitions */ }
+  const fields = graphql(`query($id:ID!){node(id:$id){...on ProjectV2{fields(first:100){nodes{...on ProjectV2SingleSelectField{
     id name options{id name} issueField{...on IssueFieldSingleSelect{id options{id name}}}}}}}}}`, { id: project.id })
     .node.fields.nodes.filter(candidate => candidate.name && candidate.options);
+  try { writeFileSync(fieldsCache(), JSON.stringify({ project: project.id, fields })); } catch { /* read-only Git directory: no cache */ }
+  return { fields, cached: false };
+}
+function selectField(fieldName, optionName) {
+  if (!projectFields) ({ fields: projectFields, cached: fieldsCached } = loadFields());
+  const known = () => {
+    const found = projectFields.find(candidate => candidate.name === fieldName);
+    const names = [...found?.options ?? [], ...found?.issueField?.options ?? []].map(choice => String(choice.name).toLowerCase());
+    return found && (optionName === undefined || names.includes(String(optionName).toLowerCase())
+      || (fieldName === 'Status' && names.some(choice => statusName(choice).toLowerCase() === statusName(optionName).toLowerCase())));
+  };
+  if (fieldsCached && !known()) { dropFieldsCache(); ({ fields: projectFields, cached: fieldsCached } = loadFields()); }
   const fields = projectFields;
   const field = fields.find(candidate => candidate.name === fieldName);
   assert.ok(field, `${project.url} has no single-select ${fieldName} field; use one of: ${fields.map(candidate => candidate.name).join(', ')}`);
@@ -913,7 +947,7 @@ function addToProject(issue) {
 
 /** Look up a field and option; nothing is printed or written. */
 function resolveOption(fieldName, optionName) {
-  const { field, linked, choices } = selectField(fieldName);
+  const { field, linked, choices } = selectField(fieldName, optionName);
   const normalized = name => String(fieldName === 'Status' ? statusName(name) : name).toLowerCase();
   const option = choices.find(choice => choice.name.toLowerCase() === String(optionName).toLowerCase())
     ?? choices.find(choice => normalized(choice.name) === normalized(optionName));
@@ -931,7 +965,7 @@ function guardOption(issue, { fieldName, option }) {
   }
   if (fieldName === 'Status' && option.name === 'In progress') {
     // Assignment first, so a missing assignment is named even when the issue is also blocked.
-    const { viewer } = graphql('query{viewer{login}}');
+    const viewer = issue.viewer; // read with the issue
     assert.ok(viewer?.login, 'Cannot verify the authenticated GitHub user');
     assert.ok(issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === viewer.login.toLowerCase()),
       `Assign yourself first: gh issue edit ${number} --repo ${project.repository} --add-assignee "@me". Verify session ownership before assigning.`);
@@ -947,7 +981,21 @@ function guardOption(issue, { fieldName, option }) {
   if (fieldName === 'Status' && statusName(option.name) === 'Automated review') verifyBacklinks(issue);
 }
 
-function writeOption(issue, { fieldName, field, linked, option }) {
+function writeOption(issue, plan) {
+  // After a refresh the ids of plans made before it are stale too (several fields in one call).
+  if (fieldsRefreshed) plan = resolveOption(plan.fieldName, plan.option.name);
+  try {
+    return writeOptionOnce(issue, plan);
+  } catch (error) {
+    // Ids from the cache may be stale (a field or option was recreated): read them again and try once more.
+    // Only a GraphQL refusal that names a field or option: a spec guard (assertion) or a quota pause is no stale id.
+    if (!fieldsCached || error.code === 'ERR_ASSERTION' || !/could not resolve|global id|field|option/i.test(String(error.stderr ?? error.message))) throw error;
+    dropFieldsCache();
+    return writeOptionOnce(issue, resolveOption(plan.fieldName, plan.option.name));
+  }
+}
+
+function writeOptionOnce(issue, { fieldName, field, linked, option }) {
   const beforeSend = () => guardSpecStatus(issue, { fieldName, option });
   if (linked) {
     graphql(`mutation($issue:ID!,$field:ID!,$option:ID!){setIssueFieldValue(input:{issueId:$issue,
@@ -969,14 +1017,14 @@ function writeOption(issue, { fieldName, field, linked, option }) {
 
 /** Write a selected field option; guarded delivery can reject the fresh issue before mutation. */
 function set(fieldName, optionName = value, beforeWrite) {
-  let issue = readIssue();
+  // A guarded handoff rechecks current ownership/readiness after the potentially lengthy review reads; its fresh issue replaces this read.
+  let issue = beforeWrite ? undefined : readIssue();
   const plan = resolveOption(fieldName, optionName);
-  guardOption(issue, plan);
-  // A guarded handoff rechecks current ownership/readiness after the potentially lengthy review reads.
   if (beforeWrite) {
     issue = beforeWrite();
     if (!issue) return;
   }
+  guardOption(issue, plan);
   console.log(writeOption(issue, plan));
   return plan.option.name;
 }
@@ -1196,6 +1244,7 @@ const readBlock = miss => rows => {
  * finished by hand, never created twice. `--from FILE` creates a whole list instead (createMany).
  */
 function create() {
+  dropFieldsCache(); // the issue is created before its fields are written: a stale cached id would leave it half done
   const args = process.argv.slice(3);
   if (args[0] === '--from') return createMany(args.slice(1));
   const options = newOptions(args);
@@ -1259,14 +1308,15 @@ function createMany([file, ...extra]) {
 }
 
 // Reviewers run unreliably, so only traces on the current head count (docs/CONTRIBUTING.md#review-loop).
-const prQuery = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
+// GitHub charges a query by its connections: each of the up to 100 review threads and check suites counts one more. 30 suites keep the whole read at 1 point instead of 2; a longer list is read again at 100.
+const prQuery = suites => `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
   number state isDraft createdAt headRefName headRefOid baseRefName mergeStateStatus reviewDecision isCrossRepository headRepository{nameWithOwner} body${project.selfReview === undefined ? '' : ' bodyHTML'}
   readyEvents:timelineItems(last:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}
   firstReadyEvents:timelineItems(first:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}
   convertEvents:timelineItems(last:1,itemTypes:[CONVERT_TO_DRAFT_EVENT]){nodes{...on ConvertToDraftEvent{createdAt}}}
   latestOpinionatedReviews(first:100){totalCount nodes{state author{login}}}
   reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved comments(first:1){nodes{url}}}}
-  commits(last:1){nodes{commit{oid committedDate checkSuites(first:100){totalCount nodes{createdAt status conclusion app{slug} workflowRun{databaseId workflow{id}} checkRuns(first:1){totalCount}}}
+  commits(last:1){nodes{commit{oid committedDate checkSuites(first:${suites}){totalCount nodes{createdAt status conclusion app{slug} workflowRun{databaseId workflow{id}} checkRuns(first:1){totalCount}}}
     statusCheckRollup{contexts(first:100){totalCount nodes{__typename
       ...on CheckRun{name status conclusion title summary detailsUrl startedAt completedAt checkSuite{databaseId createdAt app{slug} workflowRun{databaseId event workflow{id name}}}}
       ...on StatusContext{context state description createdAt creator{login}}}}}}}}
@@ -1393,7 +1443,13 @@ const isOptional = name => (optional ??= optionalReviewers()).has(reviewerKey(na
 const isOptionalCheck = check => isOptional(check.checkSuite?.app?.slug ?? check.creator?.login);
 const passed = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 
-const readPr = prNumber => graphql(prQuery, { owner, name, number: prNumber }).repository.pullRequest;
+const readPr = prNumber => {
+  for (const suites of [30, 100]) {
+    const pr = graphql(prQuery(suites), { owner, name, number: prNumber }).repository.pullRequest;
+    const commit = pr?.commits?.nodes?.[0]?.commit;
+    if (suites === 100 || !(commit?.checkSuites?.totalCount > commit.checkSuites.nodes.length)) return pr;
+  }
+};
 // The token goes only to these hosts, whatever URL a check run names.
 const sonarHosts = ['https://sonarcloud.io', 'https://sonarqube.us'];
 const sonarListed = 10; // findings printed per analysis; the count says how many more
@@ -2135,7 +2191,7 @@ function handoffPr(issueId, viewer, expectedHead, prior, partial) {
 /** Guard the Human review write with current PR proof followed by current issue prerequisites. */
 function handoff() {
   const issue = readIssue();
-  const { viewer } = graphql('query{viewer{login}}');
+  const { viewer } = issue;
   assert.ok(viewer?.login, 'Cannot verify the authenticated GitHub user');
   // The issue side's reasons wait for the PR side's, so one run names everything that is missing.
   const currentPrNumber = Number(value);
@@ -2382,7 +2438,7 @@ async function merge() {
       return;
     }
   }
-  const look = () => reviews(stallOption());
+  const look = () => reviewsForHead(); // an unchanged REST marker answers from the last full read, like `wait`
   // Like `wait`: look again until CI and the reviewers have finished (or --max-minutes runs out: exit 4); the gate then decides once.
   let polled = await poll(look);
   if (!polled) return;
@@ -2763,10 +2819,14 @@ function start() {
   if (!mayStart(check(issue, { session, takeover }))) return;
   const stacked = stackedOn, login = issue.viewer.login;
   // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
-  const raced = startReasons(readIssue(), session, takeover).blocked;
+  const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
-  if (!issue.assignees.nodes.some(user => sameLogin(user.login, login))) restPost(`repos/${project.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
-  set('Status', 'In progress');
+  if (!fresh.assignees.nodes.some(user => sameLogin(user.login, login))) {
+    restPost(`repos/${project.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
+    fresh.assignees.nodes.push({ login });
+  }
+  // The read seconds ago is the one `set` would take now; the read-back at the end of start still reads the issue again.
+  set('Status', 'In progress', () => fresh);
   const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
     : baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch);
   // Only a session claim or an allowed takeover proves branch ownership; the agent prefix does not.

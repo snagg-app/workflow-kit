@@ -279,6 +279,9 @@ and then work in that directory, their relative paths (changed files given to `a
   300 points again, sleeping until the reset taken from the response headers; a pause that would end after `--max-minutes`
   (default 9) is not slept through: it ends `still waiting: call quota-wait again after <time>` (exit 4). Use it, or `wait`, instead of a loop of your own around `gh`:
   a refused `gh api graphql` prints the error and may still exit 0.
+- Cost of a call: `BOARD_TRACE=1 node scripts/board.mjs …` prints one `gql COST QUERY` line per GraphQL request to stderr. The Project's
+  field and option ids are cached in the clone's Git directory (`board-project-fields.json`, shared by worktrees) and read again only when a
+  name or option is missing or a write with them fails; `BOARD_FIELD_CACHE=0` switches the cache off. Delete the file after recreating a field.
 - `merge PR [--stack] [--stall MINUTES] [--grace MINUTES] [--interval SECONDS] [--max-minutes N]`: the only way for an agent with merge
   authority to merge ([review loop](docs/CONTRIBUTING.md#review-loop) step 7). It applies the review gates of
   `done` (open non-draft PR, CI green, every reviewer with a trace on the head finished or
