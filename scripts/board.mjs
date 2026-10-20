@@ -1045,6 +1045,7 @@ function newOptions(args) {
  * of the field definitions), milestone and labels. `status` is the Status the command sets.
  */
 let repositoryLists;
+const sameTitle = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields }, status = 'Backlog') {
   for (const [what, text] of [['title', title], ['body file', bodyFile], ['milestone', milestone], ['priority', priority]]) assert.ok(text, `${what} is required`);
   assert.ok(wanted.length, 'at least one label is required');
@@ -1057,7 +1058,12 @@ function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields 
   }
   const plans = planFields(pairs);
   assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || plans.find(plan => plan.fieldName === 'Status').option.name === 'Backlog', 'A new spec starts in Backlog; only a human-invoked spec-review changes its status');
-  repositoryLists ??= { milestones: restAll(`repos/${project.repository}/milestones`), labels: restAll(`repos/${project.repository}/labels`) };
+  // Open issues over REST, not the search index, which misses one created seconds ago by a parallel session (#618). PRs are listed too.
+  repositoryLists ??= { milestones: restAll(`repos/${project.repository}/milestones`), labels: restAll(`repos/${project.repository}/labels`),
+    issues: restAll(`repos/${project.repository}/issues`).filter(item => !item.pull_request) };
+  // shortcut: two sessions creating within the same second still both pass; GitHub has no conditional create.
+  const same = repositoryLists.issues.find(item => sameTitle(item.title, title));
+  assert.ok(!same, `open issue ${same?.html_url} already has the title "${title}"; link it (board.mjs sub PARENT ${same?.number}) instead of creating it again`);
   const exact = (list, name, key) => list.find(item => item[key].toLowerCase() === name.toLowerCase());
   const found = exact(repositoryLists.milestones, milestone, 'title');
   assert.ok(found, `${project.repository} has no open milestone "${milestone}"`);
@@ -1232,6 +1238,8 @@ function createMany([file, ...extra]) {
     assert.ok(fields && typeof fields === 'object' && !Array.isArray(fields) && Object.values(fields).every(value => typeof value === 'string'), 'fields is an object of NAME: VALUE');
     return planNew({ ...entry, labels, fields: Object.entries(fields) });
   }));
+  const twice = plans.find((plan, index) => plans.findIndex(other => sameTitle(other.title, plan.title)) !== index);
+  assert.ok(!twice, `new --from: the title "${twice?.title}" appears twice in ${file}`);
   const made = [];
   const known = () => made.length ? `${made.length} of ${plans.length} issues exist: ${made.map(({ created }) => created.html_url).join(' ')}` : 'none was created';
   try {
