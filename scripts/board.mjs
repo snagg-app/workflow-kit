@@ -113,7 +113,7 @@ function graphql(query, variables = {}, tolerate, beforeSend) {
       const { data, errors } = JSON.parse(body);
       quota = quotaOf(headers) ?? quota;
       spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
-      if (process.env.BOARD_TRACE) console.error(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
+      if (process.env.BOARD_TRACE) console.error(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? '~1' : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
       if (errors?.length) {
         const message = errors.map(({ type, message }) => `${type ?? ''} ${message ?? ''}`).join('\n').trim();
         if (!(tolerate?.test(message) && data)) throw Object.assign(new Error(message), { stdout: response, stderr: message });
@@ -883,7 +883,7 @@ function next() {
 }
 
 /** A single-select Project field with its options in configured order. The definitions are read once per run, however many fields are looked up. */
-let projectFields, fieldsCached = false;
+let projectFields, fieldsCached = false, fieldsRefreshed = false; // refreshed: ids resolved before it may be stale
 // Field and option ids change rarely: kept in the clone's Git directory (shared by its worktrees) and read again only when a name
 // or option is missing from them or a write with them fails (writeOption). One read costs a point; every run used to pay it.
 const fieldsCache = () => {
@@ -895,9 +895,10 @@ const fieldsCache = () => {
   return join(dir, 'board-project-fields.json');
 };
 function dropFieldsCache() {
+  fieldsRefreshed = true;
   projectFields = undefined;
   fieldsCached = false;
-  rmSync(fieldsCache(), { force: true });
+  if (process.env.BOARD_FIELD_CACHE !== '0') rmSync(fieldsCache(), { force: true });
 }
 function loadFields() {
   try {
@@ -980,6 +981,8 @@ function guardOption(issue, { fieldName, option }) {
 }
 
 function writeOption(issue, plan) {
+  // After a refresh the ids of plans made before it are stale too (several fields in one call).
+  if (fieldsRefreshed) plan = resolveOption(plan.fieldName, plan.option.name);
   try {
     return writeOptionOnce(issue, plan);
   } catch (error) {
@@ -1239,6 +1242,7 @@ const readBlock = miss => rows => {
  * finished by hand, never created twice. `--from FILE` creates a whole list instead (createMany).
  */
 function create() {
+  dropFieldsCache(); // the issue is created before its fields are written: a stale cached id would leave it half done
   const args = process.argv.slice(3);
   if (args[0] === '--from') return createMany(args.slice(1));
   const options = newOptions(args);

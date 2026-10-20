@@ -3,7 +3,7 @@ import { fixture, issue, test } from './board-fixture.mjs';
 
 test('the field definitions are read once and then served from the Git directory until a name or option is missing', t => {
   const { env, queries, run, writeIssue } = fixture(t);
-  delete env.BOARD_FIELD_CACHE; // the other board tests switch the cache off
+  env.BOARD_FIELD_CACHE = ''; // the other board tests switch the cache off, and so may the caller's environment
   const definitions = () => queries().filter(query => query.includes('fields(first:100)')).length;
   writeIssue(issue());
   assert.equal(run('field', '1', 'Size', 'xs').status, 0);
