@@ -342,6 +342,19 @@ test('done merges a base the branch is behind, pushes it and tests the merged he
   assert.match(text('affected-tests-calls'), /--run/);
 });
 
+test('done pushes the merged base to its own branch although the upstream is the base (#651)', t => {
+  const { run, head, git, checkout, file, json } = delivery(t, handoffFixture);
+  moveBase(git, checkout);
+  git('update-ref', 'refs/remotes/origin/release/0.1.1', head);
+  git('branch', '--set-upstream-to=origin/release/0.1.1');
+  showPr(file, json, { isDraft: false });
+  assert.equal(run('done', '1', 'result.md').status, 1);
+  const merged = git('rev-parse', 'HEAD');
+  assert.notEqual(merged, head);
+  assert.match(git('ls-remote', 'origin', 'refs/heads/work'), new RegExp(`^${merged}`), 'the merge is pushed to the branch');
+  assert.equal(git('rev-parse', '--abbrev-ref', '@{u}'), 'origin/work');
+});
+
 // The origin answers the fetch of `done` by a script that fails `message` the first `fails` times (stderr like git's), then serves the real upload-pack; it counts its calls.
 function flakyFetch(git, checkout, fails, message) {
   writeFileSync(join(checkout, 'upload-pack.sh'), `echo x >> attempts\n[ "$(wc -l < attempts)" -le ${fails} ] && { echo "${message}" >&2; exit 1; }\nexec git upload-pack "$1"\n`);
