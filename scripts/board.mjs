@@ -2423,7 +2423,7 @@ function runPush(branch, merged) {
  * Merge for agents with merge authority: the same gate as handoff (CI, every traced review finished, no blocker or open
  * thread). A single PR is merged as it is, whatever the base gained since (#552); only a red check can ask for the base first (below).
  * Then exactly the checked head: `--match-head-commit` needs the full object id, and it also refuses a push that lands after the check, so
- * no recheck window is left to close. Never repeated: a refusal by gh ends as ERROR, except the stack refusal of a PR with stacked children (#321),
+ * no recheck window is left to close. Repeated once only for "Base branch was modified" (#638: gate again, then merge again); any other refusal by gh ends as ERROR, except the stack refusal of a PR with stacked children (#321),
  * which goes once to merge-async with the same head and is read back until merged. Afterwards the head branch goes (see deleteHeadBranch).
  * `--stack`: PR is the top of a native stack. Every layer holds its own gate first (stackReasons), CI and reviewers count for the top head
  * only (it contains all layers), then the top alone goes to merge-async: GitHub merges every layer below it too, bottom first, and shows each as merged (#389).
@@ -2471,7 +2471,7 @@ async function merge() {
     process.exitCode = 1;
     return;
   }
-  const { headRefOid } = result.pr;
+  let { headRefOid } = result.pr;
   let asynchronous = false;
   const mergeAsync = () => {
     // Without the version header GitHub answers 404 for a stacked PR (#492); direct_merge is still a valid merge_action with it. The result is read from the PR below.
@@ -2480,9 +2480,23 @@ async function merge() {
     asynchronous = true;
   };
   // A stack is merged by GitHub from its top, and a plain `gh pr merge` of the top would land it in the layer below: merge-async only.
+  const ghMerge = () => execFileSync(gh.file, ['pr', 'merge', String(number), '--repo', project.repository, '--merge', '--match-head-commit', headRefOid],
+    { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
   if (result.merged) console.log(`note: PR #${number} is already merged`); else if (stack) mergeAsync(); else try {
-    execFileSync(gh.file, ['pr', 'merge', String(number), '--repo', project.repository, '--merge', '--match-head-commit', headRefOid],
-      { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+    try {
+      ghMerge();
+    } catch (error) {
+      // Another PR landed on the base a moment ago (#638): read the PR and run the gate again, then merge once more. A second refusal ends as before.
+      if (!/Base branch was modified/i.test(`${error.stderr}${error.stdout}`)) throw error;
+      console.log('note: the base branch was modified during the merge; checking the PR again and merging once more');
+      polled = await poll(look);
+      if (!polled) return;
+      const again = mergeGate(viewer, polled);
+      if (!again) return;
+      assert.match(again.pr.headRefOid, /^[0-9a-f]{40}$/, 'The PR head is not a full object id');
+      ({ headRefOid } = again.pr);
+      if (again.merged) console.log(`note: PR #${number} is already merged`); else ghMerge();
+    }
   } catch (error) {
     // A PR with stacked children (#321) is refused, but accepted by merge-async: same merge, same head, the answer is 202 and the merge follows in the background.
     // GitHub's GraphQL text is "part of a stack and must be merged using the asynchronous merge REST API"; a REST merge answers HTTP 403.
