@@ -44,7 +44,11 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
 5. **Gap tickets.** Each **open** gap with one obvious fix, without a matching open sub-issue, first gets a search of
    open issues (`gh issue list --search "<finding words>"`): an unlinked match from an earlier run is linked with
    `board.mjs sub SPEC N`. Otherwise it becomes a new issue via `board.mjs new` (required fields per the project's
-   tracker doc), then `board.mjs sub SPEC NEW`. When `new` refuses because an open issue has the same title, link that
+   tracker doc), then `board.mjs sub SPEC NEW`. Right before each `board.mjs new`, repeat the duplicate check, because
+   parallel runs and other agents file issues in the meantime: list the issues updated in the last 24 hours, open and
+   closed (`gh api "repos/{owner}/{repo}/issues?state=all&since=<UTC now minus 24 h, ISO 8601>&per_page=100" --jq '.[]|select(.pull_request|not)|[.number,.state,.title]'`),
+   and match them by the title words of the new ticket and by a reference to the spec in the body (`#SPEC` or the spec URL; read the body only of title candidates).
+   A match, open or closed, is linked with `board.mjs sub SPEC N` instead of creating the issue. When `new` refuses because an open issue has the same title, link that
    issue instead (`board.mjs sub SPEC N`). No ticket carries an open decision; `needs-human-input` is only for
    work a human must do. Architecture candidates never get a ticket here.
 
@@ -65,7 +69,8 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
    and the user confirmed.
 
 8. **Agreed work to tickets.** Right after step 7, each answer that asks for follow-up work gets its ticket the way
-   step 5 does; the body states the decision with date and source, and "after the release" goes into its target
+   step 5 does, including its duplicate check right before each `board.mjs new` (last 24 hours, title words and spec
+   reference; a match is linked with `board.mjs sub SPEC N`); the body states the decision with date and source, and "after the release" goes into its target
    release. Adjust the spec's text and acceptance point to the decisions (`board.mjs body`) and add a short addendum
    comment (Nachtrag) on the spec: decisions, outcomes, every sub-issue created or newly linked in this invocation.
    Done when every agreed piece of work has an open sub-issue, read back from the sub-issues API.
