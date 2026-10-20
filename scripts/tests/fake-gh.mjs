@@ -533,6 +533,12 @@ function pr(argv, input, stdout, stderr, exit) {
   if (argv[argv.indexOf('--match-head-commit') + 1] !== JSON.parse(fs.readFileSync('pr.json')).headRefOid) {
     stderr('gh: Head branch was modified\n'); exit(1);
   }
+  // merge-base-modified: the number of refusals left because the base moved (#638); the file is gone after the last one.
+  if (fs.existsSync('merge-base-modified')) {
+    const left = Number(fs.readFileSync('merge-base-modified', 'utf8') || 1) - 1;
+    if (left > 0) fs.writeFileSync('merge-base-modified', String(left)); else fs.rmSync('merge-base-modified');
+    stderr('GraphQL: Base branch was modified. Review and try the merge again. (mergePullRequest)\n'); exit(1);
+  }
   if (fs.existsSync('merge-fails')) { stderr('gh: Head branch was modified\n'); exit(1); }
   // merge-403: the refusal of a PR with stacked children; the file holds gh's text, empty means the GraphQL text seen on GitHub (#321).
   if (fs.existsSync('merge-403')) {

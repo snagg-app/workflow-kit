@@ -310,6 +310,25 @@ test('merge falls back to merge-async with the checked head when gh refuses a PR
   assert.deepEqual(calls(), ['merge', 'merge-async']);
 });
 
+test('merge repeats once, after a new gate, when the base was modified during the merge, and never a third time (#638)', t => {
+  const { checkout, run, show, calls, flag } = mergeFixture(t);
+  show();
+  writeFileSync(join(checkout, 'merge-base-modified'), '1');
+  const merged = run('merge', '7', '--interval', '0');
+  assert.equal(merged.status, 0, merged.stdout + merged.stderr);
+  assert.match(merged.stdout, /^note: the base branch was modified during the merge; checking the PR again and merging once more$/m);
+  assert.deepEqual(calls(), ['merge', 'merge', 'delete claude/7-topic']);
+  // The second refusal ends the command, as does any other refusal at the first try.
+  show();
+  writeFileSync(join(checkout, 'merge-base-modified'), '2');
+  assert.equal(run('merge', '7', '--interval', '0').status, 2);
+  assert.deepEqual(calls(), ['merge', 'merge']);
+  show();
+  flag('merge-fails');
+  assert.equal(run('merge', '7', '--interval', '0').status, 2);
+  assert.deepEqual(calls(), ['merge']);
+});
+
 test('merge deletes the head branch only when nothing else needs it, and the merge stands when the delete fails', t => {
   const { run, show, calls, flag, json } = mergeFixture(t);
   const dependent = (number, ref) => ({ number, base: { ref } });
