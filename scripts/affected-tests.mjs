@@ -4,10 +4,11 @@
 // The mapping is the plain table below: explicit, no import analysis. CI keeps running the whole suite.
 // A project adds its own map in .github/affected-tests.json (see README); its commands are printed after the kit's tests
 // (`--base REF` replaces origin/main as the merge base, for projects that target release branches).
+// `--resume FILE` (with `--run`) remembers the green steps per head in FILE and skips them on the next call; a red step names whether its test file is in the diff.
 // `--run` stays quiet when green (test counts, `ok: <command>`) and shows the failing output otherwise; `--verbose` shows it all.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -94,6 +95,15 @@ export function projectCommands(files, map) {
   return [...new Set(Object.entries(map).filter(([pattern]) => files.some(file => glob(pattern).test(file))).flatMap(([, value]) => [value].flat()))];
 }
 
+let lastOutput = '';
+
+/** Says whether the test files named in the red output belong to the diff: a red file outside it is not this change's doing. */
+function redHint(changed) {
+  const named = [...new Set((lastOutput.match(/scripts[\\/]tests[\\/][\w.-]+\.test\.mjs/g) ?? []).map(file => file.replaceAll('\\', '/')))];
+  if (!named.length) return 'the output names no test file; read it above';
+  return named.map(file => `${file} ${changed.includes(file) ? 'is in your diff' : 'is NOT in your diff: probably not caused by this change (check the base), then --skip-local-tests REASON'}`).join('; ');
+}
+
 /**
  * Runs a command and returns its exit status. Unless `verbose`, its output stays hidden: a green run prints `ok` (or the
  * output lines matching `summary`), a red one prints everything except the lines matching `noise`. Either way a line names the
@@ -104,6 +114,7 @@ export function quiet(verbose, command, args, options, { summary, noise, ok, lab
   console.log(`run: ${label}`);
   const start = Date.now(), result = spawnSync(command, args, { ...options, encoding: 'utf8', maxBuffer: 1 << 28 });
   const lines = `${result.stdout ?? ''}${result.stderr ?? ''}`.split('\n');
+  lastOutput = lines.join('\n');
   console.log(result.status === 0 ? ok ?? lines.filter(line => summary.test(line)).join('\n') : lines.filter(line => !noise?.test(line)).join('\n').trim());
   console.log(`took ${((Date.now() - start) / 1000).toFixed(1)} s`);
   return result.status ?? 1;
@@ -111,7 +122,7 @@ export function quiet(verbose, command, args, options, { summary, noise, ok, lab
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
   enterCwd(); // `--cwd PROJECT_DIR` as the first argument; file arguments are relative to it
-  const { values, positionals: given } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, verbose: { type: 'boolean' }, base: { type: 'string', default: 'origin/main' } } });
+  const { values, positionals: given } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, verbose: { type: 'boolean' }, resume: { type: 'string' }, base: { type: 'string', default: 'origin/main' } } });
   // A project that uses the kit as a submodule: kit tests follow the kit's own changes, the project map the project's.
   const root = projectRoot(), inKit = realpathSync.native(root) === realpathSync.native(kit);
   const kitFiles = given.length ? (inKit ? given : []) : changedFiles(inKit ? values.base : undefined, kit);
@@ -121,7 +132,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1
   if (!values.run) { if (selected.length || commands.length) console.log([...selected, ...commands].join('\n')); }
   else if (!selected.length && !commands.length) console.log('no affected tests');
   else {
-    if (selected.length) process.exitCode = quiet(values.verbose, process.execPath, ['--test', ...selected], { cwd: kit }, { summary: /^ℹ (tests|pass|fail) /, noise: /^(start: |✔ )/, label: `node --test (${selected.length} files)` });
-    for (const command of commands) if (!process.exitCode) process.exitCode = quiet(values.verbose, command, [], { cwd: root, shell: true, env: { ...process.env, AFFECTED_BASE: values.base } }, { ok: `ok: ${command}` });
+    // --resume FILE: the green steps of a head are kept in FILE (first line the head, then one step per line), so a call after a red step runs only what is still open.
+    const head = values.resume ? git(root, 'rev-parse', 'HEAD')[0] : undefined;
+    const [saved, ...green] = values.resume && existsSync(values.resume) ? readFileSync(values.resume, 'utf8').split('\n') : [];
+    const done = new Set(saved === head ? green : []);
+    const step = (label, command, args, options, texts) => {
+      if (process.exitCode) return;
+      if (done.has(label)) return console.log(`skip (green for this head): ${label}`);
+      const status = quiet(values.verbose, command, args, options, { ...texts, label });
+      if (status === 0) { done.add(label); if (values.resume) writeFileSync(values.resume, [head, ...done].join('\n')); }
+      else process.exitCode = status;
+    };
+    if (selected.length) step(`node --test (${selected.length} files)`, process.execPath, ['--test', ...selected], { cwd: kit }, { summary: /^ℹ (tests|pass|fail) /, noise: /^(start: |✔ )/ });
+    for (const command of commands) step(command, command, [], { cwd: root, shell: true, env: { ...process.env, AFFECTED_BASE: values.base } }, { ok: `ok: ${command}` });
+    if (process.exitCode) console.error(`red step;${redHint(inKit ? kitFiles : given.length ? given : changedFiles(values.base, root))}`);
   }
 }

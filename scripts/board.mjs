@@ -2993,21 +2993,27 @@ async function done() {
   const prepare = !file && !findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
   if (skipReason) console.log(`LOCAL TESTS SKIPPED ${sha}: ${skipReason}`);
   else if (!isTested()) {
+    // The green steps of this head are kept (--resume): after a red step the next call runs only the open ones.
+    const steps = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-steps'));
     try {
-      execFileSync(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
-    } catch { return fail('the targeted tests of the changed files failed (output above); fix them, push, then run done again'); }
+      execFileSync(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--resume', steps, '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
+    } catch { return fail('the targeted tests of the changed files failed (output above; green steps of this head are kept); fix the cause, then run done again (a push starts all steps anew)'); }
     writeFileSync(tested, sha);
   }
+  const stepStart = Date.now(), took = name => console.log(`done: ${name} took ${((Date.now() - stepStart) / 1000).toFixed(1)} s`);
   ready(prNumber, sha);
   if (process.exitCode) return;
+  took('ready');
   value = String(prNumber);
   delivered = [value];
   const status = projectStatus(issue);
   if (partial) postBacklink(number, pull.html_url);
   // A head prepared after an earlier handoff has no handoff yet: it leaves Human review.
   else if (status !== 'Automated review' && (prepare || status !== 'Human review')) set('Status', 'Automated review');
-  const result = await poll(() => reviewsForHead(prNumber));
+  console.log('done: waiting for CI and reviews');
+  const waitStart = Date.now(), result = await poll(() => reviewsForHead(prNumber));
   if (!result) return;
+  console.log(`done: CI and reviews took ${((Date.now() - waitStart) / 1000).toFixed(1)} s`);
   if (result.failed) {
     process.exitCode = outcome(result)[1];
     return console.log([outcome(result)[0], ...result.lines, quotaLine()].filter(Boolean).join('\n'));

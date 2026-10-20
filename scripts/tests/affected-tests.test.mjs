@@ -91,6 +91,24 @@ test('--run names a command before it starts, with the duration after it', async
   assert.match(out, /^run: node -e .*\nok: .*\ntook [\d.]+ s\n$/s);
 });
 
+test('--resume skips the green steps of the same head after a red one', async t => {
+  const script = fileURLToPath(new URL('../affected-tests.mjs', import.meta.url));
+  const { NODE_TEST_CONTEXT, ...outside } = process.env;
+  const project = temporary(t, 'affected-tests-');
+  await run('git', ['init', '-q'], { cwd: project });
+  await run('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], { cwd: project });
+  mkdirSync(join(project, '.github'));
+  const ok = 'node -e "process.exit(0)"', bad = 'node -e "process.exit(Number(process.env.FAIL || 0))"';
+  writeFileSync(join(project, '.github/affected-tests.json'), JSON.stringify({ 'a/**': [ok, bad] }));
+  const steps = join(project, 'steps');
+  const ask = env => run(process.execPath, [script, '--run', '--resume', steps, 'a/B.java'], { cwd: project, env: { ...outside, ...env } });
+  const red = await ask({ FAIL: '1' });
+  assert.equal(red.status, 1);
+  const again = await ask({});
+  assert.equal(again.status, 0);
+  assert.ok(again.stdout.includes(`skip (green for this head): ${ok}`) && again.stdout.includes(`run: ${bad}`), again.stdout);
+});
+
 test('a project entry without a command is refused', t => {
   const project = temporary(t, 'affected-tests-');
   mkdirSync(join(project, '.github'));
