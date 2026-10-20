@@ -839,6 +839,7 @@ function next() {
   }
   loadPrFeedback(nodes);
   // The Priority field's option order is the ranking, whatever the scale (High/Low, P0/P1, …).
+  dropFieldsCache(); // the ranking is the option order: never from the cache
   const rank = selectField('Priority').choices.map(choice => choice.name);
   const order = priority => rank.includes(priority) ? rank.indexOf(priority) : rank.length;
   const ready = nodes.map(issue => ({ ...issue, item: projectItem(issue) }))
@@ -987,7 +988,8 @@ function writeOption(issue, plan) {
     return writeOptionOnce(issue, plan);
   } catch (error) {
     // Ids from the cache may be stale (a field or option was recreated): read them again and try once more.
-    if (!fieldsCached) throw error;
+    // Only a GraphQL refusal that names a field or option: a spec guard (assertion) or a quota pause is no stale id.
+    if (!fieldsCached || error.code === 'ERR_ASSERTION' || !/could not resolve|global id|field|option/i.test(String(error.stderr ?? error.message))) throw error;
     dropFieldsCache();
     return writeOptionOnce(issue, resolveOption(plan.fieldName, plan.option.name));
   }
