@@ -88,6 +88,20 @@ test('start takes a Ready issue to a Draft PR that closes it, and the same call 
   assert.equal(JSON.parse(text('pr.json')).body, 'Closes #1\nAgent: claude, Session: S2\nMehr');
 });
 
+test('start --issue-repo takes the issue of the other repository and opens the PR here, closing it by its full name', t => {
+  const { run, writeIssue, git, checkout, file, text } = startFixture(t);
+  writeIssue(issue('Ready'));
+  const result = run('--issue-repo', 'test/kit', 'start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^test\/kit#1 Fixture$/m);
+  const asked = text('repositories').split('\n');
+  assert.ok(asked.includes('issue owner=test/name=kit') && !asked.includes('issue owner=test/name=example'), 'the issue is looked up in the other repository only');
+  assert.ok(text('created-pr').includes('Closes test/kit#1\nAgent: claude, Session: S1\n'));
+  assert.equal(existsSync(file('develops')), false, 'no linked branch in the other repository');
+  assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');
+  assert.equal(run('--issue-repo', 'test/kit', 'check', '1').status, 2, 'only start and done take the option');
+});
+
 test('start resumes its empty ordinary upper claim before linking a native stack (#606)', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
   git(checkout, 'switch', '-q', '-c', 'lower');

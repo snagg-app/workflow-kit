@@ -22,6 +22,10 @@ try { projectDirectory = projectRoot(startDirectory); } catch (error) {
   console.error(`${startDirectory}: ${missing ? 'is not a directory' : 'is not inside a Git checkout'}`);
   process.exit(2);
 }
+// `--issue-repo OWNER/NAME` (start, done), anywhere in the arguments: the issue lives in that repository and on its board (a kit issue fixed in
+// the project); PR, branch and tests stay in the project's. Taken off here like --cwd, so the commands read their arguments by position.
+const issueRepoAt = process.argv.indexOf('--issue-repo');
+const issueRepoOption = issueRepoAt < 0 ? undefined : process.argv.splice(issueRepoAt, 2)[1];
 const [command, ref, typed] = process.argv.slice(2);
 const projectFile = join(projectDirectory, '.github/workflow-project.json');
 if (!existsSync(projectFile)) {
@@ -30,6 +34,8 @@ if (!existsSync(projectFile)) {
 }
 const project = JSON.parse(readFileSync(projectFile, 'utf8'));
 const [owner, name] = project.repository.split('/');
+// The repository and board of the issue: the project's own unless --issue-repo names another one (read once by useIssueRepo, before start and done).
+let issueProject = project, [issueOwner, issueName] = [owner, name];
 // `new` has no issue yet and assigns the number it creates.
 let number = Number(String(ref).replace(/^#/, ''));
 const gh = externalTool('gh', process.cwd(), projectDirectory);
@@ -152,7 +158,7 @@ const deliveryFields = `closedByPullRequestsReferences(first:10,includeClosedPrs
 // "baseBranch": {"field": "Zielrelease", "pattern": "release/{value}", "values": {"main": "main"}} names the branch an issue starts from (#385);
 // `check` reads the field with the issue. The optional `values` give a fixed branch for those field values instead of the pattern (#403).
 const baseSetting = () => {
-  const setting = project.baseBranch;
+  const setting = issueProject.baseBranch;
   if (setting === undefined) return;
   assert.ok(typeof setting?.field === 'string' && setting.field.trim() && typeof setting.pattern === 'string' && setting.pattern.includes('{value}')
     && (setting.values === undefined || Object.values(setting.values ?? {}).every(branch => typeof branch === 'string' && branch.trim())),
@@ -179,9 +185,9 @@ const issueQuery = subIssues => `query($owner:String!,$name:String!,$number:Int!
 const named = (label, read) => {
   try { return read(); } catch (error) { throw new Error(`${label}: ${String(error.stderr || error.message).trim()}`, { cause: error }); }
 };
-const readIssue = (withSubIssues = false, at = number) => named(`${project.repository}#${at}`, () => {
+const readIssue = (withSubIssues = false, at = number) => named(`${issueProject.repository}#${at}`, () => {
   for (let first = withSubIssues && 30; ; first = 100) {
-    const { viewer, repository } = graphql(issueQuery(first), { owner, name, number: at, branch: `/${at}-` });
+    const { viewer, repository } = graphql(issueQuery(first), { owner: issueOwner, name: issueName, number: at, branch: `/${at}-` });
     const issue = repository.issue ?? assert.fail('issue not found');
     if (!(issue.subIssues?.totalCount > issue.subIssues?.nodes.length) || first >= 100) return { ...issue, viewer, branches: repository.refs?.nodes ?? [] };
   }
@@ -204,7 +210,7 @@ function loadDeliveries(predecessors) {
       }));
   }
 }
-const projectItem = issue => issue.projectItems.nodes.find(item => item.project.id === project.id);
+const projectItem = issue => issue.projectItems.nodes.find(item => item.project.id === issueProject.id);
 // Existing boards use either spelling; unknown statuses keep their value and fail closed.
 const statusName = name => String(name).toLowerCase() === 'auto review' ? 'Automated review' : name;
 const projectStatus = issue => statusName(projectItem(issue)?.status?.name);
@@ -219,7 +225,7 @@ function isSpec(issue) {
   assert.ok(labels.totalCount === undefined || (Number.isSafeInteger(labels.totalCount) && labels.totalCount >= labels.nodes.length), 'Issue label count is unreadable');
   if (labels.nodes.some(label => label.name.toLowerCase() === specLabel.toLowerCase())) return true;
   if (labels.totalCount > labels.nodes.length) {
-    const all = restAll(`repos/${project.repository}/issues/${issue.number}/labels`);
+    const all = restAll(`repos/${issueProject.repository}/issues/${issue.number}/labels`);
     assert.ok(all.length === labels.totalCount && all.every(label => typeof label?.name === 'string'), 'Not every issue label is readable; retry the read');
     labels.nodes = all;
     return all.some(label => label.name.toLowerCase() === specLabel.toLowerCase());
@@ -234,7 +240,7 @@ function guardSpecStatus(issue, { fieldName, option }) {
   assert.ok(option.name !== 'Done', specRefusal(issue.number, 'Status Done is refused'));
   assert.ok(command === 'field' && process.argv.includes('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
   if (option.name === 'Human review') {
-    const children = restAll(`repos/${project.repository}/issues/${issue.number}/sub_issues`);
+    const children = restAll(`repos/${issueProject.repository}/issues/${issue.number}/sub_issues`);
     assert.ok(children.every(child => Number.isSafeInteger(child?.number) && ['open', 'closed'].includes(child.state)), 'Spec sub-issues are unreadable');
     const open = children.filter(child => child.state === 'open');
     assert.ok(!open.length, specRefusal(issue.number, `Human review is refused: open sub-issues ${open.map(child => `#${child.number}`).join(', ')}`));
@@ -592,7 +598,7 @@ function assignedIssues(login) {
       issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{number title assignees(first:10){nodes{login}} ${issueFeedback}
       closedByPullRequestsReferences(first:10){nodes{state body id}}
       projectItems(first:100){nodes{project{id} status:fieldValueByName(name:"Status"){...on ProjectV2ItemFieldSingleSelectValue{name}}}}}}}}`,
-    { q: `repo:${project.repository} is:issue is:open assignee:${login}`, ...(after && { after }) });
+    { q: `repo:${issueProject.repository} is:issue is:open assignee:${login}`, ...(after && { after }) });
     rows.push(...search.nodes);
     if (!search.pageInfo.hasNextPage) {
       assert.ok(rows.length >= search.issueCount, `Search returned ${rows.length} of ${search.issueCount} issues of ${login}; the own work would be incomplete`);
@@ -622,7 +628,7 @@ function issueReasons(issue) {
   const status = projectStatus(issue);
   const blocked = [], unknown = [];
   if (issue.state !== 'OPEN') blocked.push('issue is closed');
-  if (!projectItem(issue)) unknown.push(`issue is not on ${project.url}`);
+  if (!projectItem(issue)) unknown.push(`issue is not on ${issueProject.url}`);
   else if (!status) unknown.push('the Project status is unset');
   else if (['Backlog', 'Done'].includes(status)) blocked.push(`status is ${status}`);
   else if (!['Ready', 'In progress', 'Automated review', 'Human review'].includes(status)) unknown.push(`unknown status ${status}`);
@@ -724,7 +730,7 @@ function check(issue = readIssue(), claims, currentPrNumber) {
   } catch (error) { unknown.push(`own open work is unreadable: ${String(error.stderr || error.message).trim()}`); }
   const plain = verdictOf({ blocked, unknown });
   const verdict = stackedOn && plain === 'STARTABLE' ? 'STACKABLE' : plain;
-  console.log(`${project.repository}#${issue.number} ${issue.title}\nstatus: ${status ?? '-'}, assignees: ${logins(issue) || 'none'}\n${verdict}`);
+  console.log(`${issueProject.repository}#${issue.number} ${issue.title}\nstatus: ${status ?? '-'}, assignees: ${logins(issue) || 'none'}\n${verdict}`);
   for (const reason of [...blocked, ...unknown]) console.log(`- ${reason}`);
   // Only where loadDeliveries ran (open predecessors alone hold the issue) the PRs are known; elsewhere nothing is claimed.
   for (const predecessor of predecessors.open) if (predecessor.closedByPullRequestsReferences?.nodes) console.log(predecessorLine(predecessor));
@@ -906,12 +912,12 @@ function dropFieldsCache() {
 function loadFields() {
   try {
     const cached = JSON.parse(readFileSync(fieldsCache(), 'utf8'));
-    if (cached.project === project.id && Array.isArray(cached.fields)) return { fields: cached.fields, cached: true };
+    if (cached.project === issueProject.id && Array.isArray(cached.fields)) return { fields: cached.fields, cached: true };
   } catch { /* no usable cache: read the definitions */ }
   const fields = graphql(`query($id:ID!){node(id:$id){...on ProjectV2{fields(first:100){nodes{...on ProjectV2SingleSelectField{
-    id name options{id name} issueField{...on IssueFieldSingleSelect{id options{id name}}}}}}}}}`, { id: project.id })
+    id name options{id name} issueField{...on IssueFieldSingleSelect{id options{id name}}}}}}}}}`, { id: issueProject.id })
     .node.fields.nodes.filter(candidate => candidate.name && candidate.options);
-  try { writeFileSync(fieldsCache(), JSON.stringify({ project: project.id, fields })); } catch { /* read-only Git directory: no cache */ }
+  try { writeFileSync(fieldsCache(), JSON.stringify({ project: issueProject.id, fields })); } catch { /* read-only Git directory: no cache */ }
   return { fields, cached: false };
 }
 function selectField(fieldName, optionName) {
@@ -925,7 +931,7 @@ function selectField(fieldName, optionName) {
   if (fieldsCached && !known()) { dropFieldsCache(); ({ fields: projectFields, cached: fieldsCached } = loadFields()); }
   const fields = projectFields;
   const field = fields.find(candidate => candidate.name === fieldName);
-  assert.ok(field, `${project.url} has no single-select ${fieldName} field; use one of: ${fields.map(candidate => candidate.name).join(', ')}`);
+  assert.ok(field, `${issueProject.url} has no single-select ${fieldName} field; use one of: ${fields.map(candidate => candidate.name).join(', ')}`);
   // An empty Project option list means the field mirrors an organization issue field.
   const linked = !field.options.length && field.issueField;
   return { field, linked, choices: linked ? linked.options : field.options };
@@ -938,7 +944,7 @@ function selectField(fieldName, optionName) {
 function addToProject(issue) {
   try {
     return graphql(`mutation($project:ID!,$content:ID!){addProjectV2ItemById(
-      input:{projectId:$project,contentId:$content}){item{id}}}`, { project: project.id, content: issue.id }).addProjectV2ItemById.item.id;
+      input:{projectId:$project,contentId:$content}){item{id}}}`, { project: issueProject.id, content: issue.id }).addProjectV2ItemById.item.id;
   } catch (error) {
     if (!/already exists in this project/i.test(String(error.stderr ?? ''))) throw error;
     const id = projectItem(readIssue())?.id;
@@ -970,7 +976,7 @@ function guardOption(issue, { fieldName, option }) {
     const viewer = issue.viewer; // read with the issue
     assert.ok(viewer?.login, 'Cannot verify the authenticated GitHub user');
     assert.ok(issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === viewer.login.toLowerCase()),
-      `Assign yourself first: gh issue edit ${number} --repo ${project.repository} --add-assignee "@me". Verify session ownership before assigning.`);
+      `Assign yourself first: gh issue edit ${number} --repo ${issueProject.repository} --add-assignee "@me". Verify session ownership before assigning.`);
     // A refusal is an error like the others: its verdict lines become the one ERROR line instead of a second output format.
     const log = console.log, verdict = [];
     // An open issue in Done was reopened by a human (a merge closes it): it may leave Done, with a note (#510). A closed one stays blocked.
@@ -1008,13 +1014,13 @@ function writeOptionOnce(issue, { fieldName, field, linked, option }) {
     if (!item) {
       item = addToProject(issue);
       // Later writes of the same call reuse the item instead of adding it again.
-      issue.projectItems.nodes.push({ id: item, project: { id: project.id } });
+      issue.projectItems.nodes.push({ id: item, project: { id: issueProject.id } });
     }
     graphql(`mutation($project:ID!,$item:ID!,$field:ID!,$option:String!){updateProjectV2ItemFieldValue(input:{projectId:$project,
       itemId:$item,fieldId:$field,value:{singleSelectOptionId:$option}}){projectV2Item{id}}}`,
-    { project: project.id, item, field: field.id, option: option.id }, undefined, beforeSend);
+    { project: issueProject.id, item, field: field.id, option: option.id }, undefined, beforeSend);
   }
-  return `${project.repository}#${issue.number} ${fieldName}: ${option.name}`;
+  return `${issueProject.repository}#${issue.number} ${fieldName}: ${option.name}`;
 }
 
 /** Write a selected field option; guarded delivery can reject the fresh issue before mutation. */
@@ -1061,7 +1067,7 @@ function applyFields(issue, plans) {
     issue(number:$number){projectItems(first:100){nodes{project{id} fieldValues(first:100){nodes{
       ...on ProjectV2ItemFieldSingleSelectValue{name field{...on ProjectV2FieldCommon{name}}}}}}}
     issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}}}}`,
-  { owner, name, number });
+  { owner: issueOwner, name: issueName, number });
   const values = [...projectItem(repository.issue)?.fieldValues.nodes ?? [], ...repository.issue.issueFieldValues.nodes];
   for (const { fieldName, option } of plans) {
     const stored = values.find(entry => entry?.field?.name === fieldName)?.name;
@@ -1344,6 +1350,14 @@ function unresolvedThreads(prNumber = number, firstPage) {
   }
 }
 const rest = path => JSON.parse(execFileSync(gh.file, ['api', path], { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, stdio: 'pipe' }));
+/** `--issue-repo OWNER/NAME`: the issue, its board (id, fields, base setting) and its comments are those of that repository's `.github/workflow-project.json`. */
+function useIssueRepo() {
+  if (issueRepoOption === undefined || issueRepoOption.toLowerCase() === project.repository.toLowerCase()) return;
+  const file = rest(`repos/${issueRepoOption}/contents/.github/workflow-project.json`);
+  assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${issueRepoOption} is unreadable`);
+  issueProject = { ...JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')), repository: issueRepoOption };
+  [issueOwner, issueName] = issueRepoOption.split('/');
+}
 /** Every page, so an early bot summary on a long PR is never cut off. */
 function restAll(path, expected) {
   const items = [];
@@ -1392,7 +1406,7 @@ function verifyBacklinks(issue) {
   assert.ok(pr.isDraft === false, `PR #${prNumber} is still Draft (its CI skips checks); run board.mjs done ${number}`);
   const url = new URL(pr.url);
   assert.equal(url.pathname, `/${project.repository}/pull/${prNumber}`, 'PR belongs to another repository');
-  const scope = new Set([`${project.repository}#${number}`, ...extraIssues.map(ref =>
+  const scope = new Set([`${issueProject.repository}#${number}`,...extraIssues.map(ref =>
     `${blockerRepository(ref)}#${Number(ref.slice(ref.lastIndexOf('#') + 1))}`)]);
   for (const issueRef of scope) {
     const repository = blockerRepository(issueRef), issueNumber = Number(issueRef.slice(issueRef.lastIndexOf('#') + 1));
@@ -1402,7 +1416,7 @@ function verifyBacklinks(issue) {
     let backlink = findBacklink(issueComments(repository, issueNumber), url);
     // An issue of this repository gets what `link` does (native connection and comment, read back); only a failure refuses.
     // A partial PR of this issue gets the comment only: a native link would make it a second closing PR.
-    if (!backlink && repository === project.repository) {
+    if (!backlink && repository === issueProject.repository) {
       if (issueNumber === number && isPartialPr(issue, prNumber)) postBacklink(issueNumber, pr.url);
       else linkIssue(issueNumber, prNumber);
       backlink = findBacklink(issueComments(repository, issueNumber), url);
@@ -1894,9 +1908,9 @@ const lines = path => readFileSync(path, 'utf8').replaceAll('\r\n', '\n').trimEn
  */
 function writeBody(change) {
   const current = () => {
-    const issue = rest(`repos/${project.repository}/issues/${number}`);
+    const issue = rest(`repos/${issueProject.repository}/issues/${number}`);
     // The Issues API also serves pull requests under their number; a PR description is no issue body to replace.
-    assert.ok(issue?.number === number && !issue.pull_request, `#${number} is not an issue of ${project.repository}`);
+    assert.ok(issue?.number === number && !issue.pull_request, `#${number} is not an issue of ${issueProject.repository}`);
     return String(issue.body ?? '').replaceAll('\r\n', '\n').trimEnd();
   };
   const refuse = (reason, diff) => {
@@ -1908,7 +1922,7 @@ function writeBody(change) {
   if (fresh === undefined) return;
   if (before === fresh) return console.log(`BODY #${number} already has this text`);
   // The text already read and compared goes over stdin: gh would take a file named "-" for stdin and write an empty body.
-  execFileSync(gh.file, ['api', `repos/${project.repository}/issues/${number}`, '-X', 'PATCH', '-F', 'body=@-'],
+  execFileSync(gh.file, ['api', `repos/${issueProject.repository}/issues/${number}`, '-X', 'PATCH', '-F', 'body=@-'],
     { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: fresh });
   const after = current();
   if (after !== fresh) return refuse(`the body of #${number} is not what was written: another session overwrote it meanwhile (diff: what you wrote, then the current body); read it, merge, write again`, diffText(fresh, after));
@@ -1967,11 +1981,11 @@ function linkIssue(issueNumber, prNumber, refsOnly, known) {
 /** The backlink comment alone (a partial PR must not be linked natively). An existing comment is a success without a write. The text goes over stdin, like in `body`; the guard's reader proves it. */
 function postBacklink(issueNumber, url) {
   const prUrl = new URL(url);
-  let backlink = findBacklink(issueComments(project.repository, issueNumber), prUrl);
+  let backlink = findBacklink(issueComments(issueProject.repository, issueNumber), prUrl);
   if (!backlink) {
-    execFileSync(gh.file, ['api', `repos/${project.repository}/issues/${issueNumber}/comments`, '-X', 'POST', '-F', 'body=@-'],
+    execFileSync(gh.file, ['api', `repos/${issueProject.repository}/issues/${issueNumber}/comments`, '-X', 'POST', '-F', 'body=@-'],
       { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: `PR: ${url}\n` });
-    backlink = findBacklink(issueComments(project.repository, issueNumber), prUrl);
+    backlink = findBacklink(issueComments(issueProject.repository, issueNumber), prUrl);
     assert.ok(backlink, `Backlink read-back differs: the comment with ${url} is not readable on #${issueNumber}; read the comments before writing again`);
   }
   console.log(`backlink #${issueNumber}: ${backlink.html_url}`);
@@ -2039,7 +2053,7 @@ function handoffIssueReasons(issue, viewer, reviewedHead, currentPrNumber) {
   }
   if (!['Automated review', 'Human review'].includes(status)) reasons.push(`status is ${status ?? 'unset'}: when the work is done, run board.mjs done ISSUE`);
   if (!issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === viewer.login.toLowerCase())) {
-    reasons.push(`the issue is not assigned to the authenticated driver: gh issue edit ${issue.number} --repo ${project.repository} --add-assignee "@me"`);
+    reasons.push(`the issue is not assigned to the authenticated driver: gh issue edit ${issue.number} --repo ${issueProject.repository} --add-assignee "@me"`);
   }
   return reasons;
 }
@@ -2805,6 +2819,7 @@ const sameLogin = (a, b) => a?.toLowerCase() === b?.toLowerCase();
  */
 function start() {
   const agent = process.env.CODEX_THREAD_ID ? 'codex' : 'claude', modules = join(projectDirectory, '.gitmodules');
+  useIssueRepo();
   const session = sessionOption();
   assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
   // One checkout-wide setting each, so a kit commit never rides along with a project push and a branch switch follows the kit pin.
@@ -2828,7 +2843,7 @@ function start() {
   const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
   if (!fresh.assignees.nodes.some(user => sameLogin(user.login, login))) {
-    restPost(`repos/${project.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
+    restPost(`repos/${issueProject.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
     fresh.assignees.nodes.push({ login });
   }
   // The read seconds ago is the one `set` would take now; the read-back at the end of start still reads the issue again.
@@ -2849,8 +2864,10 @@ function start() {
     || git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`)); suffix++) {
     branch = `${stem}-${session}${suffix === 1 ? '' : `-${suffix}`}`;
   }
-  if (!taken && !workBranches(issue).includes(branch)) execFileSync(gh.file, ['issue', 'develop', String(number), '--repo', project.repository, '--name', branch, '--base', base], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+  if (!taken && issueProject === project && !workBranches(issue).includes(branch)) execFileSync(gh.file, ['issue', 'develop', String(number), '--repo', project.repository, '--name', branch, '--base', base], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
   git('fetch', 'origin');
+  // An issue of another repository cannot get a linked branch here: the branch is pushed from the base, the PR below links the issue.
+  if (!taken && issueProject !== project && !git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`)) git('push', 'origin', `refs/remotes/origin/${base}:refs/heads/${branch}`);
   if (git('branch', '--show-current') !== branch) {
     const local = Boolean(taken) && localBranchExists(branch);
     // --takeover (#550): the predecessor's worktree may still hold the branch; it belongs to nobody after the takeover.
@@ -2865,7 +2882,7 @@ function start() {
     // GitHub opens no PR without a commit of its own: the first one only says that the work began. --only: changes already staged stay staged, they are the driver's to commit.
     if (git('rev-list', '--count', `origin/${base}..HEAD`) === '0') git('commit', '--allow-empty', '--only', '-m', `Arbeit an #${number} beginnen`);
     git('push', '--set-upstream', 'origin', branch);
-    pr = JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes #${number}\n${claimLine}\n`)).number;
+    pr = JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claimLine}\n`)).number;
     linkIssue(number, pr, false, fresh);
   } else if (!ownPr(issue, session)) {
     // A stale PR of another session is taken over: the claim line in its body names this session from now on.
@@ -2891,6 +2908,7 @@ function start() {
  * `--refs`: a PR that only names the issue (a part for another base): its gate runs, the issue status stays.
  */
 async function done() {
+  useIssueRepo();
   const args = process.argv.slice(4), skipAt = args.indexOf('--skip-local-tests');
   const skipReason = skipAt < 0 ? undefined : args[skipAt + 1]?.trim();
   assert.ok(skipAt < 0 || (skipReason && !skipReason.startsWith('--')), '--skip-local-tests needs a non-empty reason');
@@ -2929,7 +2947,7 @@ async function done() {
     try {
       const fresh = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){issue(number:$number){
         state stateReason closedByPullRequestsReferences(first:100,includeClosedPrs:true){totalCount nodes{number state mergeCommit{oid} repository{nameWithOwner}}}}}}`,
-      { owner, name, number }).repository.issue;
+      { owner: issueOwner, name: issueName, number }).repository.issue;
       assert.ok(fresh && ['OPEN', 'CLOSED'].includes(fresh.state), 'issue closure state is unreadable');
       const linked = currentIssuePr(fresh);
       assert.ok(!linked.unknown, linked.unknown);
@@ -2942,7 +2960,7 @@ async function done() {
       }
       assert.equal(linked.number, prNumber, 'the open issue-linked PR changed; run done again');
     } catch (error) { return fail(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
-    restPost(`repos/${project.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## Übergabe\n\n${lines(file)}\n`);
+    restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## Übergabe\n\n${lines(file)}\n`);
     if (pull) execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
     writeBody(before => tickAcceptance(before));
     set('Status', 'Human review');
@@ -3032,7 +3050,7 @@ async function done() {
 // check, reviews, handoff, ready and link are the steps `start` and `done` take; they stay callable for those two and for the tests, but nobody runs them by hand, so the usage leaves them out.
 const commands = { start, done, next, sweep, check: () => check(readIssue(true), { session: sessionOption() }), block, sub, field: setField, new: create,
   reviews: reviewsOnce, wait, 'quota-wait': quotaWait, handoff, merge, 'stack-sync': stackSync, ready, link, body, 'body-replace': bodyReplace };
-const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--max-minutes N] [--skip-local-tests REASON] (without HANDOFF_FILE: prepare only, stops after the automated review)'
+const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] [--issue-repo OWNER/NAME: the issue is in that repository, the PR here] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--issue-repo OWNER/NAME] [--max-minutes N] [--skip-local-tests REASON] (without HANDOFF_FILE: prepare only, stops after the automated review)'
   + ' | next [--session ID] | sweep | field ISSUE NAME VALUE [NAME VALUE ...] [--spec-review: only a human-invoked spec-review changes spec status]'
   + ' | new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] | new --from FILE'
   + ' | block ISSUE BLOCKER | sub PARENT CHILD | wait PR [--stall MINUTES] [--grace MINUTES] [--head SHA] [--max-minutes N] [--interval SECONDS] | wait PR --merged [--max-minutes N]'
@@ -3083,6 +3101,8 @@ if (command === 'wait' && Number.isSafeInteger(number) && value !== '--merged' &
   process.exit(2);
 }
 if (!commands[command] || (!['next', 'sweep', 'new', 'quota-wait'].includes(command) && !Number.isSafeInteger(number))
+  // --issue-repo needs a repository and belongs to start and done only: elsewhere it would silently read the project's issue.
+  || (issueRepoAt >= 0 && (!['start', 'done'].includes(command) || !/^[\w.-]+\/[\w.-]+$/.test(issueRepoOption ?? '')))
   // Field names and options travel as GraphQL variables, so any printable text works (Größe, Area/Team, P0: urgent).
   || (command === 'field' && !(process.argv.length > 5 && process.argv.slice(4).filter(arg => arg !== '--spec-review').every(text => /^[^\p{Cc}-][^\p{Cc}]*$/u.test(text))))
   // A misspelled flag must not silently turn the session check off.
