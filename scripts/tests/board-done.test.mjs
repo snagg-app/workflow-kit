@@ -491,13 +491,28 @@ for (const action of ['push', 'delete']) test(`done refuses a live remote ${acti
   assert.equal(text('stored'), 'In progress');
 });
 
-test('done without any PR puts the result on the issue, ticks the boxes and moves it to Human review; without a file it stops', t => {
+test('done refuses to push from a branch that tracks main or release/** and changes nothing (#646)', t => {
+  const { run, git, text, file } = delivery(t, handoffFixture);
+  git('branch', '--set-upstream-to=origin/release/0.1.1');
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^FAILED\nblocker: work tracks release\/0\.1\.1;.*--no-track/m);
+  assert.equal(text('stored'), 'In progress');
+  assert.equal(existsSync(file('mutations')), false);
+});
+
+test('done without any PR puts the result on the issue, ticks the boxes and moves it to Human review only with --no-pr (#646)', t => {
   const { run, text, json } = delivery(t, fixture); // no PR closes the issue
   let result = run('done', '1');
   assert.equal(result.status === 0, false, 'no PR and no file');
   assert.match(result.stdout + result.stderr, /no open PR closes #1/);
   assert.equal(text('stored'), 'In progress');
   result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, 'a FILE alone does not set the status');
+  assert.match(result.stdout, /no PR for #1, so the status stays/);
+  assert.equal(text('stored'), 'In progress');
+  assert.deepEqual(json('issues-comments.json'), []);
+  result = run('done', '1', 'result.md', '--no-pr');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^DONE #1 \(no PR\)/m);
   assert.match(json('issues-comments.json').at(-1).body, /^## Übergabe\n\nAlles geliefert\./);
@@ -564,7 +579,7 @@ for (const [name, changes] of [
 test('done delivers a human-reopened issue through the existing No-PR handoff', t => {
   const { run, text, json, writeIssue } = delivery(t, fixture);
   writeIssue({ ...closedDelivery(), state: 'OPEN', stateReason: 'REOPENED' });
-  const result = run('done', '1', 'result.md');
+  const result = run('done', '1', 'result.md', '--no-pr');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^DONE #1 \(no PR\)/m);
   assert.equal(text('stored'), 'Human review');

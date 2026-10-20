@@ -687,7 +687,7 @@ function baseLines(issue, stacked) {
   if (code === 1) return [...lines, `note: ${remote} is not known in this checkout; run git fetch origin`];
   // A stack starts from its base PR's branch, and an issue that has a branch was started: HEAD is not the base's business then.
   if (code === 0 && !stacked && !(issue.branches ?? []).some(ref => new RegExp(`^[\\w.-]+/${issue.number}-`).test(ref.name))) code = exit('merge-base', '--is-ancestor', `refs/remotes/${remote}`, 'HEAD');
-  if (code === 1) lines.push(`note: HEAD is not on ${remote}; create the branch from there (git fetch origin, then git switch -c <branch> ${remote})`);
+  if (code === 1) lines.push(`note: HEAD is not on ${remote}; create the branch from there (git fetch origin, then git switch -c <branch> --no-track ${remote})`);
   else if (code) lines.push(`note: git could not check ${remote} (exit ${code}); no advice on the base`);
   return lines;
 }
@@ -2868,7 +2868,7 @@ function openFirstPr(issue) {
     for (let suffix = 1; workBranches(issue).includes(branch) || localBranchExists(branch) || git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`); suffix++) {
       branch = `${stem}-${claim[2]}${suffix === 1 ? '' : `-${suffix}`}`;
     }
-    git('switch', '-c', branch);
+    git('switch', '-c', branch, '--no-track');
   }
   git('push', '--set-upstream', 'origin', branch);
   const pr = JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n`)).number;
@@ -2951,7 +2951,7 @@ function start() {
   // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
   if (project.setup) try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
   console.log(current ? `START #${number} session ${session} branch ${branch} base ${base} PR #${current.number}`
-    : `START #${number} session ${session} base ${base} (claim only: work on a branch from origin/${base}; done opens branch and Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
+    : `START #${number} session ${session} base ${base} (claim only: work on a branch from origin/${base} made with git switch -c <branch> --no-track origin/${base}, never push to ${base}; done opens branch and Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
 }
 
 /**
@@ -2974,12 +2974,21 @@ async function done() {
   const issue = readIssue(), found = currentIssuePr(issue);
   let prNumber = given ?? found.number;
   if (prNumber === undefined && !found.unknown && !process.argv.includes('--refs')) prNumber = openFirstPr(issue);
+  // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch.
+  const onBase = ref => ref === 'main' || ref.startsWith('release/');
+  const checkedOut = prNumber === undefined ? '' : git('branch', '--show-current');
+  let upstream = '';
+  if (prNumber !== undefined) try { upstream = git('rev-parse', '--abbrev-ref', '@{upstream}').replace(/^[^/]+\//, ''); } catch { /* no upstream */ }
+  if (onBase(checkedOut) || onBase(upstream)) {
+    console.log(`FAILED\nblocker: ${onBase(checkedOut) ? `the checkout is on ${checkedOut}` : `${checkedOut} tracks ${upstream}`}; nothing is pushed to main or release/**. Fix: git switch -c <agent>/${number}-<slug> --no-track (keeps your commits), or git branch --unset-upstream, then run done again`);
+    process.exitCode = 1;
+    return;
+  }
   // No open PR but a FILE: a check task whose PR is already closed (or never opened) takes the way of the PR without a change.
   if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}: run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
   const pull = prNumber === undefined ? undefined : rest(`repos/${project.repository}/pulls/${prNumber}`);
   const partial = prNumber !== undefined && (process.argv.includes('--refs') || isPartialPr(issue, prNumber));
-  assert.ok(partial || !isSpec(issue), specRefusal(number, 'done is refused; agents leave specs untouched (use --refs for a partial PR)'));
-  const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
+  assert.ok(partial || !isSpec(issue), specRefusal(number, 'done is refused; agents leave specs untouched (use --refs for a partial PR)'));  const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
   // A PR without a change (a check task: `start` opened it as the claim) delivers nothing to merge: the result goes to the issue, the PR closes.
   if ((!pull || pull.changed_files === 0) && !partial) {
     assert.ok(file, `PR #${prNumber} has no change: name the FILE with the result for the issue`);
@@ -3017,6 +3026,8 @@ async function done() {
       }
       assert.equal(linked.number, prNumber, 'the open issue-linked PR changed; run done again');
     } catch (error) { return fail(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
+    // #646: no PR delivers nothing for review; only an exploration that says so (--no-pr) gets Human review, otherwise nothing changes.
+    if (!pull && !args.includes('--no-pr')) return fail(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
     restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## Übergabe\n\n${lines(file)}\n`);
     if (pull) execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
     writeBody(before => tickAcceptance(before));
@@ -3107,7 +3118,7 @@ async function done() {
 // check, reviews, handoff, ready and link are the steps `start` and `done` take; they stay callable for those two and for the tests, but nobody runs them by hand, so the usage leaves them out.
 const commands = { start, done, next, sweep, check: () => check(readIssue(true), { session: sessionOption() }), block, sub, field: setField, new: create,
   reviews: reviewsOnce, wait, 'quota-wait': quotaWait, handoff, merge, 'stack-sync': stackSync, ready, link, body, 'body-replace': bodyReplace };
-const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] [--issue-repo OWNER/NAME: the issue is in that repository, the PR here] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--issue-repo OWNER/NAME] [--max-minutes N] [--skip-local-tests REASON] (without HANDOFF_FILE: prepare only, stops after the automated review)'
+const usage = 'Usage: board.mjs [--cwd PROJECT_DIR] start ISSUE [--session ID] [--takeover: take over a fresh PR of another session] [--issue-repo OWNER/NAME: the issue is in that repository, the PR here] | done ISSUE [PR] [HANDOFF_FILE] [--refs] [--no-pr: an exploration without a PR may reach Human review] [--issue-repo OWNER/NAME] [--max-minutes N] [--skip-local-tests REASON] (without HANDOFF_FILE: prepare only, stops after the automated review)'
   + ' | next [--session ID] | sweep | field ISSUE NAME VALUE [NAME VALUE ...] [--spec-review: only a human-invoked spec-review changes spec status]'
   + ' | new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] | new --from FILE'
   + ' | block ISSUE BLOCKER | sub PARENT CHILD | wait PR [--stall MINUTES] [--grace MINUTES] [--head SHA] [--max-minutes N] [--interval SECONDS] | wait PR --merged [--max-minutes N]'
@@ -3120,7 +3131,7 @@ if (process.argv.slice(2).some(arg => arg === '--help' || arg === '-h')) {
 }
 // A writing command takes only its own flags (value 1: followed by a value) and as many plain words as it names (the issue or PR
 // included); any other argument is a mistake that must not reach a write. `field` checks its own trailing words.
-const writeArgs = { start: { words: 1, flags: { '--session': 1, '--takeover': 0 } }, done: { words: 3, flags: { '--refs': 0, '--max-minutes': 1, '--skip-local-tests': 1 } },
+const writeArgs = { start: { words: 1, flags: { '--session': 1, '--takeover': 0 } }, done: { words: 3, flags: { '--refs': 0, '--no-pr': 0, '--max-minutes': 1, '--skip-local-tests': 1 } },
   sweep: { words: 0 }, field: { words: Infinity, flags: { '--spec-review': 0 } }, block: { words: 2 }, sub: { words: 2 }, link: { words: 2, flags: { '--refs': 0 } },
   body: { words: 3 }, 'body-replace': { words: 1, flags: { '--from': 1, '--to': 1 } },
   new: { words: 0, flags: { '--title': 1, '--body-file': 1, '--milestone': 1, '--label': 1, '--priority': 1, '--field': 1, '--from': 1, '--status': 1 } },

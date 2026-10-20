@@ -111,6 +111,7 @@ test('done opens the branch and the Draft PR with the first push (#643)', t => {
   const created = text('created-pr');
   for (const part of ['head=claude/1-fixture', 'base=main', 'draft=true', 'Closes #1\nAgent: claude, Session: S1\n']) assert.ok(created.includes(part), part);
   assert.equal(git(checkout, 'rev-list', '--count', 'origin/main..origin/claude/1-fixture'), '1');
+  assert.equal(git(checkout, 'rev-parse', '--abbrev-ref', 'claude/1-fixture@{upstream}'), 'origin/claude/1-fixture', 'the upstream is the branch itself, never the base (#646)');
 });
 
 for (const [setup, expected] of [[undefined, ''], ['echo "setup on $BRANCH" > setup-ran', 'setup on main']]) {

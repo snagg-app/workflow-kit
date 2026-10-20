@@ -104,7 +104,7 @@ work between them:
    predecessor PR holds the issue) continues as a [stacked PR](docs/CONTRIBUTING.md#stacked-pull-requests).
    Then it assigns you, sets In progress, posts the claim comment (`Agent: claude|codex, Session: ID`
    and the base), brings the kit to its pin and reads every step back. No branch and no PR yet:
-   work on a branch from the printed base; the first `done` opens the branch and the Draft PR that
+   work on a branch from the printed base (`git switch -c <branch> --no-track origin/<base>`; never push to the base, `done` refuses a checkout on or tracking `main`/`release/**`); the first `done` opens the branch and the Draft PR that
    closes the issue (its body carries the claim line: keep it when you rewrite the body). A claim of
    another session (comment or open PR) blocks unless it is stale or a handover/`--takeover` rewrites it. Abandoned work (no push, comment or status
    change for `staleHours`, default 6, or a Human-review PR with conflicts) is taken over by
