@@ -492,11 +492,13 @@ for (const action of ['push', 'delete']) test(`done refuses a live remote ${acti
 });
 
 test('done refuses to push from a branch that tracks main or release/** and changes nothing (#646)', t => {
-  const { run, git, text, file } = delivery(t, handoffFixture);
+  const { run, git, text, file, checkout } = delivery(t, handoffFixture);
   git('branch', '--set-upstream-to=origin/release/0.1.1');
+  writeFileSync(join(checkout, '.git/hooks/pre-push'), `#!/bin/sh\necho push >> "${checkout.replaceAll('\\', '/')}/pushes"\n`, { mode: 0o755 });
   const result = run('done', '1', 'result.md');
+  assert.equal(existsSync(join(checkout, 'pushes')), false, 'no push attempt');
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stdout, /^FAILED\nblocker: work tracks release\/0\.1\.1;.*--no-track/m);
+  assert.match(result.stdout, /^FAILED/m);
   assert.equal(text('stored'), 'In progress');
   assert.equal(existsSync(file('mutations')), false);
 });

@@ -2845,6 +2845,8 @@ function sub() {
 
 const restPost = (path, args, input) => execFileSync(gh.file, ['api', path, '-X', 'POST', ...args], { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input });
 const sameLogin = (a, b) => a?.toLowerCase() === b?.toLowerCase();
+// #646: `done` never pushes to these.
+const onBase = ref => ref === 'main' || ref.startsWith('release/');
 const localBranchExists = name => {
   try { git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`); return true; } catch { return false; }
 };
@@ -2863,7 +2865,7 @@ function openFirstPr(issue) {
   if (git('rev-list', '--count', `origin/${base}..HEAD`) === '0') return;
   const stem = `${claim[1].toLowerCase()}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
   let branch = git('branch', '--show-current');
-  if (!new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
+  if (onBase(branch) || !new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
     branch = stem;
     for (let suffix = 1; workBranches(issue).includes(branch) || localBranchExists(branch) || git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`); suffix++) {
       branch = `${stem}-${claim[2]}${suffix === 1 ? '' : `-${suffix}`}`;
@@ -2975,10 +2977,9 @@ async function done() {
   let prNumber = given ?? found.number;
   if (prNumber === undefined && !found.unknown && !process.argv.includes('--refs')) prNumber = openFirstPr(issue);
   // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch.
-  const onBase = ref => ref === 'main' || ref.startsWith('release/');
   const checkedOut = prNumber === undefined ? '' : git('branch', '--show-current');
   let upstream = '';
-  if (prNumber !== undefined) try { upstream = git('rev-parse', '--abbrev-ref', '@{upstream}').replace(/^[^/]+\//, ''); } catch { /* no upstream */ }
+  if (prNumber !== undefined) try { upstream = git('rev-parse', '--abbrev-ref', '@{upstream}').replace(/^origin\//, ''); } catch { /* no upstream */ }
   if (onBase(checkedOut) || onBase(upstream)) {
     console.log(`FAILED\nblocker: ${onBase(checkedOut) ? `the checkout is on ${checkedOut}` : `${checkedOut} tracks ${upstream}`}; nothing is pushed to main or release/**. Fix: git switch -c <agent>/${number}-<slug> --no-track (keeps your commits), or git branch --unset-upstream, then run done again`);
     process.exitCode = 1;
@@ -2988,7 +2989,8 @@ async function done() {
   if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}: run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
   const pull = prNumber === undefined ? undefined : rest(`repos/${project.repository}/pulls/${prNumber}`);
   const partial = prNumber !== undefined && (process.argv.includes('--refs') || isPartialPr(issue, prNumber));
-  assert.ok(partial || !isSpec(issue), specRefusal(number, 'done is refused; agents leave specs untouched (use --refs for a partial PR)'));  const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
+  assert.ok(partial || !isSpec(issue), specRefusal(number, 'done is refused; agents leave specs untouched (use --refs for a partial PR)'));
+  const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
   // A PR without a change (a check task: `start` opened it as the claim) delivers nothing to merge: the result goes to the issue, the PR closes.
   if ((!pull || pull.changed_files === 0) && !partial) {
     assert.ok(file, `PR #${prNumber} has no change: name the FILE with the result for the issue`);
