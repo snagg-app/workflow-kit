@@ -1302,14 +1302,15 @@ function createMany([file, ...extra]) {
 }
 
 // Reviewers run unreliably, so only traces on the current head count (docs/CONTRIBUTING.md#review-loop).
-const prQuery = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
+// GitHub charges a query by its connections: each of the up to 100 review threads and check suites counts one more. 30 suites keep the whole read at 1 point instead of 2; a longer list is read again at 100.
+const prQuery = suites => `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
   number state isDraft createdAt headRefName headRefOid baseRefName mergeStateStatus reviewDecision isCrossRepository headRepository{nameWithOwner} body${project.selfReview === undefined ? '' : ' bodyHTML'}
   readyEvents:timelineItems(last:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}
   firstReadyEvents:timelineItems(first:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}
   convertEvents:timelineItems(last:1,itemTypes:[CONVERT_TO_DRAFT_EVENT]){nodes{...on ConvertToDraftEvent{createdAt}}}
   latestOpinionatedReviews(first:100){totalCount nodes{state author{login}}}
   reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved comments(first:1){nodes{url}}}}
-  commits(last:1){nodes{commit{oid committedDate checkSuites(first:100){totalCount nodes{createdAt status conclusion app{slug} workflowRun{databaseId workflow{id}} checkRuns(first:1){totalCount}}}
+  commits(last:1){nodes{commit{oid committedDate checkSuites(first:${suites}){totalCount nodes{createdAt status conclusion app{slug} workflowRun{databaseId workflow{id}} checkRuns(first:1){totalCount}}}
     statusCheckRollup{contexts(first:100){totalCount nodes{__typename
       ...on CheckRun{name status conclusion title summary detailsUrl startedAt completedAt checkSuite{databaseId createdAt app{slug} workflowRun{databaseId event workflow{id name}}}}
       ...on StatusContext{context state description createdAt creator{login}}}}}}}}
@@ -1436,7 +1437,13 @@ const isOptional = name => (optional ??= optionalReviewers()).has(reviewerKey(na
 const isOptionalCheck = check => isOptional(check.checkSuite?.app?.slug ?? check.creator?.login);
 const passed = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
 
-const readPr = prNumber => graphql(prQuery, { owner, name, number: prNumber }).repository.pullRequest;
+const readPr = prNumber => {
+  for (const suites of [30, 100]) {
+    const pr = graphql(prQuery(suites), { owner, name, number: prNumber }).repository.pullRequest;
+    const commit = pr?.commits?.nodes?.[0]?.commit;
+    if (suites === 100 || !(commit?.checkSuites?.totalCount > commit.checkSuites.nodes.length)) return pr;
+  }
+};
 // The token goes only to these hosts, whatever URL a check run names.
 const sonarHosts = ['https://sonarcloud.io', 'https://sonarqube.us'];
 const sonarListed = 10; // findings printed per analysis; the count says how many more
@@ -2425,7 +2432,7 @@ async function merge() {
       return;
     }
   }
-  const look = () => reviews(stallOption());
+  const look = () => reviewsForHead(); // an unchanged REST marker answers from the last full read, like `wait`
   // Like `wait`: look again until CI and the reviewers have finished (or --max-minutes runs out: exit 4); the gate then decides once.
   let polled = await poll(look);
   if (!polled) return;
@@ -2806,10 +2813,14 @@ function start() {
   if (!mayStart(check(issue, { session, takeover }))) return;
   const stacked = stackedOn, login = issue.viewer.login;
   // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
-  const raced = startReasons(readIssue(), session, takeover).blocked;
+  const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
-  if (!issue.assignees.nodes.some(user => sameLogin(user.login, login))) restPost(`repos/${project.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
-  set('Status', 'In progress');
+  if (!fresh.assignees.nodes.some(user => sameLogin(user.login, login))) {
+    restPost(`repos/${project.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
+    fresh.assignees.nodes.push({ login });
+  }
+  // The read seconds ago is the one `set` would take now; the read-back at the end of start still reads the issue again.
+  set('Status', 'In progress', () => fresh);
   const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
     : baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch);
   // Only a session claim or an allowed takeover proves branch ownership; the agent prefix does not.
