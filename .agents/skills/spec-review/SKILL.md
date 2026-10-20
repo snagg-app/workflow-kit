@@ -44,10 +44,12 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
 5. **Gap tickets.** Each **open** gap with one obvious fix, without a matching open sub-issue, first gets a search of
    open issues (`gh issue list --search "<finding words>"`): an unlinked match from an earlier run is linked with
    `board.mjs sub SPEC N`. Otherwise it becomes a new issue via `board.mjs new` (required fields per the project's
-   tracker doc), then `board.mjs sub SPEC NEW`. No ticket carries an open decision; `needs-human-input` is only for
+   tracker doc), then `board.mjs sub SPEC NEW`. When `new` refuses because an open issue has the same title, link that
+   issue instead (`board.mjs sub SPEC N`). No ticket carries an open decision; `needs-human-input` is only for
    work a human must do. Architecture candidates never get a ticket here.
 
-6. **Report on the spec.** One comment on the spec in plain language: verdict table with proofs, gap tickets from
+6. **Report on the spec.** One comment on the spec in plain language, written to a file and posted with
+   `gh issue comment SPEC --body-file FILE` (also the addendum in step 8): verdict table with proofs, gap tickets from
    step 5, path of the HTML report, and the questions from step 4 that step 7 settles.
 
 7. **Walk the user through.** Open the HTML report in the user's external browser (`start` on Windows, `open` on

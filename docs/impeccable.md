@@ -3,8 +3,8 @@
 Source: `.vendor/impeccable`, pinned to `skill-v4.6.0` and used unchanged.
 `scripts/impeccable/` holds the hook engine's `VERSION` and `SHA256SUMS`.
 Follow [generated files](../README.md#generated-files-and-ownership) for reviewed
-updates and discovery paths, including Codex/Claude/Copilot agents and OpenCode
-commands. Consumer `PRODUCT.md` and `.impeccable` settings stay in the project.
+updates and discovery paths, including Codex and Claude agents. Consumer
+`PRODUCT.md` and `.impeccable` settings stay in the project.
 Exclude generated third-party skills and companions in every provider from static analysis.
 
 ## Coupled updates
@@ -16,7 +16,7 @@ kit checkout:
 node scripts/update-impeccable.mjs
 ```
 
-It reads the engine version from all six pinned skill packages, checks the
+It reads the engine version from both pinned skill packages, checks the
 official engine release and all five platform digests against their checksum
 files, and validates every metadata target before writing. Then it stages the
 validated gitlink for the existing generators and refreshes engine pins, fixed

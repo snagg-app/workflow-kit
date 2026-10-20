@@ -10,7 +10,7 @@ import { skipWithoutSubmodules } from './fixtures.mjs';
 const skip = skipWithoutSubmodules();
 const kit = fileURLToPath(new URL('../../', import.meta.url));
 const upstream = join(kit, '.vendor/matt-pocock-skills');
-const providers = ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'];
+const providers = ['.agents', '.claude'];
 const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 const write = (path, content) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 const files = path => readdirSync(path, { recursive: true }).filter(file => lstatSync(join(path, file)).isFile())
@@ -67,7 +67,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
   };
   write(join(consumer, '.agents/skills/MATT-POCOCK-SOURCES.json'), JSON.stringify(previousManifest));
   // A malformed manifest in the last provider must prevent every earlier provider from changing.
-  const invalid = join(consumer, '.pi/skills/MATT-POCOCK-SOURCES.json');
+  const invalid = join(consumer, '.claude/skills/MATT-POCOCK-SOURCES.json');
   write(invalid, JSON.stringify({ ...previousManifest, skills: { '../outside': 'skills/engineering/retired-skill' } }));
   const invalidRun = run('setup-skills.mjs');
   assert.notEqual(invalidRun.status, 0);

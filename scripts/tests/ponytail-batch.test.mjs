@@ -6,7 +6,7 @@ import { isolatedGit, run as exec, temporary } from './fixtures.mjs';
 
 const skills = ['ponytail', 'ponytail-audit', 'ponytail-debt', 'ponytail-gain', 'ponytail-help', 'ponytail-review'];
 const hooks = ['activate', 'config', 'instructions', 'mode-tracker', 'runtime', 'subagent'];
-const providers = ['.agent', '.agents', '.claude', '.github', '.opencode', '.pi'];
+const providers = ['.agents', '.claude'];
 const write = (path, content) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 
 /** The real setup against a committed local upstream: no download or model call. Each test has its own, so they run side by side. */
@@ -53,31 +53,32 @@ test('setup writes byte-correct ordinary files for every provider and reruns wit
     assert.equal(readFileSync(join(f.root, output), 'utf8'), original.replaceAll('\r\n', '\n').replace('\nbase\n', '\npatched\n'), path);
   }
   for (const provider of providers) assert.ok(lstatSync(join(f.root, provider, 'skills/ponytail')).isDirectory(), provider);
-  const copilot = join(f.root, '.github/skills/ponytail/SKILL.md');
-  const before = readFileSync(copilot);
+  assert.deepEqual(readdirSync(f.root).sort(), ['.agents', '.claude', '.git', '.workflow-kit'], 'Only Codex and Claude Code outputs');
+  const claude = join(f.root, '.claude/skills/ponytail/SKILL.md');
+  const before = readFileSync(claude);
   succeeds(await f.run());
-  assert.deepEqual(readFileSync(copilot), before);
+  assert.deepEqual(readFileSync(claude), before);
 });
 
-test('a dirty source is refused; generated Copilot skills are regenerated, stale ones removed', async t => {
+test('a dirty source is refused; generated Claude skills are regenerated, stale ones removed', async t => {
   const f = await fixture(t); succeeds(await f.run());
   const hook = join(f.root, '.agents/hooks/ponytail-activate.js'), installed = readFileSync(hook);
   writeFileSync(join(f.source, 'hooks/ponytail-runtime.js'), '// local change\n');
   assert.notEqual((await f.run()).status, 0);
   assert.deepEqual(readFileSync(hook), installed, 'The installation stays');
   writeFileSync(join(f.source, 'hooks/ponytail-runtime.js'), '');
-  const output = join(f.root, '.github/skills/ponytail/SKILL.md'), generated = readFileSync(output);
+  const output = join(f.root, '.claude/skills/ponytail/SKILL.md'), generated = readFileSync(output);
   writeFileSync(output, 'Manual change\n');
-  write(join(f.root, '.github/skills/ponytail-retired/SKILL.md'), 'Dropped upstream\n');
-  write(join(f.root, '.github/skills/custom/SKILL.md'), 'User skill\n');
+  write(join(f.root, '.claude/skills/ponytail-retired/SKILL.md'), 'Dropped upstream\n');
+  write(join(f.root, '.claude/skills/custom/SKILL.md'), 'User skill\n');
   succeeds(await f.run());
   assert.deepEqual(readFileSync(output), generated);
-  assert.deepEqual(readdirSync(join(f.root, '.github/skills')).sort(), ['custom', ...skills].sort());
+  assert.deepEqual(readdirSync(join(f.root, '.claude/skills')).sort(), ['custom', ...skills].sort());
 });
 
 test('copies, files and old provider junctions become ordinary files; originals move aside once', async t => {
   const f = await fixture(t); succeeds(await f.run());
-  const copy = join(f.root, '.claude/skills/ponytail'), file = join(f.root, '.agents/hooks'), link = join(f.root, '.pi/skills/ponytail');
+  const copy = join(f.root, '.claude/skills/ponytail'), file = join(f.root, '.agents/hooks'), link = join(f.root, '.agents/skills/ponytail');
   write(join(copy, 'SKILL.md'), 'Copied from another worktree\n');
   rmSync(file, { recursive: true }); write(file, 'User file\n');
   const legacy = join(f.root, '.workflow-kit/old-ponytail');
@@ -97,8 +98,8 @@ test('copies, files and old provider junctions become ordinary files; originals 
   const replaced = join(f.root, '.workflow-kit/replaced', moved);
   assert.equal(readFileSync(join(replaced, '.claude/skills/ponytail/SKILL.md'), 'utf8'), 'Copied from another worktree\n');
   assert.equal(readFileSync(join(replaced, '.agents/hooks'), 'utf8'), 'User file\n');
-  assert.ok(lstatSync(join(replaced, '.pi/skills/ponytail')).isSymbolicLink());
-  assert.equal(readFileSync(join(replaced, '.pi/skills/ponytail/SKILL.md'), 'utf8'), 'Personal legacy customization\n',
+  assert.ok(lstatSync(join(replaced, '.agents/skills/ponytail')).isSymbolicLink());
+  assert.equal(readFileSync(join(replaced, '.agents/skills/ponytail/SKILL.md'), 'utf8'), 'Personal legacy customization\n',
     'The preserved link still exposes personal contents');
   assert.equal(readFileSync(join(oldTarget, 'SKILL.md'), 'utf8'), 'Personal legacy customization\n');
   succeeds(await f.run());

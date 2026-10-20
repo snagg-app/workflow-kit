@@ -138,7 +138,7 @@ match in the body it just read and refuses when the text is missing or occurs mo
 repository milestone, a Project Priority and area/type labels when it is created,
 and keeps them after closing. Set the real fields, not text in the body. The standard way is one call,
 `board.mjs new --title … --body-file FILE --milestone … --label … --priority … [--field NAME=VALUE …]`
-([README](../README.md#board-commands)): it checks every value before creating the issue, sets the Status Backlog,
+([README](../README.md#board-commands)): it checks every value before creating the issue, refuses a title an open issue already has (link that one instead), sets the Status Backlog,
 and reads everything back. Several issues at once (a spec with its sub-issues, a batch of follow-ups): write them in
 a JSON list and run `board.mjs new --from FILE` ([README](../README.md#board-commands)), which needs 3 GraphQL
 requests per 5 issues instead of nine per issue. Starting the new issue is a separate `board.mjs start`, only when a human request covers the

@@ -202,3 +202,30 @@ test('new --from halves a request GitHub refuses for its cost, and lists an issu
 test('new refuses an unknown flag before creating anything', t => {
   fixture(t).refusesUnknownFlag('new', '--title', 'T');
 });
+
+test('new refuses a title an open issue already has, so parallel sessions create no duplicate (#618)', t => {
+  const { checkout, run } = fixture(t);
+  const write = (file, data) => writeFileSync(join(checkout, file), JSON.stringify(data));
+  write('test-milestones.json', [{ number: 4, title: '0.1.1' }]);
+  write('test-labels.json', [{ name: 'enhancement' }]);
+  write('test-issues.json', [{ number: 5, title: ' Gleicher Titel', html_url: 'https://github.com/test/example/issues/5' },
+    { number: 6, title: 'PR-Titel', html_url: 'h', pull_request: {} }]);
+  write('create-response.json', { number: 1, node_id: 'N1', html_url: 'https://github.com/test/example/issues/1' });
+  write('backlink-1.json', { number: 1, milestone: { title: '0.1.1' }, labels: [{ name: 'enhancement' }] });
+  writeFileSync(join(checkout, 'body.md'), 'Text');
+  const created = join(checkout, 'created.json');
+  const single = title => run('new', '--title', title, '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--priority', 'low');
+  const refused = (result, pattern) => {
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.match(result.stdout, pattern);
+    assert.equal(existsSync(created), false, 'nothing is created');
+  };
+  refused(single('gleicher titel '), /^ERROR - .*issues\/5/);
+  const entry = title => ({ title, bodyFile: 'body.md', milestone: '0.1.1', labels: ['enhancement'], priority: 'Low' });
+  write('list.json', [entry('Neu'), entry('Gleicher Titel')]);
+  refused(run('new', '--from', 'list.json'), /^ERROR - .*issues\/5/);
+  write('list.json', [entry('Zweimal'), entry('zweimal')]);
+  refused(run('new', '--from', 'list.json'), /^ERROR - .*Zweimal/i);
+  // A pull request with the same title is no issue.
+  assert.equal(single('PR-Titel').status, 0);
+});
