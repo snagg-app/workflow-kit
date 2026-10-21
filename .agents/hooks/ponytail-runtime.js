@@ -49,7 +49,7 @@ if (projectHost) {
   // use session-keyed state if independent concurrent modes become necessary.
   let checkout = fs.realpathSync(process.cwd());
   while (!fs.existsSync(path.join(checkout, '.git')) && path.dirname(checkout) !== checkout) checkout = path.dirname(checkout);
-  stateDir = path.join(getConfigDir(), 'vaultdex', createHash('sha256').update(checkout).digest('hex'), projectHost);
+  stateDir = path.join(getConfigDir(), 'workflow-kit', createHash('sha256').update(checkout).digest('hex'), projectHost);
 }
 
 const statePath = path.join(stateDir, STATE_FILE);

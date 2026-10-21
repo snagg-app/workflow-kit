@@ -42,7 +42,7 @@ for (const name of manifests) test(`${name}: a missing engine speaks once at Ses
 });
 
 test('an installed engine receives stdin and its failure is not suppressed', t => {
-  const f = fixture(t), engine = join(f.root, `.impeccable/vaultdex/engine-${version}/impeccable${windows ? '.exe' : ''}`);
+  const f = fixture(t), engine = join(f.root, `.impeccable/workflow-kit/engine-${version}/impeccable${windows ? '.exe' : ''}`);
   mkdirSync(join(engine, '..'), { recursive: true });
   if (windows) {
     const compiled = spawnSync(join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'),

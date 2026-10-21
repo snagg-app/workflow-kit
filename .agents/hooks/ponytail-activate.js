@@ -57,7 +57,7 @@ try {
 // 2. Emit the ponytail ruleset, filtered to the active intensity level.
 const output = getPonytailInstructions(mode);
 
-// Vaultdex: no global statusline setup, personal-settings reads or codebase map (the kit packages no ponytail-map.js).
+// Workflow Kit: no global statusline setup, personal-settings reads or codebase map (the kit packages no ponytail-map.js).
 
 try {
   writeHookOutput('SessionStart', mode, output);

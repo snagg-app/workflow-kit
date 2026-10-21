@@ -15,7 +15,7 @@ const pins = new Map(readFileSync(new URL("SHA256SUMS", scripts), "utf8").trim()
 const expected = pins.get(asset);
 assert.match(expected ?? "", /^[a-f0-9]{64}$/, `No reviewed engine pin for ${asset}`);
 const digest = (bytes) => createHash("sha256").update(bytes).digest("hex");
-const directory = join(homedir(), ".impeccable", "vaultdex", `engine-${version}`);
+const directory = join(homedir(), ".impeccable", "workflow-kit", `engine-${version}`);
 const target = join(directory, windows ? "impeccable.exe" : "impeccable");
 mkdirSync(directory, { recursive: true });
 

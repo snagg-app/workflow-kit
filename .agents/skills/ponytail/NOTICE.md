@@ -5,7 +5,7 @@ The six sibling `ponytail*` skill packages and shared `.agents/hooks/ponytail-*.
 the pinned `.vendor/ponytail` submodule.
 Copyright (c) 2026 DietrichGebert; [MIT license](LICENSE.md) applies to all skills and hooks.
 
-Vaultdex adaptations: remove the core's host-specific `argument-hint` metadata;
+Workflow Kit adaptations: remove the core's host-specific `argument-hint` metadata;
 reuse required repository tests; make help accurate for checkout discovery and
 hooks; keep debt findings in the issue workflow instead of a ledger file. Other
 content is unchanged apart from line-ending normalization. All six host skill

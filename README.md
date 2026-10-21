@@ -60,8 +60,8 @@ of your own), or leave them unused.
 
 ### Generated files and ownership
 
-The kit owns hook handlers pointing into `~/.ponytail/vaultdex/` or
-`~/.impeccable/vaultdex/` and the kit init handler (`git ls-files -s -- .vendor/workflow-kit` followed by
+The kit owns hook handlers pointing into `~/.ponytail/workflow-kit/` or
+`~/.impeccable/workflow-kit/` and the kit init handler (`git ls-files -s -- .vendor/workflow-kit` followed by
 `git submodule update --init --checkout`; keep personal hooks elsewhere), and upstream skills, agents and
 commands by name. Generated discovery files are ordinary committed files in
 `.agents` and `.claude`, plus `.codex/agents`. Equal files stay untouched; changed

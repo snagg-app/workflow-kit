@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }
@@ -62,13 +62,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate claude; else printf '%s\\n' 'Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.'; fi",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate claude; else printf '%s\\n' 'Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.'; fi",
             "timeout": 5,
             "shell": "bash"
           },
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
             "timeout": 5
           }
         ]
@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate claude continue; else printf '%s\\n' 'Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.'; fi",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate claude continue; else printf '%s\\n' 'Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.'; fi",
             "timeout": 5,
             "shell": "bash"
           }
@@ -110,7 +110,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" subagent claude; fi",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" subagent claude; fi",
             "timeout": 5,
             "shell": "bash"
           }
@@ -122,7 +122,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" mode-tracker claude; fi",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" mode-tracker claude; fi",
             "timeout": 5,
             "shell": "bash"
           }
