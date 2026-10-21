@@ -27,8 +27,7 @@
         "fileFilters": [
           "scripts/impeccable/**",
           "docs/impeccable.md",
-          "templates/.codex/hooks.json", "templates/.claude/settings.json",
-          ".codex/hooks.json", ".claude/settings.json",
+          "scripts/versions.json",
           ".agents/skills/impeccable/**", ".claude/skills/impeccable/**",
           ".codex/agents/impeccable*", ".claude/agents/impeccable*"
         ]

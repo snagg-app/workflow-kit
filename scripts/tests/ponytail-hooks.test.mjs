@@ -13,9 +13,10 @@ const git = (process.env.PATH || '').split(path.delimiter).filter(path.isAbsolut
   .map(directory => path.join(directory, windows ? 'git.exe' : 'git')).find(existsSync);
 // Deadlines only catch hung hooks; they must not measure speed on slow shared runners.
 const hookTimeout = Number(process.env.WORKFLOW_KIT_HOOK_TIMEOUT_MS) || 30_000;
-const version = '5.2.0-1';
+const kitHook = fileURLToPath(new URL('../kit-hook.mjs', import.meta.url));
+const { ponytail: version } = JSON.parse(readFileSync(new URL('../versions.json', import.meta.url), 'utf8'));
 
-test('installed hooks run every manifest command without executing checkout programs', async t => {
+test('installed hooks run for every event and agent without executing checkout programs', async t => {
   assert.ok(git, 'Git must be available on an absolute PATH');
   const temp = mkdtempSync(path.join(tmpdir(), 'workflow-kit ponytail '));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
@@ -49,63 +50,42 @@ test('installed hooks run every manifest command without executing checkout prog
   writeFileSync(path.join(checkout, '.agents/hooks/ponytail-activate.js'), 'throw new Error("changed");\n');
   assert.notEqual(install().status, 0, 'Changed hook code needs a new snapshot version');
 
-  // Marker programs in the checkout and on PATH (including '.') must never run.
+  // Marker programs in the checkout and on PATH (including '.') must never run: the hooks start the pinned Node of the snapshot.
+  // Git is not among them: the kit check has always called it by name.
   const marker = path.join(temp, 'hijacked'), bin = path.dirname(checkoutNode);
-  const shells = windows
-    ? [{ executable: path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), args: ['-NoProfile', '-NonInteractive', '-Command'] }]
-    : [{ executable: '/bin/sh', args: ['-c'] }];
-  const gitBash = windows && path.resolve(path.dirname(git), '../bin/bash.exe');
-  if (gitBash && existsSync(gitBash)) shells.push({ executable: gitBash, args: ['--noprofile', '--norc', '-c'] });
   if (windows) {
-    const compiled = spawnSync(shells[0].executable, [...shells[0].args, `Add-Type -OutputType ConsoleApplication -OutputAssembly $env:PONYTAIL_SHIM -TypeDefinition '
+    const powershell = path.join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe');
+    const compiled = spawnSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', `Add-Type -OutputType ConsoleApplication -OutputAssembly $env:PONYTAIL_SHIM -TypeDefinition '
 public class Shim { public static void Main() { System.IO.File.WriteAllText(System.Environment.GetEnvironmentVariable("PONYTAIL_MARKER"), "executed"); } }'`],
     { env: { ...env, PONYTAIL_SHIM: path.join(bin, 'shim.exe') }, encoding: 'utf8' });
     assert.equal(compiled.status, 0, compiled.stderr);
     for (const directory of [bin, checkout, path.join(checkout, 'frontend')])
-      for (const tool of ['node.exe', 'git.exe', 'cmd.exe', 'powershell.exe']) copyFileSync(path.join(bin, 'shim.exe'), path.join(directory, tool));
+      for (const tool of ['node.exe', 'cmd.exe', 'powershell.exe']) copyFileSync(path.join(bin, 'shim.exe'), path.join(directory, tool));
   } else {
-    for (const directory of [bin, checkout, path.join(checkout, 'frontend')]) for (const tool of ['node', 'git', 'sh', 'echo'])
+    for (const directory of [bin, checkout, path.join(checkout, 'frontend')]) for (const tool of ['node', 'sh', 'echo'])
       writeFileSync(path.join(directory, tool), '#!/bin/sh\nprintf executed > "$PONYTAIL_MARKER"\n', { mode: 0o755 });
   }
-  const hostile = { ...env, PONYTAIL_MARKER: marker, PATH: [checkout, bin, '.', process.env.PATH].join(path.delimiter) };
-  const input = JSON.stringify({ prompt: '/ponytail lite' });
-  const execute = (shell, command, extra = {}) => exec(shell.executable, [...shell.args, command],
-    { cwd: path.join(checkout, 'frontend'), env: { ...hostile, ...extra }, input, timeout: hookTimeout });
-  const manifests = ['.codex/hooks.json', '.claude/settings.json'];
-  const handlers = manifest => Object.entries(JSON.parse(readFileSync(path.join(root, manifest), 'utf8')).hooks)
-    .flatMap(([event, groups]) => groups.flatMap(group => group.hooks || [group]).map(handler => ({ event, handler })))
-    .filter(({ handler }) => /ponytail/.test(handler.command || ''));
+  const hostile = { ...env, PONYTAIL_MARKER: marker, PATH: [checkout, bin, '.', process.env.PATH].join(path.delimiter), CLAUDE_PROJECT_DIR: checkout };
   const missing = { HOME: path.join(temp, 'missing'), USERPROFILE: path.join(temp, 'missing') };
-  // The handlers only read the installed snapshot, so every launcher runs side by side.
-  const trials = [];
-  for (const manifest of manifests) for (const { event, handler } of handlers(manifest)) {
-    const start = event.toLowerCase() === 'sessionstart';
-    for (const shell of shells) {
-      const powershell = shell.executable.endsWith('powershell.exe');
-      // Claude Code runs its hooks through Bash, also on Windows.
-      if (powershell && manifest !== '.codex/hooks.json') continue;
-      const command = powershell ? handler.commandWindows ?? handler.command : handler.command;
-      trials.push((async () => {
-        const result = await execute(shell, command);
-        assert.equal(result.status, 0, `${manifest} ${event}: ${result.stderr}`);
-        if (manifest !== '.claude/settings.json' && result.stdout) assert.doesNotThrow(() => JSON.parse(result.stdout), `${manifest} ${event}: host JSON`);
-        // Without a snapshot only SessionStart speaks (the install hint).
-        const absent = await execute(shell, command, missing);
-        assert.equal(absent.status, 0, `${manifest} ${event} without snapshot: ${absent.stderr}`);
-        assert.equal(Boolean(absent.stdout.trim()), start, `${manifest} ${event} without snapshot`);
-      })());
-    }
-  }
-  await Promise.all(trials);
+  const hook = (agent, event, payload, extra = {}) => exec(process.execPath, [kitHook, event, '--agent', agent],
+    { cwd: path.join(checkout, 'frontend'), env: { ...hostile, ...extra }, input: JSON.stringify({ hook_event_name: event, cwd: checkout, ...payload }), timeout: hookTimeout });
+  const events = [['SessionStart', { source: 'resume' }], ['SubagentStart', {}], ['UserPromptSubmit', { prompt: '/ponytail lite' }]];
+  // The hooks only read the installed snapshot, so every trial runs side by side.
+  await Promise.all(['claude', 'codex'].flatMap(agent => events.map(async ([event, payload]) => {
+    const result = await hook(agent, event, payload);
+    assert.equal(result.status, 0, `${agent} ${event}: ${result.stderr}`);
+    if (agent === 'codex' && result.stdout) assert.doesNotThrow(() => JSON.parse(result.stdout), `${agent} ${event}: host JSON`);
+    // Without a snapshot only SessionStart speaks (the install hint).
+    const absent = await hook(agent, event, payload, missing);
+    assert.equal(absent.status, 0, `${agent} ${event} without snapshot: ${absent.stderr}`);
+    assert.equal(Boolean(absent.stdout.trim()), event === 'SessionStart', `${agent} ${event} without snapshot`);
+  })));
   assert.equal(existsSync(marker), false, 'a checkout program ran');
 
-  // A failing installed hook stays a failure through every launcher.
+  // A failing installed hook stays a failure.
   const activate = path.join(env.HOME, '.ponytail/workflow-kit', version, '.agents/hooks/ponytail-activate.js');
-  const [{ handler: claudeStart }] = handlers('.claude/settings.json');
   writeFileSync(activate, 'process.exit(7);');
-  if (windows) assert.equal((await execute(shells[0], handlers('.codex/hooks.json')[0].handler.commandWindows)).status, 7, 'Codex preserves launcher failure');
-  for (const shell of shells.filter(shell => !shell.executable.endsWith('powershell.exe')))
-    assert.equal((await execute(shell, claudeStart.command)).status, 7, shell.executable);
+  for (const agent of ['claude', 'codex']) assert.equal((await hook(agent, 'SessionStart', { source: 'resume' })).status, 7, agent);
 });
 
 test('adapted hooks preserve explicit host and checkout state and drain stdout on EOF or stuck stdin', async t => {
@@ -173,23 +153,22 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail', 'scripts/impeccable'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
-  for (const file of ['ensure-hooks', 'install-ponytail-hooks', 'install-impeccable-hooks', 'checkout-root'])
+  for (const file of ['kit-hook', 'install-ponytail-hooks', 'install-impeccable-hooks', 'checkout-root'])
     copyFileSync(path.join(root, `scripts/${file}.mjs`), path.join(checkout, `scripts/${file}.mjs`));
+  copyFileSync(path.join(root, 'scripts/versions.json'), path.join(checkout, 'scripts/versions.json'));
   mkdirSync(path.join(checkout, '.git'));
   // The Impeccable download must fail at once here; only Ponytail is under test.
-  const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9',
-    PATH: [path.dirname(process.execPath), process.env.PATH].join(path.delimiter), PONYTAIL_DEFAULT_MODE: 'full' };
-  const bash = windows ? ['../bin', '../../bin'].map(up => path.resolve(path.dirname(git), up, 'bash.exe')).find(existsSync) : '/bin/sh';
-  const start = JSON.parse(readFileSync(path.join(root, '.claude/settings.json'), 'utf8')).hooks.SessionStart
-    .flatMap(group => group.hooks).filter(handler => /ponytail|ensure-hooks/.test(handler.command));
-  const ensure = start.find(handler => handler.command.includes('ensure-hooks')), activate = start.find(handler => /activate claude;/.test(handler.command));
-  const call = handler => exec(bash, ['-c', handler.command], { cwd: checkout, env: { ...env, CLAUDE_PROJECT_DIR: checkout }, input: '{}', timeout: hookTimeout });
+  const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9', PONYTAIL_DEFAULT_MODE: 'full', CLAUDE_PROJECT_DIR: checkout };
+  // Hook JSON in, hook JSON out: the same entry Claude and Codex call.
+  const call = source => exec(process.execPath, [path.join(checkout, 'scripts/kit-hook.mjs'), 'SessionStart', '--agent', 'claude'], { cwd: checkout, env, input: JSON.stringify({ hook_event_name: 'SessionStart', source, cwd: checkout }), timeout: hookTimeout });
   const launcher = path.join(home, '.ponytail/workflow-kit', version, 'launch.sh');
-  assert.match((await call(activate)).stdout, /Ponytail hooks are OFF/);
-  assert.equal((await call(ensure)).status, 0);
+  const first = (await call('startup')).stdout;
+  assert.match(first, /Ponytail hooks are OFF/);
+  assert.match(first, /Impeccable hooks are OFF/);
   for (let wait = 0; (!existsSync(launcher) || existsSync(path.join(home, '.ponytail/workflow-kit/.install.lock'))) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
   assert.ok(existsSync(launcher), 'the hook started the installation, which then released its lock');
-  assert.doesNotMatch((await call(activate)).stdout, /OFF/);
+  // A resume starts no second installer that would still hold the folder.
+  assert.doesNotMatch((await call('resume')).stdout, /Ponytail hooks are OFF/);
 });
 
 test('a removed pinned Node makes SessionStart say the hooks are off, other events stay silent', t => {

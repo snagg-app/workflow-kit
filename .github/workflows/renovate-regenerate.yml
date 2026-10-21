@@ -59,7 +59,7 @@ jobs:
           # Whoever wrote the commits: nothing the job runs or dispatches may differ from main. That is every
           # workflow, script and the Renovate config; the three files the updaters generate are data.
           forbidden=$(git diff --name-only --no-renames origin/main...HEAD | grep -E '^(\.github/workflows/|renovate\.json|\.node-version|scripts/)' \
-            | grep -v -x -e 'scripts/ponytail/adaptations.patch' -e 'scripts/impeccable/VERSION' -e 'scripts/impeccable/SHA256SUMS' || true)
+            | grep -v -x -e 'scripts/ponytail/adaptations.patch' -e 'scripts/versions.json' -e 'scripts/impeccable/SHA256SUMS' || true)
           if [ -n "$forbidden" ]; then
             echo "::error::The branch changes workflows, scripts or Renovate config; not running with write access: $forbidden"
             exit 1
@@ -105,7 +105,7 @@ jobs:
           set -euo pipefail
           # Generated outputs and the three generated files under scripts/ only; main's scripts and every workflow stay out.
           git add --all -- . ':(exclude)scripts' ':(exclude).node-version' ':(exclude).github/workflows'
-          git add -- scripts/ponytail/adaptations.patch scripts/impeccable/VERSION scripts/impeccable/SHA256SUMS
+          git add -- scripts/ponytail/adaptations.patch scripts/versions.json scripts/impeccable/SHA256SUMS
           if git diff --cached --quiet HEAD; then
             echo "Committed outputs are already current."
             exit 0

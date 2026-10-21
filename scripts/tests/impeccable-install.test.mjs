@@ -19,7 +19,7 @@ test('an installed engine without its executable bit is made executable again', 
   const asset = `impeccable-${process.platform}-${process.arch}`;
   mkdirSync(join(root, 'kit/scripts/impeccable'), { recursive: true });
   copyFileSync(join(kit, 'scripts/install-impeccable-hooks.mjs'), join(root, 'kit/scripts/install-impeccable-hooks.mjs'));
-  writeFileSync(join(root, 'kit/scripts/impeccable/VERSION'), '0.0.1\n');
+  writeFileSync(join(root, 'kit/scripts/versions.json'), JSON.stringify({ impeccable: '0.0.1' }));
   writeFileSync(join(root, 'kit/scripts/impeccable/SHA256SUMS'), `${createHash('sha256').update(bytes).digest('hex')}  ${asset}\n`);
   const directory = join(root, 'home/.impeccable/workflow-kit/engine-0.0.1');
   mkdirSync(directory, { recursive: true });
