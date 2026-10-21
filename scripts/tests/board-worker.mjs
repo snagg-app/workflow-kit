@@ -6,6 +6,7 @@ import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { format } from 'node:util';
 import { workerData } from 'node:worker_threads';
+import { useGhAdapter } from '../github.mjs';
 import { fakeGh } from './fake-gh.mjs';
 
 const { requests, results, done } = workerData;
@@ -38,8 +39,9 @@ const noteAffectedTests = args => {
   appendFileSync('affected-tests-calls', `${args.slice(1).join(' ')}\n`);
   if (existsSync('affected-tests-seconds')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(readFileSync('affected-tests-seconds', 'utf8')) * 1000);
 };
+// Every `gh` call of board.mjs goes through github.mjs, which takes the fake as its test variant.
+useGhAdapter(echoingFakeGh);
 childProcess.execFileSync = (file, args, options) => file === process.execPath && /affected-tests\.mjs$/.test(args[0]) ? noteAffectedTests(args)
-  : /(^|[\\/])gh(\.exe)?$/.test(file) ? echoingFakeGh(args, options)
   : /(^|[\\/])git(\.exe)?$/.test(file) ? realExecFileSync('git', args, { ...options, env: { ...options?.env, PATH: hostPath } })
     : realExecFileSync(file, args, options);
 syncBuiltinESMExports();
