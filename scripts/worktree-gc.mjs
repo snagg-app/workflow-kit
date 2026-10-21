@@ -156,7 +156,7 @@ async function main() {
   const hashesOf = list => new Set(list.flatMap(w => rootHashes(w.path)));
   const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths), protect);
   const afterRm = orphanVolumes(all, prefixes, hashesOf(livePaths.filter(w => !finished.includes(w))), protect);
-  console.log(`Volumes: ${all.length} in total, ${all.filter(n => protect.some(word => n.toLowerCase().includes(word.toLowerCase()))).length} protected (never touched),${orphans.length} orphaned${option.rm ? '' : `, ${afterRm.length - orphans.length} more once the finished worktrees are gone`}`);
+  console.log(`Volumes: ${all.length} in total, ${all.filter(n => protect.some(word => n.toLowerCase().includes(word.toLowerCase()))).length} protected (never touched), ${orphans.length} orphaned${option.rm ? '' : `, ${afterRm.length - orphans.length} more once the finished worktrees are gone`}`);
   if (option.rm) {
     let deleted = 0;
     await pool(orphans, async name => { if ((await exec(docker, ['volume', 'rm', name])).ok) deleted++; });
