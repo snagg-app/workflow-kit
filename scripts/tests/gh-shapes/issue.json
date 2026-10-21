@@ -1,0 +1,171 @@
+{
+ "repository": {
+  "refs": {
+   "nodes": []
+  },
+  "issue": {
+   "id": "x",
+   "number": 1,
+   "title": "x",
+   "state": "OPEN",
+   "stateReason": "COMPLETED",
+   "body": "x",
+   "updatedAt": "x",
+   "repository": {
+    "nameWithOwner": "x"
+   },
+   "assignees": {
+    "nodes": [
+     {
+      "login": "x"
+     }
+    ]
+   },
+   "parent": {
+    "number": 1,
+    "repository": {
+     "nameWithOwner": "x"
+    }
+   },
+   "projectItems": {
+    "nodes": [
+     {
+      "id": "x",
+      "project": {
+       "id": "x"
+      },
+      "updatedAt": "x",
+      "status": {
+       "name": "x"
+      },
+      "base": null,
+      "fieldValues": {
+       "nodes": [
+        {
+         "name": "x",
+         "field": {
+          "name": "x"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "issueFieldValues": {
+    "nodes": []
+   },
+   "blockedBy": {
+    "totalCount": 1,
+    "nodes": [
+     {
+      "id": "x",
+      "number": 1,
+      "state": "CLOSED",
+      "stateReason": "COMPLETED",
+      "repository": {
+       "nameWithOwner": "x"
+      }
+     }
+    ]
+   },
+   "labels": {
+    "totalCount": 1,
+    "nodes": [
+     {
+      "name": "x"
+     }
+    ]
+   },
+   "comments": {
+    "nodes": [
+     {
+      "createdAt": "x",
+      "url": "x",
+      "body": "x"
+     }
+    ]
+   },
+   "subIssues": {
+    "totalCount": 1,
+    "nodes": [
+     {
+      "id": "x",
+      "number": 1,
+      "title": "x",
+      "state": "CLOSED",
+      "stateReason": "COMPLETED",
+      "body": "x",
+      "updatedAt": "x",
+      "repository": {
+       "nameWithOwner": "x"
+      },
+      "assignees": {
+       "nodes": [
+        {
+         "login": "x"
+        }
+       ]
+      },
+      "projectItems": {
+       "nodes": [
+        {
+         "id": "x",
+         "project": {
+          "id": "x"
+         },
+         "updatedAt": "x",
+         "status": {
+          "name": "x"
+         },
+         "base": null
+        }
+       ]
+      },
+      "blockedBy": {
+       "totalCount": 1,
+       "nodes": [
+        {
+         "id": "x",
+         "number": 1,
+         "state": "CLOSED",
+         "stateReason": "COMPLETED",
+         "repository": {
+          "nameWithOwner": "x"
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "closedByPullRequestsReferences": {
+    "totalCount": 1,
+    "nodes": [
+     {
+      "id": "x",
+      "number": 1,
+      "url": "x",
+      "state": "MERGED",
+      "merged": true,
+      "mergedAt": "x",
+      "body": "x",
+      "updatedAt": "x",
+      "isDraft": false,
+      "isCrossRepository": false,
+      "mergeStateStatus": "UNKNOWN",
+      "baseRefName": "x",
+      "headRefName": "x",
+      "headRefOid": "x",
+      "mergeCommit": {
+       "oid": "x"
+      },
+      "repository": {
+       "nameWithOwner": "x"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

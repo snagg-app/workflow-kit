@@ -1,0 +1,101 @@
+{
+ "viewer": {
+  "login": "x"
+ },
+ "search": {
+  "issueCount": 1,
+  "pageInfo": {
+   "hasNextPage": false,
+   "endCursor": "x"
+  },
+  "nodes": [
+   {
+    "id": "x",
+    "number": 1,
+    "title": "x",
+    "body": "x",
+    "updatedAt": "x",
+    "assignees": {
+     "nodes": [
+      {
+       "login": "x"
+      }
+     ]
+    },
+    "comments": {
+     "nodes": [
+      {
+       "createdAt": "x",
+       "url": "x",
+       "body": "x"
+      }
+     ]
+    },
+    "labels": {
+     "totalCount": 1,
+     "nodes": [
+      {
+       "name": "x"
+      }
+     ]
+    },
+    "blockedBy": {
+     "totalCount": 1,
+     "nodes": [
+      {
+       "id": "x",
+       "number": 1,
+       "state": "CLOSED",
+       "stateReason": "COMPLETED",
+       "repository": {
+        "nameWithOwner": "x"
+       }
+      }
+     ]
+    },
+    "issueFieldValues": {
+     "nodes": []
+    },
+    "closedByPullRequestsReferences": {
+     "totalCount": 1,
+     "nodes": [
+      {
+       "id": "x",
+       "number": 1,
+       "url": "x",
+       "state": "OPEN",
+       "body": "x",
+       "merged": false,
+       "mergedAt": null,
+       "updatedAt": "x",
+       "mergeStateStatus": "CLEAN",
+       "baseRefName": "x",
+       "headRefName": "x",
+       "repository": {
+        "nameWithOwner": "x"
+       }
+      }
+     ]
+    },
+    "projectItems": {
+     "nodes": [
+      {
+       "id": "x",
+       "project": {
+        "id": "x"
+       },
+       "updatedAt": "x",
+       "status": {
+        "name": "x"
+       },
+       "priority": {
+        "name": "x"
+       },
+       "base": null
+      }
+     ]
+    }
+   }
+  ]
+ }
+}
