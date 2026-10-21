@@ -4,9 +4,18 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { shared } from './board-args.mjs';
+
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'start', run: 'start', writes: true, doc: 'docs/board/start.md', words: [{ name: 'ISSUE', kind: 'number' }],
+    summary: 'Claims a Ready issue. Runs the execution check, then assignment, In progress and the claim comment, each write read back. A repeated call resumes.',
+    flags: { '--session': shared.session, '--takeover': { help: 'Take over a fresh PR of another session.' }, '--issue-repo': shared.issueRepo } },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStart(env) {
-  const { claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses } = env;
+  const { args, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses } = env;
   const { baseOf, branchWork, check, foreignAssignees, isOwn, linkIssue, mayStart, openPr, ownPr, refsPr, set, startReasons, workBranches } = env.later;
 
   // #646: `done` never pushes to these.
@@ -72,7 +81,7 @@ export function createStart(env) {
     assert.ok(!isSpec(issue), specRefusal(number, 'start is refused; agents leave specs untouched'));
     // `upstream` would send a push to the base branch of a worktree made from origin/<base> (#3822); `simple` pushes to the branch's own name.
     setCloneSetting('push.default', 'simple');
-    const takeover = process.argv.includes('--takeover');
+    const takeover = args.flag('--takeover');
     if (takeover && !openPr(issue)) state.adoptedPr = refsPr();
     // --takeover without an open PR, a claim or a foreign assignee has nothing to take over (#564): refuse before anything is written.
     // A foreign assignee or claim without a PR yet is what --takeover takes over then (#572).

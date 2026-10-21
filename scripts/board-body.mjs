@@ -1,10 +1,22 @@
 // Issue bodies and links: `body`, `body-replace`, `link` and the backlinks.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
+import { shared } from './board-args.mjs';
+
+/** What `board.mjs help` and the parser know about the commands; `run` names the function this module returns. */
+export const specs = [
+  { name: 'body', run: 'body', writes: true, doc: 'docs/board/body.md', words: [{ name: 'ISSUE', kind: 'number' }, { name: 'FILE' }, { name: 'BASE_FILE' }],
+    summary: 'Replaces the issue body with FILE. Only if the current body still equals BASE_FILE; read back after. A body that changed meanwhile is refused with a diff.' },
+  { name: 'body-replace', run: 'bodyReplace', writes: true, doc: 'docs/board/body.md', words: [{ name: 'ISSUE', kind: 'number' }],
+    summary: 'Replaces one occurrence of a text in the issue body. The text in --from becomes the text in --to; written and read back like `body`.',
+    flags: { '--from': { value: 'FILE', required: true, help: 'File with the text to find (plain text, no regular expression).' }, '--to': { value: 'FILE', required: true, help: 'File with the new text.' } } },
+  { name: 'link', run: 'link', hidden: true, writes: true, words: [{ name: 'ISSUE', kind: 'number' }, { name: 'PR', kind: 'digits' }], flags: { '--refs': shared.refs },
+    summary: 'Connects the PR to the issue natively (and comments the PR URL). `done` runs it.' },
+];
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createBody(env) {
-  const { blockerRepository, command, github, graphql, isSpec, issueProject, lines, name, number, owner, project, readIssue, rest, restAll, sleep, specRefusal, state, validBlocker } = env;
+  const { args, blockerRepository, github, graphql, isSpec, issueProject, lines, name, number, owner, project, readIssue, rest, restAll, sleep, specRefusal, state, validBlocker } = env;
   const { isPartialPr } = env.later;
 
   /** Every comment of an open issue, complete and unique, or an exception: a partial list must never read as "no backlink". */
@@ -30,7 +42,7 @@ export function createBody(env) {
 
   /** Explicit scope works with Refs on release branches; native closing links remain a separate proof. */
   function verifyBacklinks(issue) {
-    const [prRef, ...extraIssues] = state.delivered ?? process.argv.filter(arg => arg !== '--spec-review').slice(command === 'field' ? 6 : 5);
+    const [prRef, ...extraIssues] = state.delivered ?? env.later.fieldWords().slice(2);
     assert.ok(prRef !== undefined, 'Automated review needs the PR number: field ISSUE Status "Automated review" PR [OTHER_ISSUE...]');
     const positive = ref =>/^\d+$/.test(ref ?? '') && Number.isSafeInteger(Number(ref)) && Number(ref) > 0;
     assert.ok(positive(prRef) && extraIssues.every(ref => validBlocker(ref) && positive(ref.slice(ref.lastIndexOf('#') + 1))),
@@ -128,14 +140,14 @@ export function createBody(env) {
   }
 
   function body() {
-    const [fresh, base] = [state.value, process.argv[5]].map(lines);
+    const [fresh, base] = args.words.slice(1).map(lines);
     writeBody((before, refuse) => before === base ? fresh
       : refuse(`the body of #${number} changed since you read it (diff: your base, then the current body); read it again, merge, write again`, diffText(base, before)));
   }
 
   /** Replace exactly one occurrence of the --from text with the --to text; the body just read is the base. No regular expressions. */
   function bodyReplace() {
-    const [from, to] = [process.argv[5], process.argv[7]].map(lines);
+    const [from, to] = [args.value('--from'), args.value('--to')].map(lines);
     assert.ok(from !== '', 'The --from text is empty');
     writeBody((before, refuse) => {
       // Every start position counts, so "aa" in "aaa" is two matches, not one.
@@ -150,7 +162,7 @@ export function createBody(env) {
   }
 
   /** Connect the issue natively to the PR (what a closing keyword does only on the default branch), post the backlink comment `status` requires, and read both back. */
-  const link = () => linkIssue(number, Number(state.value), process.argv.includes('--refs'));
+  const link = () => linkIssue(number, Number(state.value), args.flag('--refs'));
 
   /** `refsOnly` (link --refs): the PR only names the issue, so no native link; the backlink comment alone (#510). */
   function linkIssue(issueNumber, prNumber, refsOnly, known) {

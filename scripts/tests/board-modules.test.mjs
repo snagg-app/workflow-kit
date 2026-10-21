@@ -11,7 +11,7 @@ test('every board command module can be imported without running anything', asyn
     assert.ok(files.length >= 16, 'the command modules are missing');
     for (const file of files) {
       const exported = Object.keys(await import(new URL(file, dir)));
-      assert.ok(exported.some(name => /^create[A-Z]/.test(name)), `${file} exports no createX factory`);
+      assert.ok(exported.some(name => /^create[A-Z]|^command(Specs|Table)$/.test(name)), `${file} exports no createX factory`);
     }
   } finally {
     [console.log, console.error] = [log, error];

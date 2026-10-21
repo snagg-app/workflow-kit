@@ -1,10 +1,27 @@
 // `handoff` and `ready`: the checks before an issue reaches Human review.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
+import { shared } from './board-args.mjs';
+
+/** What `board.mjs help` and the parser know about the commands; `run` names the function this module returns. */
+export const specs = [
+  { name: 'handoff', run: 'handoff', hidden: true, writes: true, words: [{ name: 'ISSUE', kind: 'number' }, { name: 'PR', kind: 'digits' }],
+    summary: 'The handoff gate: Human review once the PR, its checks, reviews and the handoff comment are in order. `done` runs it.',
+    flags: { '--stall': shared.stall, '--grace': shared.grace, '--interval': { value: 'SECONDS', kind: 'seconds60', help: 'A fixed pause between reads, 0 to 60.' }, '--refs': shared.refs } },
+  { name: 'ready', run: 'ready', hidden: true, writes: true, usage: 'ready PR SHA|--local [--attempts N] [--interval SECONDS]', words: [{ name: 'PR', kind: 'number' }, { name: 'SHA', kind: 'sha', optional: true }],
+    summary: 'Marks the Draft PR ready for exactly the pushed head. `done` runs it.',
+    flags: { '--local': { help: 'Take the head from the checkout.' }, '--attempts': { value: 'N', kind: 'attempts', help: 'Reads of the PR head, 1 to 100 (default 6).' },
+      '--interval': { value: 'SECONDS', kind: 'seconds', help: 'Pause between reads (default 5).' } },
+    check: args => {
+      if (args.flag('--local') === (args.words[1] !== undefined)) return `ready needs a commit id of 7 to 40 characters (git rev-parse HEAD) or --local, not ${args.words[1] ? `"${args.words[1]}" with --local` : 'nothing'}`;
+      // Polling must end: two loops (stale head before the write, read-back after it), each sleeping up to (attempts - 1) times, at most half an hour in total.
+      if (2 * args.number('--attempts', 6) * args.number('--interval', 5) > 1800) return 'ready: --attempts times --interval is too long (at most 900 seconds of pauses)';
+    } },
+];
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createHandoff(env) {
-  const { graphql, handoffHeading, isSpec, issueProject, name, number, numberOption, owner, project, projectItem, projectStatus, readIssue, rest, sleep, specRefusal, stallOption, state, statuses, text, texts } = env;
+  const { args, graphql, handoffHeading, isSpec, issueProject, name, number, numberOption, owner, project, projectItem, projectStatus, readIssue, rest, sleep, specRefusal, stallOption, state, statuses, text, texts } = env;
   const { check, connectedIssues, isPartialPr, mayStart, outcome, readPr, reviews, set } = env.later;
 
   /**
@@ -216,7 +233,7 @@ export function createHandoff(env) {
     const currentPrNumber = Number(state.value);
     // A partial PR (see isPartialPr) has only the PR gate: no native link, and the issue's status and assignment are not its business, since the closing PR hands the issue off.
     // `--refs` is the same for a PR that only names the issue, whether or not another PR closes it (#510).
-    const partial = process.argv.includes('--refs') || isPartialPr(issue, currentPrNumber);
+    const partial = args.flag('--refs') || isPartialPr(issue, currentPrNumber);
     const prior = partial ? [] : handoffIssueReasons(issue, viewer, undefined, currentPrNumber);
     if (!prior) return;
     const pr = handoffPr(issue.id, viewer, undefined, prior, partial);

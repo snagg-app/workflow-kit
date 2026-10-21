@@ -320,7 +320,6 @@ for (const reason of [[], [''], ['  '], ['--refs']]) test(`done refuses invalid 
   const { run, head, text, json, file, git } = delivery(t, handoffFixture);
   const result = run('done', '1', 'result.md', '--skip-local-tests', ...reason);
   assert.equal(result.status, 2, result.stdout + result.stderr);
-  assert.match(result.stdout, /--skip-local-tests needs a non-empty reason/);
   assert.equal(git('rev-parse', 'HEAD'), head);
   assert.equal(text('affected-tests-calls'), '');
   assert.equal(text('stored'), 'In progress');

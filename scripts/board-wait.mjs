@@ -2,10 +2,25 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import { QuotaPause, StillWaiting, sleepers } from './github.mjs';
 import { untilText, waitInterval } from './quota.mjs';
+import { shared } from './board-args.mjs';
+
+/** What `board.mjs help` and the parser know about the commands; `run` names the function this module returns. */
+export const specs = [
+  { name: 'wait', run: 'wait', doc: 'docs/board/wait.md', words: [{ name: 'PR', kind: 'number' }],
+    summary: 'Waits until CI and every reviewer of the PR head have finished. Exit 0 done, 1 red CI, 3 waiting, 4 call again, 2 error; prints blockers and Sonar issues.',
+    flags: { '--merged': { help: 'Wait for the human merge instead (REST only).' }, '--stall': shared.stall, '--grace': shared.grace,
+      '--head': { value: 'SHA', kind: 'sha', help: 'The id you just pushed: keep waiting while the PR still shows another head.' }, '--max-minutes': shared.maxMinutes,
+      '--interval': { value: 'SECONDS', kind: 'seconds300', help: 'A fixed pause between looks, 0 to 300 (default: 60 growing to 300).' } },
+    check: args => args.flag('--merged') && args.flag('--head') ? '--head does not combine with --merged' : undefined },
+  { name: 'quota-wait', run: 'quotaWait', doc: 'docs/board/quota-wait.md', flags: { '--max-minutes': shared.maxMinutes },
+    summary: 'Waits for the shared GraphQL quota. Returns once it has 300 points again, sleeping until the reset (exit 4 if that is after --max-minutes).' },
+  { name: 'reviews', run: 'reviewsOnce', hidden: true, words: [{ name: 'PR', kind: 'number' }], flags: { '--stall': shared.stall, '--grace': shared.grace },
+    summary: 'One look at the reviewers of the PR head, without waiting.' },
+];
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createWait(env) {
-  const { command, github, graphql, headOption, number, numberOption, project, quotaLine, rest, stallOption, startedAt } = env;
+  const { args, command, github, graphql, number, numberOption, project, quotaLine, rest, stallOption, startedAt } = env;
   const { isOptional, readPr, reviews, unresolvedThreads, useBaseSettings } = env.later;
 
   // Waiting is over either way; FAILED keeps a red head from reading as a finished review.
@@ -33,7 +48,7 @@ export function createWait(env) {
    * ponytail: a head that never matches (wrong id, someone else pushed on top) waits on; stop it by hand.
    */
   function lookAtHead(pr, threads) {
-    const expected = headOption()?.toLowerCase();
+    const expected = args.value('--head')?.toLowerCase();
     if (!expected || pr.state !== 'OPEN' || pr.headRefOid.startsWith(expected)) return reviews(stallOption(), Date.now(), pr.number, pr, undefined, threads ?? (current => unresolvedThreads(current.number, current.reviewThreads)));
     return { done: false, lines: [`#${pr.number} ${pr.state} head ${pr.headRefOid.slice(0, 7)}`,
       `waiting: PR still shows head ${pr.headRefOid.slice(0, 7)}, expected ${expected.slice(0, 7)}`] };
@@ -128,7 +143,7 @@ export function createWait(env) {
         }
         if (Date.now() >= github.deadline) return stillWaiting(result.pausedUntil);
         // Little quota lengthens the pause, but not while REST is read in place of GraphQL.
-        const pause = ['wait', 'merge'].includes(command) && process.argv.includes('--interval') ? numberOption('--interval', 0) : waitInterval(quiet++, result.pausedUntil ? undefined : github.quota?.remaining);
+        const pause = ['wait', 'merge'].includes(command) && args.flag('--interval') ? numberOption('--interval', 0) : waitInterval(quiet++, result.pausedUntil ? undefined : github.quota?.remaining);
         await new Promise(resolve => setTimeout(resolve, Math.min(1000 * pause, github.deadline - Date.now())));
       }
     } catch (error) {
@@ -138,7 +153,7 @@ export function createWait(env) {
   }
 
   async function wait() {
-    const result = await poll(process.argv.includes('--merged') ? mergeState : reviewsForHead);
+    const result = await poll(args.flag('--merged') ? mergeState : reviewsForHead);
     if (!result) return;
     const [word, code] = outcome(result);
     process.exitCode = code;

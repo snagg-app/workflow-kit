@@ -7,6 +7,15 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { externalTool } from './checkout-root.mjs';
 import { SonarOtherPr } from './board-reviews.mjs';
+import { shared } from './board-args.mjs';
+
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'merge', run: 'merge', writes: true, doc: 'docs/board/merge.md', words: [{ name: 'PR', kind: 'number' }],
+    summary: 'Merges a PR (the only way for an agent with merge authority). It applies the gates of `done`, waits for CI and reviewers, merges the checked head and reads the merge back.',
+    flags: { '--stack': { help: 'PR is the top of a native stack: merge every layer in one run.' }, '--stall': shared.stall, '--grace': shared.grace,
+      '--interval': { value: 'SECONDS', kind: 'seconds60', help: 'A fixed pause between looks, 0 to 60.' }, '--max-minutes': shared.maxMinutes } },
+];
 
 /** env: project, owner, name, github, projectDirectory, number, stack, stackState, numberOption, sleep, readyQuery, dependentPrs, mergeGate, stackReasons, runShell, reviewsForHead, poll, readPr, baseMovement, filesText */
 export function createMerge(env) {

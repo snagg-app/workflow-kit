@@ -2,6 +2,14 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'block', run: 'block', writes: true, doc: 'docs/board/block.md', words: [{ name: 'ISSUE', kind: 'number' }, { name: 'BLOCKER', kind: 'reference' }],
+    summary: 'Marks ISSUE as blocked by BLOCKER (N, #N or OWNER/REPO#N).' },
+  { name: 'sub', run: 'sub', writes: true, doc: 'docs/board/block.md', words: [{ name: 'PARENT', kind: 'number' }, { name: 'CHILD', kind: 'reference' }],
+    summary: 'Makes CHILD (N, #N or OWNER/REPO#N) a native sub-issue of PARENT, read back. An existing link succeeds again.' },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createBlock(env) {
   const { blockerRepository, graphql, named, number, project, readIssue, state } = env;
