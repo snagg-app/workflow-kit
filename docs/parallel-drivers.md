@@ -82,9 +82,10 @@ schreiben und per `--body-file` übergeben, nicht per Heredoc.
 Allgemeine Regeln für jeden Driver-Subagenten. Projektspezifische Regeln und die
 Modellwahl stehen hier nicht.
 
-0. **Neuer Worktree: Kit zuerst.** Ein Worktree mit `isolation: worktree` startet mit leerem
-   Kit-Submodul, weil die Start-Hooks für das Projektverzeichnis der Eltern laufen: als Erstes
-   `git submodule update --init .vendor/workflow-kit`, dann AGENT_RULES.md lesen.
+0. **Neuer Worktree: Kit zuerst.** Ein Worktree mit `isolation: worktree` startet ohne die Verknüpfung
+   `.vendor/workflow-kit`, weil die Start-Hooks für das Projektverzeichnis der Eltern laufen. Fehlt sie,
+   legt `node <gemeinsamer-Kit-Checkout>/scripts/kit-hook.mjs SessionStart --agent claude` sie an (mit
+   `CLAUDE_PROJECT_DIR=<Worktree>`); dann AGENT_RULES.md lesen.
 1. **Ein Issue bis „Human review“ treiben.** Früher enden nur bei einem menschlichen
    Gate (Merge, Secrets, Backlog→Ready, Produktentscheidung) oder bei einem Blocker
    (`board.mjs start` meldet BLOCKED oder UNKNOWN, eine Voraussetzung ändert sich;
@@ -153,10 +154,9 @@ Modellwahl stehen hier nicht.
      falschen Issue landen; ein `cd … &&` ist dafür nicht nötig.
    - Worktree: der Driver arbeitet im eigenen Worktree, nie in dem der Eltern-Session;
      hat er keinen, legt er ihn als Erstes an. Scratch-Dateien tragen die Issue-Nummer.
-   - Kit-Stand: Hooks und Skills eines Subagenten kommen aus dem Start-Worktree der
-     Eltern-Session. Sie hält vor dem Start von Drivern ihr Kit auf dem Pin-Stand
-     (`git submodule update --init .vendor/workflow-kit`), damit neue Regeln für die
-     Driver gelten.
+   - Kit-Stand: Alle Worktrees teilen einen Kit-Checkout auf `main`, der bei jedem Sessionstart
+     nachzieht; ein Pin gibt es nicht mehr. Kit-Treiber arbeiten in einem eigenen Worktree des
+     Kit-Repos, nie im gemeinsamen Checkout.
 5a. **Selbstprüfung vor Ready.** Nennt das Projekt `"selfReview"` in `.github/workflow-project.json`
    (zum Beispiel `ponytail-review` und `code-review`), laufen diese Prüfungen einmal je PR im
    Vordergrund vor „Ready for Review“, und der PR-Text hat den Abschnitt `## Selbstprüfung` mit jedem Namen

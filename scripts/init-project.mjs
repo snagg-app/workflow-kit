@@ -1,9 +1,10 @@
-// Zweck: Kit-Hooks, .gitignore und .ignore (Suche) in das Projekt übernehmen; neue Projekte erhalten die Vorlagen.
-// Aufruf: Bei Einrichtung oder Kit-Updates; --existing lässt die Vorlagen weg.
-// Nutzen: Kit-Handler werden an ihrer Kennung erkannt und ersetzt; fremde Hooks und Einstellungen bleiben.
+// Zweck: Kit-Verknüpfung, Kit-Hooks, .gitignore und .ignore (Suche) in das Projekt übernehmen; neue Projekte erhalten die Vorlagen.
+// Aufruf: Bei Einrichtung oder Kit-Updates, aus dem gemeinsamen Kit-Checkout (--cwd PROJEKT); --existing lässt die Vorlagen weg.
+// Nutzen: .vendor/workflow-kit zeigt auf den gemeinsamen Checkout (ein alter Gitlink entfällt); Kit-Handler werden an ihrer Kennung ersetzt; fremde Hooks und Einstellungen bleiben.
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { checkDirectory } from './provider-links.mjs';
@@ -11,10 +12,9 @@ import { checkDirectory } from './provider-links.mjs';
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 enterCwd(); // `--cwd PROJECT_DIR` as the first argument
 const requestedRoot = projectRoot();
-// The installed kit owns only itself or the checkout it is vendored into.
-const root = requestedRoot === kit ? kit : resolve(kit, '../..');
-assert.equal(requestedRoot, root, 'Run init-project inside the project that vendors this kit at .vendor/workflow-kit');
-if (root !== kit) assert.equal(relative(root, kit).split(sep).join('/'), '.vendor/workflow-kit', 'Install the kit at .vendor/workflow-kit in the target');
+// The kit is the shared checkout; it configures itself or the project named by --cwd, never a project that contains the kit.
+const root = requestedRoot;
+assert.ok(root === kit || !(kit + sep).startsWith(root + sep), 'Run init-project from the shared kit checkout (a clone next to the project, not inside it): node <kit>/scripts/init-project.mjs --cwd <project>');
 const existing = process.argv.includes('--existing');
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 const present = p => lstatSync(p, { throwIfNoEntry: false });
@@ -58,6 +58,34 @@ function mergeHooks(name, template) {
   } else if (existsSync(target) || template) write(name, JSON.stringify(merged, null, 2) + '\n');
 }
 
+/** `.vendor/workflow-kit` is a link to the shared kit, not a submodule: a leftover gitlink, its .gitmodules entry and its clone go. */
+function linkKit() {
+  const link = join(root, '.vendor/workflow-kit'), git = (...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const entry = present(link);
+  if (entry && !entry.isSymbolicLink()) {
+    const kitGit = join(link, '.git');
+    // Work that a removal would lose stays: refuse, and name the way out.
+    if (existsSync(kitGit)) {
+      const lost = execFileSync('git', ['-C', link, 'status', '--porcelain'], { encoding: 'utf8' }).trim()
+        || execFileSync('git', ['-C', link, 'rev-list', '-n', '1', 'HEAD', '--not', '--remotes'], { encoding: 'utf8' }).trim();
+      assert.ok(!lost, '.vendor/workflow-kit has local changes or unpublished commits: commit, push or discard them, then run init-project again');
+    }
+    // A folder that is no clone is only removed when empty (an uninitialized submodule).
+    assert.ok(existsSync(kitGit) || !entry.isDirectory() || !readdirSync(link).length, '.vendor/workflow-kit is a folder with files that are no kit clone: move it away, then run init-project again');
+    if (git('ls-files', '-s', '--', '.vendor/workflow-kit').startsWith('160000')) git('rm', '-f', '-q', '--', '.vendor/workflow-kit');
+    rmSync(link, { recursive: true, force: true });
+    rmSync(join(git('rev-parse', '--absolute-git-dir'), 'modules/.vendor/workflow-kit'), { recursive: true, force: true });
+    // An emptied .gitmodules goes too.
+    if (existsSync(join(root, '.gitmodules')) && !text(join(root, '.gitmodules')).trim()) git('rm', '-f', '-q', '--', '.gitmodules');
+  }
+  if (entry?.isSymbolicLink() && realpathSyncOr(link) === kit) return;
+  rmSync(link, { force: true });
+  mkdirSync(dirname(link), { recursive: true });
+  symlinkSync(kit, link, 'junction'); // a junction on Windows, which needs no privilege; a symlink elsewhere
+}
+const realpathSyncOr = file => { try { return realpathSync.native(file); } catch { return ''; } };
+if (root !== kit) linkKit();
+
 const templates = readdirSync(join(kit, 'templates'), { recursive: true })
   .filter(file => lstatSync(join(kit, 'templates', file)).isFile()).map(file => file.split(sep).join('/'));
 for (const name of templates.filter(name => !isHooks(name))) {
@@ -76,7 +104,7 @@ const providers = ['.agent', '.agents', '.claude', '.opencode', '.pi'];
 const legacy = new Set(['/.agents/hooks/', ...providers.map(p => `/${p}/skills/ponytail*/`), '/.agents/hooks',
   ...providers.flatMap(p => [`/${p}/skills/ponytail*`, `/${p}/skills/impeccable`]),
   '/.claude/agents/impeccable-*.md', '/.codex/agents/impeccable_*.toml', '/.opencode/commands/impeccable.md']);
-const patterns = ['/.workflow-kit/', '/.scratch/','/.impeccable/vendor/', '/.impeccable/setup-*/',
+const patterns = ['/.vendor/workflow-kit', '/.workflow-kit/', '/.scratch/','/.impeccable/vendor/', '/.impeccable/setup-*/',
   '.claude/settings.local.json', '**/.impeccable/config.local.json', '**/skills/impeccable/scripts/bin/'];
 const ignore = existsSync(safe('.gitignore')) ? text(safe('.gitignore')).split('\n').filter(line => !legacy.has(line)).join('\n') : '';
 const additions = patterns.filter(p => !ignore.split('\n').includes(p));

@@ -1,8 +1,8 @@
-// Zweck: Eine Stelle fuer alle Kit-Hooks von Claude und Codex (Kit-Pin, Warnungen, Ponytail, Impeccable, Selbstinstallation).
+// Zweck: Eine Stelle fuer alle Kit-Hooks von Claude und Codex (gemeinsamer Kit-Checkout, Warnungen, Ponytail, Impeccable, Selbstinstallation).
 // Aufruf: node scripts/kit-hook.mjs <Event> --agent <claude|codex>; Hook-JSON auf stdin, Antwort-JSON auf stdout, Exit 0.
 // Nutzen: Die Agent-Einstellungen enthalten nur noch diesen Aufruf; Versionen stehen in versions.json.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,26 +14,31 @@ const windows = process.platform === 'win32';
 const [event, ...rest] = process.argv.slice(2);
 const agent = rest[rest.indexOf('--agent') + 1];
 
-/** One installer run per machine: the lock directory is atomic; a crashed run is taken over after 15 minutes. */
-function install() {
-  const home = path.join(homedir(), '.ponytail', 'workflow-kit');
-  const lock = path.join(home, '.install.lock');
-  mkdirSync(home, { recursive: true });
+/** Runs `work` under an atomic lock directory; a holder that crashed is taken over after `stale` ms. Another live holder: skipped, not waited for. */
+function locked(lock, stale, work) {
   for (let attempt = 0;; attempt++) {
     try { mkdirSync(lock); break; } catch (error) {
-      if (error.code !== 'EEXIST' || attempt || Date.now() - statSync(lock).mtimeMs < 15 * 60_000) return;
+      if (error.code !== 'EEXIST' || attempt || Date.now() - statSync(lock).mtimeMs < stale) return;
       rmSync(lock, { recursive: true, force: true });
     }
   }
-  const log = openSync(path.join(home, '.install.log'), 'w');
-  try {
-    // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
-    for (const name of ['ponytail', 'impeccable'])
-      spawnSync(process.execPath, [path.join(scripts, `install-${name}-hooks.mjs`)], { stdio: ['ignore', log, log], timeout: 300_000 });
-  } finally {
-    closeSync(log);
-    rmSync(lock, { recursive: true, force: true });
-  }
+  try { work(); } finally { rmSync(lock, { recursive: true, force: true }); }
+}
+
+/** One installer run per machine. */
+function install() {
+  const home = path.join(homedir(), '.ponytail', 'workflow-kit');
+  mkdirSync(home, { recursive: true });
+  locked(path.join(home, '.install.lock'), 15 * 60_000, () => {
+    const log = openSync(path.join(home, '.install.log'), 'w');
+    try {
+      // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
+      for (const name of ['ponytail', 'impeccable'])
+        spawnSync(process.execPath, [path.join(scripts, `install-${name}-hooks.mjs`)], { stdio: ['ignore', log, log], timeout: 300_000 });
+    } finally {
+      closeSync(log);
+    }
+  });
 }
 
 if (event === '--install') { install(); process.exit(0); }
@@ -64,7 +69,7 @@ function emit() {
 }
 
 /** Fast-forward a clean checkout to its last fetched base; a dirty one only gets a warning. No network. */
-function followBase(root, kit) {
+function followBase(root) {
   for (const ref of ['@{upstream}', 'origin/HEAD']) {
     const base = git(root, 'rev-parse', '--verify', '-q', '--abbrev-ref', ref);
     if (!base.ok || !git(root, 'merge-base', '--is-ancestor', 'HEAD', base.out).ok) continue;
@@ -74,43 +79,70 @@ function followBase(root, kit) {
     if (git(root, '--no-optional-locks', 'status', '--porcelain', '--ignore-submodules').out) {
       say(`Checkout is ${behind} commit(s) behind ${name} (as of the last fetch) and has no commits of its own but local changes, so it was not fast-forwarded and its rules, skills and board commands may be outdated. Nothing was fetched: commit or stash the changes, run git fetch, then git merge --ff-only ${name}; skills load at session start, so restart after updating.`);
     } else {
-      // A kit on its own branch keeps it: the project moves, the kit does not follow.
-      const branched = existsSync(path.join(kit, '.git')) && git(kit, 'symbolic-ref', '-q', 'HEAD').ok;
-      git(root, '-c', 'core.hooksPath=/dev/null', ...(branched ? ['-c', 'submodule.recurse=false'] : []), 'merge', '--ff-only', '--quiet', base.out);
+      git(root, '-c', 'core.hooksPath=/dev/null', 'merge', '--ff-only', '--quiet', base.out);
     }
     return;
   }
 }
 
-/** Bring the kit of one checkout to the commit the project pins; report what needs a human. */
-function checkKit(dir) {
+const real = file => { try { return realpathSync.native(file); } catch { return ''; } };
+const mentionsKit = root => ['.claude/settings.json', '.codex/hooks.json'].some(file => {
+  try { return /"id":\s*"workflow-kit"/.test(readFileSync(path.join(root, file), 'utf8')); } catch { return false; }
+});
+
+/** The shared kit checkout: WORKFLOW_KIT_DIR, else `workflow-kit` next to the main checkout of the project (also from a worktree). */
+function sharedKit(root) {
+  if (process.env.WORKFLOW_KIT_DIR) return path.resolve(process.env.WORKFLOW_KIT_DIR);
+  const common = git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out;
+  return path.join(path.dirname(path.dirname(common)), 'workflow-kit');
+}
+
+let updated = false;
+/** `git pull --ff-only` and the kit's own submodules, once per run. Work in progress in the checkout is never touched, only reported. */
+function updateKit(kit) {
+  if (updated) return;
+  updated = true;
+  const branch = git(kit, 'symbolic-ref', '--short', '-q', 'HEAD').out;
+  if (branch !== 'main')
+    return say(`The shared Workflow Kit checkout ${kit} is ${branch ? `on branch ${branch}` : 'on a fixed revision'}, not on main, so it was not updated. When you are done with it: git -C ${kit} switch main`);
+  if (git(kit, '--no-optional-locks', 'status', '--porcelain', '--ignore-submodules').out || git(kit, 'rev-list', '-n', '1', 'HEAD', '--not', '--remotes').out)
+    return say(`The shared Workflow Kit checkout ${kit} has local changes or unpublished commits, so it was not updated. Kit work belongs in its own worktree of the kit repository: resolve them in ${kit}.`);
+  // Never prompt, never run hooks of the checkout, never wait long: the host kills the whole hook after 120 seconds.
+  const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' };
+  const step = (...args) => spawnSync('git', ['-C', kit, '-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', ...args],
+    { stdio: 'ignore', windowsHide: true, env, timeout: 40_000 }).status === 0;
+  locked(path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock'), 10 * 60_000, () => {
+    if (!step('pull', '--ff-only', '--quiet') || (existsSync(path.join(kit, '.gitmodules')) && !step('submodule', 'update', '--init', '--quiet')))
+      say(`The shared Workflow Kit checkout ${kit} could not be updated (offline or diverged?). Try: git -C ${kit} pull --ff-only && git -C ${kit} submodule update --init`);
+  });
+}
+
+/** Link `.vendor/workflow-kit` of one checkout to the shared kit (a Windows junction, else a symlink), then update the kit; report what needs a human. */
+function checkKit(dir, update) {
   const top = git(dir, 'rev-parse', '--show-toplevel');
   if (!top.ok || !top.out) {
     if (isDirectory(path.join(dir, '.vendor/workflow-kit')))
-      say(`${dir}: Workflow Kit not checked: git did not find the project repository (is git on PATH?). From that directory run git submodule update --init .vendor/workflow-kit`);
+      say(`${dir}: Workflow Kit not checked: git did not find the project repository (is git on PATH?).`);
     return;
   }
-  const root = top.out, kit = path.join(root, '.vendor/workflow-kit');
-  followBase(root, kit);
-  const [mode, pin] = git(root, 'ls-files', '-s', '--', '.vendor/workflow-kit').out.split(/\s+/);
-  if (mode !== '160000') return;
-  const current = () => git(kit, 'rev-parse', 'HEAD').out === pin && existsSync(path.join(kit, 'AGENT_RULES.md'));
-  if (current()) return;
-  const gitDir = git(root, 'rev-parse', '--absolute-git-dir').out;
-  // Remnants of an aborted first clone: empty folders only (rmdir never removes content).
-  for (const part of ['modules/.vendor/workflow-kit', 'modules/.vendor', 'modules']) try { rmdirSync(path.join(gitDir, part)); } catch { /* not empty or absent */ }
-  const dot = path.join(kit, '.git');
-  if (existsSync(dot) && statSync(dot).isFile() && !git(kit, 'rev-parse', '--git-dir').ok) {
-    if (readdirSync(kit).length === 1) rmSync(dot, { force: true });
-    else return say(`${root}: Workflow Kit has a .git that points nowhere and other files, so it was not repaired: if they are not needed, from that directory run rm -rf .vendor/workflow-kit && git submodule update --init .vendor/workflow-kit`);
+  const root = top.out, link = path.join(root, '.vendor/workflow-kit');
+  followBase(root);
+  const entry = lstatSync(link, { throwIfNoEntry: false });
+  // The kit's own repository runs its own scripts; a project without any kit hook is none of our business.
+  if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(self) || (!entry && !mentionsKit(root))) return;
+  const kit = sharedKit(root);
+  if (entry && !entry.isSymbolicLink())
+    return say(`${root}: .vendor/workflow-kit is still a submodule or a folder, not a link to the shared kit. Switch it: node ${path.join(kit, 'scripts/init-project.mjs')} --existing --cwd ${root}`);
+  if (!existsSync(path.join(kit, 'AGENT_RULES.md')))
+    return say(`${root}: the shared Workflow Kit checkout ${kit} is missing or incomplete. Clone it: git clone https://github.com/snagg-app/workflow-kit.git ${kit}`);
+  if (real(link) !== real(kit)) {
+    try {
+      rmSync(link, { force: true });
+      mkdirSync(path.dirname(link), { recursive: true });
+      symlinkSync(kit, link, 'junction');
+    } catch (error) { if (real(link) === real(kit)) return; /* a parallel session linked it first */ return say(`${root}: could not link .vendor/workflow-kit to ${kit} (${error.code ?? error.message}).`); }
   }
-  if (existsSync(dot) && (git(kit, 'status', '--porcelain', '--ignored', '--untracked-files=all').out
-    || git(kit, 'rev-list', '-n', '1', 'HEAD', '--not', '--remotes').out || git(kit, 'symbolic-ref', '-q', 'HEAD').ok))
-    return say(`${root}: Workflow Kit is not at the commit this project pins, but it has local changes, unpublished commits or a checked-out branch, so it was not updated: resolve them, then from that directory run git submodule update --init .vendor/workflow-kit`);
-  // Never prompt, never run hooks of the checkout.
-  spawnSync('git', ['-C', root, '-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', 'submodule', 'update', '--init', '--checkout', '.vendor/workflow-kit'],
-    { stdio: 'ignore', windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } });
-  if (!current()) say(`${root}: Workflow Kit missing, incomplete or not at the commit this project pins: from that directory run git submodule update --init .vendor/workflow-kit (still missing: git -C .vendor/workflow-kit checkout -- AGENT_RULES.md)`);
+  if (update) updateKit(kit);
 }
 
 function checkNodeModules(dir) {
@@ -177,7 +209,7 @@ else {
   const fresh = !['resume', 'compact', 'fork'].includes(input.source);
   if (agent === 'claude') fingerprint(project, input);
   // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
-  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) checkKit(dir);
+  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) checkKit(dir, event === 'SessionStart' && input.source !== 'compact');
   if (event === 'SessionStart') {
     checkNodeModules(project);
     if (fresh) spawn(process.execPath, [self, '--install'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
