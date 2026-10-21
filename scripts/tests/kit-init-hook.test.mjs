@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
@@ -18,132 +18,123 @@ const home = temp => { const dir = join(temp, 'home'); mkdirSync(dir, { recursiv
 
 // Every test runs in its own temporary directory with its own repositories, so they run side by side.
 describe('kit hook', { concurrency: true }, () => {
-test('initializes a missing kit once and leaves an initialized one alone', async t => {
-  const temp = temporary(t, 'kit-init ');
-  // The test submodule is a local path; Git blocks that transport for submodules unless allowed.
-  const local = { ...isolatedGit(temp), HOME: home(temp), GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'protocol.file.allow', GIT_CONFIG_VALUE_0: 'always' };
+/** A project whose hooks name the kit, a shared kit checkout (a clone of `upstream` on main) and the env that points the hook at it. */
+async function shared(t, label, { link = false, kitDir = true } = {}) {
+  const temp = temporary(t, label);
+  const env = { ...isolatedGit(temp), HOME: home(temp), CLAUDE_PROJECT_DIR: '', WORKFLOW_KIT_DIR: join(temp, 'kit') };
   const git = async (cwd, ...a) => {
-    const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env: local });
+    const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env });
     assert.equal(result.status, 0, result.stderr);
-    return result.stdout;
+    return result.stdout.trim();
   };
-  const fixture = async (name, ...files) => { const dir = join(temp, name); mkdirSync(dir); await git(dir, 'init', '--quiet'); for (const file of files) writeFileSync(join(dir, file), 'x'); return dir; };
+  const [upstream, kit, project] = ['upstream', 'kit', 'project'].map(name => join(temp, name));
+  mkdirSync(upstream); await git(upstream, 'init', '--quiet', '-b', 'main');
+  writeFileSync(join(upstream, 'AGENT_RULES.md'), 'x');
+  await git(upstream, 'add', '.'); await git(upstream, 'commit', '--quiet', '-m', 'kit');
+  if (kitDir) await git(temp, 'clone', '--quiet', upstream, kit);
+  mkdirSync(join(project, '.claude'), { recursive: true }); await git(project, 'init', '--quiet', '-b', 'main');
+  writeFileSync(join(project, '.claude/settings.json'), JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ id: 'workflow-kit' }] }] } }));
+  writeFileSync(join(project, '.gitignore'), '/.vendor/workflow-kit\n');
+  await git(project, 'add', '.'); await git(project, 'commit', '--quiet', '-m', 'project');
+  // `resume` starts no installer; the personal home has no snapshots, so the output also carries the Ponytail hint.
+  const trial = (extra = {}, source = 'resume', cwd = project) => call('SessionStart', cwd, { ...env, CLAUDE_PROJECT_DIR: cwd, ...extra }, { source });
+  const newer = async () => { await git(upstream, 'commit', '--quiet', '--allow-empty', '-m', `newer ${Math.random()}`); return git(upstream, 'rev-parse', 'HEAD'); };
+  const head = () => git(kit, 'rev-parse', 'HEAD');
+  const linked = () => existsSync(join(project, '.vendor/workflow-kit')) && realpathSync.native(join(project, '.vendor/workflow-kit')) === realpathSync.native(kit);
+  return { temp, env, git, upstream, kit, project, trial, newer, head, linked };
+}
+const notice = /Workflow Kit/;
 
-  const kit = await fixture('kit', 'AGENT_RULES.md');
-  // Checkout code the hook must not run: a team-wide relative core.hooksPath reaches the kit's own .githooks.
-  mkdirSync(join(kit, '.githooks'));
-  writeFileSync(join(kit, '.githooks/post-checkout'), '#!/bin/sh\necho ran > "$HOOK_MARKER"\n');
-  await git(kit, 'add', '.'); await git(kit, 'update-index', '--chmod=+x', '.githooks/post-checkout'); await git(kit, 'commit', '--quiet', '-m', 'kit');
-  const origin = await fixture('origin', 'README.md');
-  await git(origin, 'submodule', '--quiet', 'add', kit.replaceAll('\\', '/'), '.vendor/workflow-kit');
-  await git(origin, 'add', '.'); await git(origin, 'commit', '--quiet', '-m', 'consumer');
-  const plain = await fixture('plain', 'README.md');
-  await git(plain, 'add', '.'); await git(plain, 'commit', '--quiet', '-m', 'plain');
-  let count = 0;
-  const clone = async () => { const dir = join(temp, 'clone' + count++); await git(temp, 'clone', '--quiet', origin, dir); return dir; };
-  const marker = join(temp, 'hook-ran').replaceAll('\\', '/');
-  const nested = { ...local, HOOK_MARKER: marker, GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_1: 'core.hooksPath', GIT_CONFIG_VALUE_1: '.githooks' };
-  // Precondition: without the hook's protection that git hook does run during the init.
-  const bare = await clone();
-  const initialized = await spawn('git', ['submodule', '--quiet', 'update', '--init', '--checkout', '.vendor/workflow-kit'], { cwd: bare, env: nested });
-  assert.equal(initialized.status, 0, initialized.stderr);
-  assert.ok(existsSync(marker), 'the fixture hook runs when nothing disables hooks');
-  rmSync(marker);
-
-  const trial = (cwd, env) => call('SubagentStart', cwd, { ...nested, ...env });
-  const [first, second] = [await clone(), await clone()];
-  assert.ok(!existsSync(join(first, '.vendor/workflow-kit/AGENT_RULES.md')), 'fresh clone starts without the kit');
-
-  let result = await trial(first);
+test('a fresh project gets the link to the shared kit and a clean git status; the kit follows main', async t => {
+  const f = await shared(t, 'kit-shared ');
+  assert.ok(!f.linked());
+  let result = await f.trial();
   assert.equal(result.status, 0, result.stderr);
-  assert.equal(result.stdout, '', 'a successful init prints nothing');
-  assert.ok(existsSync(join(first, '.vendor/workflow-kit/AGENT_RULES.md')), 'the hook initializes the kit');
-  assert.ok(!existsSync(marker), 'the hook runs no git hook from the checkout');
+  assert.doesNotMatch(result.stdout, notice);
+  assert.ok(f.linked(), 'the hook links .vendor/workflow-kit to the shared checkout');
+  assert.equal(await f.git(f.project, 'status', '--porcelain'), '', 'the link is ignored');
 
-  const rules = join(first, '.vendor/workflow-kit/AGENT_RULES.md');
-  rmSync(rules);
-  result = await trial(first);
-  assert.notEqual(result.stdout.trim(), '', 'a kit whose rules file is missing despite the update is reported');
-  await git(join(first, '.vendor/workflow-kit'), 'checkout', '--', 'AGENT_RULES.md');
+  const tip = await f.newer();
+  result = await f.trial();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(await f.head(), tip, 'the next session start has the new kit commit, without a merge in the project');
+});
 
-  rename(kit, `${kit}-gone`);
-  result = await trial(first);
-  assert.deepEqual([result.status, result.stdout, result.stderr], [0, '', ''], 'an initialized kit is not touched, not even to reach the source');
+test('the shared kit is found next to the main checkout, also from a worktree', async t => {
+  const f = await shared(t, 'kit-worktree ');
+  const { WORKFLOW_KIT_DIR, ...env } = f.env;
+  const wanted = join(f.temp, 'workflow-kit');
+  await f.git(f.temp, 'clone', '--quiet', f.upstream, wanted);
+  const worktree = join(f.temp, 'wt');
+  await f.git(f.project, 'worktree', 'add', '--quiet', '--detach', worktree, 'HEAD');
+  const result = await call('SessionStart', worktree, { ...env, CLAUDE_PROJECT_DIR: worktree }, { source: 'resume' });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(realpathSync.native(join(worktree, '.vendor/workflow-kit')), realpathSync.native(wanted));
+});
 
-  result = await trial(second);
-  assert.equal(result.status, 0, 'a failed init must not abort the session');
-  assert.notEqual(result.stdout.trim(), '', 'a failed init prints the manual command');
-  assert.ok(!existsSync(join(second, '.vendor/workflow-kit/AGENT_RULES.md')));
-  rename(`${kit}-gone`, kit);
-
-  // An initialized kit whose gitlink moved on (a base merge) lags behind the pin; the pin commit is not fetched yet.
-  const head = async inner => (await git(inner, 'rev-parse', 'HEAD')).trim();
-  // Initializing a submodule is the slowest Git call here, so it happens once; every case starts from a copy.
-  let template;
-  const stale = async () => {
-    template ??= (async () => {
-      const dir = await clone();
-      await git(dir, 'submodule', '--quiet', 'update', '--init', '.vendor/workflow-kit');
-      return dir;
-    })();
-    const dir = join(temp, 'clone' + count++), inner = join(dir, '.vendor/workflow-kit');
-    cpSync(await template, dir, { recursive: true });
-    const old = await head(inner);
-    await git(kit, 'commit', '--quiet', '--allow-empty', '-m', 'newer');
-    const pin = await head(kit);
-    await git(dir, 'update-index', '--cacheinfo', `160000,${pin},.vendor/workflow-kit`);
-    assert.notEqual(old, pin, 'the kit lags behind its pin');
-    return { dir, inner, old, pin };
+test('work in the shared kit is never touched, only reported', async t => {
+  const f = await shared(t, 'kit-guard ');
+  await f.trial();
+  const stays = async (why, pattern) => {
+    const before = await f.head(), tip = await f.newer();
+    const result = await f.trial();
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, pattern, why);
+    assert.doesNotThrow(() => JSON.parse(result.stdout), 'host JSON');
+    assert.equal(await f.head(), before, why);
+    return tip;
   };
-  let lag = await stale();
-  result = await trial(lag.dir);
-  assert.deepEqual([result.status, result.stdout, await head(lag.inner)], [0, '', lag.pin], 'the hook moves a lagging kit to the pin');
-  assert.ok(!existsSync(marker), 'the update runs no git hook from the checkout');
+  writeFileSync(join(f.kit, 'notes.txt'), 'mine');
+  await stays('local changes', /local changes/);
+  rmSync(join(f.kit, 'notes.txt'));
+  await f.git(f.kit, 'commit', '--quiet', '--allow-empty', '-m', 'mine');
+  await stays('an unpublished commit', /unpublished/);
+  await f.git(f.kit, 'reset', '--quiet', '--hard', 'origin/main');
+  await f.git(f.kit, 'switch', '--quiet', '-c', 'work');
+  await stays('another branch', /branch work/);
+  await f.git(f.kit, 'switch', '--quiet', '--detach');
+  await stays('a fixed revision', /fixed revision/);
+  await f.git(f.kit, 'switch', '--quiet', 'main');
+  await f.trial();
+  assert.equal(await f.head(), await f.git(f.upstream, 'rev-parse', 'HEAD'), 'back on a clean main the kit follows again');
+});
 
-  // Work that a checkout would lose stays: local changes, unpublished commits. Both are reported.
-  lag = await stale();
-  writeFileSync(join(lag.inner, 'notes.txt'), 'mine');
-  result = await trial(lag.dir);
-  assert.notEqual(result.stdout.trim(), '', 'a lagging kit with local changes is reported');
-  assert.deepEqual([await head(lag.inner), existsSync(join(lag.inner, 'notes.txt'))], [lag.old, true]);
-  lag = await stale();
-  await git(lag.inner, 'commit', '--quiet', '--allow-empty', '-m', 'mine');
-  const mine = await head(lag.inner);
-  result = await trial(lag.dir);
-  assert.notEqual(result.stdout.trim(), '', 'a lagging kit with unpublished commits is reported');
-  assert.equal(await head(lag.inner), mine);
+test('a running update is skipped, a compaction does not update, an unreachable source is reported', async t => {
+  const f = await shared(t, 'kit-lock ');
+  await f.trial();
+  const lock = join(f.kit, '.git/kit-update.lock'), before = await f.head();
+  await f.newer();
+  mkdirSync(lock);
+  assert.equal((await f.trial()).status, 0);
+  assert.equal(await f.head(), before, 'another session holds the lock: no pull, no waiting');
+  rmSync(lock, { recursive: true });
+  assert.equal((await f.trial({}, 'compact')).status, 0);
+  assert.equal(await f.head(), before, 'a compaction is no session start');
+  rename(f.upstream, `${f.upstream}-gone`);
+  const result = await f.trial();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /could not be updated/);
+  assert.ok(!existsSync(lock), 'the lock is released');
+});
 
-  lag = await stale();
-  rename(kit, `${kit}-gone`);
-  result = await trial(lag.dir);
-  assert.notEqual(result.stdout.trim(), '', 'a lagging kit that cannot be updated is reported');
-  assert.equal(await head(lag.inner), lag.old);
-  rename(`${kit}-gone`, kit);
+test('a wrong link is replaced, a leftover submodule folder only reported, a project without kit hooks left alone', async t => {
+  const f = await shared(t, 'kit-link ');
+  const link = join(f.project, '.vendor/workflow-kit'), other = join(f.temp, 'other');
+  mkdirSync(other); mkdirSync(join(f.project, '.vendor'));
+  symlinkSync(other, link, 'junction');
+  assert.equal((await f.trial()).status, 0);
+  assert.ok(f.linked(), 'a link to another folder points at the shared kit afterwards');
+  assert.ok(existsSync(other), 'the old target is not touched');
 
-  // A .git file that points nowhere (aborted first clone): with other files in the folder the hook only reports,
-  // with nothing but the .git file it clears it, and an empty modules remnant, and loads the pin again.
-  lag = await stale();
-  rmSync(join(lag.dir, '.git/modules'), { recursive: true });
-  result = await trial(lag.dir);
-  assert.notEqual(result.stdout.trim(), '', 'a kit with a dangling .git and other files is reported');
-  assert.ok(existsSync(join(lag.inner, 'AGENT_RULES.md')));
-  for (const name of ['AGENT_RULES.md', '.githooks']) rmSync(join(lag.inner, name), { recursive: true });
-  mkdirSync(join(lag.dir, '.git/modules'));
-  result = await trial(lag.dir);
-  assert.deepEqual([result.status, result.stdout, await head(lag.inner)], [0, '', lag.pin], 'the hook repairs a dangling .git');
+  rmSync(link); mkdirSync(link); writeFileSync(join(link, 'mine.txt'), 'x');
+  const result = await f.trial();
+  assert.match(result.stdout, /still a submodule or a folder/);
+  assert.ok(existsSync(join(link, 'mine.txt')), 'a real folder stays');
 
-  // The agent's project directory wins over the hook's working directory.
-  const away = await clone();
-  result = await trial(temp, { CLAUDE_PROJECT_DIR: away });
-  assert.ok(existsSync(join(away, '.vendor/workflow-kit/AGENT_RULES.md')), 'the hook initializes the project directory, not the working directory');
-
-  const noGit = mkdtempSync(join(temp, 'no-git '));
-  result = await trial(await clone(), { PATH: noGit });
-  assert.deepEqual([result.status, result.stdout.trim() !== ''], [0, true], 'a missing git is reported, not skipped silently');
-
-  result = await trial(plain);
-  assert.deepEqual([result.status, result.stdout], [0, ''], 'a project without a kit gitlink is left alone');
-  assert.ok(!existsSync(join(plain, '.vendor')));
+  const plain = join(f.temp, 'plain');
+  mkdirSync(plain); await f.git(plain, 'init', '--quiet');
+  assert.equal((await f.trial({}, 'resume', plain)).status, 0);
+  assert.ok(!existsSync(join(plain, '.vendor')), 'no kit hooks, no link');
 });
 
 test('a clean checkout is fast-forwarded to its fetched base, a changed one is warned, and the network is never needed', async t => {
@@ -237,43 +228,6 @@ test('a clean checkout is fast-forwarded to its fetched base, a changed one is w
   assert.ok(!existsSync(marker), 'the hook runs no git hook from the checkout');
 });
 
-test('the kit moves to the pin of the fast-forwarded checkout', async t => {
-  const temp = temporary(t, 'kit-follow ');
-  // submodule.recurse=true is the documented setup: a project fast-forward then also checks out the new pin in the kit.
-  const env = { ...isolatedGit(temp), HOME: home(temp), CLAUDE_PROJECT_DIR: '', GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'protocol.file.allow', GIT_CONFIG_VALUE_0: 'always', GIT_CONFIG_KEY_1: 'submodule.recurse', GIT_CONFIG_VALUE_1: 'true' };
-  const git = async (cwd, ...a) => {
-    const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env });
-    assert.equal(result.status, 0, result.stderr);
-    return result.stdout.trim();
-  };
-  const fixture = async (name, file) => { const dir = join(temp, name); mkdirSync(dir); await git(dir, 'init', '--quiet'); writeFileSync(join(dir, file), 'x'); await git(dir, 'add', '.'); await git(dir, 'commit', '--quiet', '-m', name); return dir; };
-  const kit = await fixture('kit', 'AGENT_RULES.md'), origin = await fixture('origin', 'README.md');
-  await git(origin, 'submodule', '--quiet', 'add', kit.replaceAll('\\', '/'), '.vendor/workflow-kit');
-  await git(origin, 'commit', '--quiet', '-m', 'consumer');
-  // A second clone works on a clean, published kit branch (#484).
-  const [work, branched] = [join(temp, 'work'), join(temp, 'branched')];
-  for (const dir of [work, branched]) await git(temp, 'clone', '--quiet', '--recurse-submodules', origin, dir);
-  const [inner, branch] = [join(work, '.vendor/workflow-kit'), join(branched, '.vendor/workflow-kit')];
-  await git(branch, 'switch', '--quiet', '-c', 'mine');
-  const old = await git(branch, 'rev-parse', 'HEAD');
-  // The consumer moves its pin to a newer kit commit; the clones only fetch that.
-  await git(kit, 'commit', '--quiet', '--allow-empty', '-m', 'newer');
-  const pin = await git(kit, 'rev-parse', 'HEAD');
-  await git(join(origin, '.vendor/workflow-kit'), 'pull', '--quiet');
-  await git(origin, 'commit', '--quiet', '-am', 'bump the kit');
-  for (const dir of [work, branched]) await git(dir, 'fetch', '--quiet');
-  assert.notEqual(await git(inner, 'rev-parse', 'HEAD'), pin, 'the kit lags behind the fetched pin');
-
-  const result = await call('SubagentStart', work, env);
-  assert.deepEqual([result.status, result.stdout], [0, ''], result.stderr);
-  assert.deepEqual([await git(work, 'rev-parse', 'HEAD'), await git(inner, 'rev-parse', 'HEAD')], [await git(origin, 'rev-parse', 'HEAD'), pin]);
-
-  // The project still moves, but the kit keeps its branch and commit.
-  await call('SubagentStart', branched, env);
-  assert.equal(await git(branched, 'rev-parse', 'HEAD'), await git(origin, 'rev-parse', 'HEAD'), 'the project fast-forwards');
-  assert.deepEqual([await git(branch, 'symbolic-ref', '--short', 'HEAD'), await git(branch, 'rev-parse', 'HEAD')], ['mine', old], 'a kit branch is left alone');
-});
-
 test('a missing node_modules is reported with the project setup and nothing is installed', async t => {
   const temp = temporary(t, 'kit-modules ');
   const env = { ...isolatedGit(temp), HOME: home(temp), CLAUDE_PROJECT_DIR: '' };
@@ -315,31 +269,6 @@ test('a missing node_modules is reported with the project setup and nothing is i
   await silent(temp, 'a directory outside any repository is left alone');
 });
 
-// Claude Code creates an agent worktree without checkout and resets it, so post-checkout never runs (#479). The hook
-// then gets CLAUDE_PROJECT_DIR of the session that started the agent; the directory of the agent itself is on stdin.
-test('the kit of the worktree named on stdin is filled, not only that of the project directory', async t => {
-  const temp = temporary(t, 'kit-worktree ');
-  const env = { ...isolatedGit(temp), HOME: home(temp), GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'protocol.file.allow', GIT_CONFIG_VALUE_0: 'always' };
-  const git = async (cwd, ...a) => {
-    const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env });
-    assert.equal(result.status, 0, result.stderr);
-  };
-  const fixture = async (name, file) => { const dir = join(temp, name); mkdirSync(dir); await git(dir, 'init', '--quiet'); writeFileSync(join(dir, file), 'x'); await git(dir, 'add', '.'); await git(dir, 'commit', '--quiet', '-m', name); return dir; };
-  const kit = await fixture('kit', 'AGENT_RULES.md'), origin = await fixture('origin', 'README.md');
-  await git(origin, 'submodule', '--quiet', 'add', kit.replaceAll('\\', '/'), '.vendor/workflow-kit');
-  await git(origin, 'commit', '--quiet', '-m', 'consumer');
-  const project = join(temp, 'project'), worktree = join(temp, 'worktree');
-  await git(temp, 'clone', '--quiet', '--recurse-submodules', origin, project);
-  await git(project, 'worktree', 'add', '--quiet', '--no-checkout', '--detach', worktree, 'HEAD');
-  await git(worktree, 'reset', '--quiet', '--hard');
-  const rules = join(worktree, '.vendor/workflow-kit/AGENT_RULES.md');
-  assert.ok(!existsSync(rules), 'a worktree created like Claude Code does starts without the kit');
-
-  const result = await call('SubagentStart', project, { ...env, CLAUDE_PROJECT_DIR: project }, { cwd: worktree });
-  assert.deepEqual([result.status, result.stdout], [0, ''], result.stderr);
-  assert.ok(existsSync(rules), 'the kit of the agent worktree is initialized');
-});
-
 // Claude Code reads hooks once per session (#513): SessionStart keeps a fingerprint, SubagentStart compares it with the last fetched base.
 test('a subagent is warned when the base changed the hook settings since the session started', async t => {
   const temp = temporary(t, 'kit-fingerprint ');
@@ -373,7 +302,7 @@ test('a subagent is warned when the base changed the hook settings since the ses
   assert.equal(await warns('new'), false, 'a session that started after the change is not');
 });
 
-// The one-line entries of the agent settings: they only find Node and the kit, then hand over to kit-hook.mjs.
+// The one-line entries of the agent settings: they only find Node and the kit (cloning the shared checkout if it is missing), then hand over to kit-hook.mjs.
 const sh = process.platform === 'win32' ? spawnSync('where', ['sh']).stdout?.toString().split(/\r?\n/)[0] : '/bin/sh';
 // Absolute: the Node-missing trial runs the shell with an empty PATH.
 const powershell = process.platform === 'win32' ? join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : spawnSync('which', ['pwsh']).stdout?.toString().trim();
@@ -384,49 +313,52 @@ const entries = [
 ];
 for (const [file, key, shell, args] of entries) {
   const available = Boolean(shell) && spawnSync(shell, args.at(-1) === '-c' ? ['-c', 'exit 0'] : ['-NoProfile', '-Command', 'exit 0']).status === 0;
-  test(`${file} ${key}: Node missing is a clear message, a missing kit is initialized, then kit-hook.mjs gets event and agent`, { skip: !available && `${shell} unavailable` }, async t => {
+  test(`${file} ${key}: Node missing is a clear message, a missing kit is cloned, then kit-hook.mjs gets event and agent`, { skip: !available && `${shell} unavailable` }, async t => {
     const temp = temporary(t, 'kit-entry ');
     const handler = event => Object.values(JSON.parse(readFileSync(join(templates, file), 'utf8')).hooks[event]).flatMap(group => group.hooks)[0][key];
-    const env = { ...isolatedGit(temp), HOME: home(temp), GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'protocol.file.allow', GIT_CONFIG_VALUE_0: 'always', HOOK_MARKER: join(temp, 'marker') };
+    const origin = join(temp, 'origin'), project = join(temp, 'project');
+    // The kit's address is rewritten to a local repository, so the trial needs no network.
+    const rewrite = to => ({ GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.longpaths', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_KEY_1: `url.${to.replaceAll('\\', '/')}.insteadOf`, GIT_CONFIG_VALUE_1: 'https://github.com/snagg-app/workflow-kit.git' });
+    const env = { ...isolatedGit(temp), HOME: home(temp), HOOK_MARKER: join(temp, 'marker'), ...rewrite(origin) };
+    delete env.WORKFLOW_KIT_DIR;
     const git = async (cwd, ...a) => {
       const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env });
       assert.equal(result.status, 0, result.stderr);
     };
     // A kit whose hook module only records how it was called.
-    const kit = join(temp, 'kit'), origin = join(temp, 'origin'), project = join(temp, 'project');
-    mkdirSync(join(kit, 'scripts'), { recursive: true });
-    writeFileSync(join(kit, 'AGENT_RULES.md'), 'x');
-    writeFileSync(join(kit, 'scripts/kit-hook.mjs'), "import { writeFileSync } from 'node:fs'; writeFileSync(process.env.HOOK_MARKER, process.argv.slice(2).join(' '));\n");
-    await git(kit, 'init', '--quiet'); await git(kit, 'add', '.'); await git(kit, 'commit', '--quiet', '-m', 'kit');
-    mkdirSync(origin); await git(origin, 'init', '--quiet'); writeFileSync(join(origin, 'README.md'), 'x');
-    await git(origin, 'submodule', '--quiet', 'add', kit.replaceAll('\\', '/'), '.vendor/workflow-kit');
-    await git(origin, 'add', '.'); await git(origin, 'commit', '--quiet', '-m', 'consumer');
-    await git(temp, 'clone', '--quiet', origin, project);
+    mkdirSync(join(origin, 'scripts'), { recursive: true });
+    writeFileSync(join(origin, 'AGENT_RULES.md'), 'x');
+    writeFileSync(join(origin, 'scripts/kit-hook.mjs'), "import { writeFileSync } from 'node:fs'; writeFileSync(process.env.HOOK_MARKER, process.argv.slice(2).join(' '));\n");
+    await git(origin, 'init', '--quiet'); await git(origin, 'add', '.'); await git(origin, 'commit', '--quiet', '-m', 'kit');
+    mkdirSync(project); await git(project, 'init', '--quiet');
     const run = (command, extra) => spawn(shell, [...args, command], { cwd: project, env: { ...env, CLAUDE_PROJECT_DIR: project, ...extra }, input: '{}' });
+    const agent = file.startsWith('.claude') ? 'claude' : 'codex';
 
     const noNode = await run(handler('SessionStart'), { PATH: mkdtempSync(join(temp, 'empty ')) });
     assert.equal(noNode.status, 0, noNode.stderr);
     assert.match(JSON.parse(noNode.stdout).systemMessage, /Node is missing/);
     assert.ok(!existsSync(env.HOOK_MARKER));
 
-    assert.ok(!existsSync(join(project, '.vendor/workflow-kit/scripts/kit-hook.mjs')), 'the project starts without the kit');
-    for (const event of ['SessionStart', 'UserPromptSubmit']) {
+    // Without the shared checkout nothing can run; the clone is the only job of the entry, and it lands next to the project.
+    const kit = join(temp, 'workflow-kit');
+    const broken = await run(handler('SessionStart'), rewrite(join(temp, 'nowhere')));
+    assert.equal(broken.status, 0, broken.stderr);
+    assert.match(JSON.parse(broken.stdout).systemMessage, /could not be cloned/);
+    assert.ok(!existsSync(env.HOOK_MARKER) && !existsSync(kit));
+    for (const event of ['SessionStart', 'SubagentStart']) {
       rmSync(env.HOOK_MARKER, { force: true });
       const result = await run(handler(event));
       assert.equal(result.status, 0, result.stderr);
-      if (event === 'SessionStart') assert.ok(existsSync(join(project, '.vendor/workflow-kit/scripts/kit-hook.mjs')), 'the entry initializes the missing kit');
-      assert.equal(readFileSync(env.HOOK_MARKER, 'utf8'), `${event} --agent ${file.startsWith('.claude') ? 'claude' : 'codex'}`);
+      assert.ok(existsSync(join(kit, 'scripts/kit-hook.mjs')), 'the entry clones the missing shared kit');
+      assert.equal(readFileSync(env.HOOK_MARKER, 'utf8'), `${event} --agent ${agent}`);
     }
 
-    // An aborted first clone leaves a .git file that points nowhere and an empty modules folder: the entry still reaches the kit.
-    const second = join(temp, 'second');
-    await git(temp, 'clone', '--quiet', '--recurse-submodules', origin, second);
-    rmSync(join(second, '.git/modules'), { recursive: true });
-    for (const name of ['AGENT_RULES.md', 'scripts']) rmSync(join(second, '.vendor/workflow-kit', name), { recursive: true });
-    mkdirSync(join(second, '.git/modules'));
-    const repaired = await spawn(shell, [...args, handler('SessionStart')], { cwd: second, env: { ...env, CLAUDE_PROJECT_DIR: second }, input: '{}' });
-    assert.equal(repaired.status, 0, repaired.stderr);
-    assert.ok(existsSync(join(second, '.vendor/workflow-kit/scripts/kit-hook.mjs')), 'the entry repairs a dangling .git');
+    // WORKFLOW_KIT_DIR names another place.
+    const chosen = join(temp, 'chosen');
+    await run(handler('UserPromptSubmit'), { WORKFLOW_KIT_DIR: chosen });
+    assert.ok(!existsSync(chosen), 'only SessionStart and SubagentStart clone');
+    await run(handler('SessionStart'), { WORKFLOW_KIT_DIR: chosen });
+    assert.ok(existsSync(join(chosen, 'scripts/kit-hook.mjs')));
   });
 }
 });

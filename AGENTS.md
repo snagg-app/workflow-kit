@@ -27,6 +27,6 @@ kit paths drop the `.vendor/workflow-kit/` prefix (`node scripts/board.mjs start
   them, secrets or private product content. The [hook rule](AGENT_RULES.md#hooks)
   authorizes agents to invoke the two existing installers; no hook or script may,
   except the hook module `scripts/kit-hook.mjs` (Milan, 21.10.2026, #666), which starts them detached at SessionStart.
-  The two commands the hook module runs itself are `git merge --ff-only` (a clean checkout without own commits,
-  to the last fetched base) and `git submodule update --init .vendor/workflow-kit` (for a missing or
-  lagging kit, and from the Git `post-checkout` hook after a branch checkout).
+  The commands the hook module and its entries run themselves are `git merge --ff-only` (a clean project checkout
+  without own commits, to the last fetched base), `git clone` of the shared kit when it is missing, and
+  `git pull --ff-only` with `git submodule update --init` in that shared checkout (on `main`, clean, nothing unpublished).
