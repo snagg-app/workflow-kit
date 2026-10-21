@@ -45,7 +45,7 @@ whose `git reset --hard` aborted with `could not reset submodule index` and left
 ## Hooks
 
 A SessionStart hint "Ponytail hooks are OFF" or "Impeccable hooks are OFF" says the hooks are unavailable
-right now. They install and update themselves: the SessionStart handler `scripts/ensure-hooks.mjs` starts the installers in
+right now. They install and update themselves: the hook module `scripts/kit-hook.mjs` starts the installers at SessionStart in
 the background (at most one run per machine, never blocking the start), so the hooks are active from the next session start
 and after every kit update that changes a version. Do not install them yourself; tell the user to restart once and trust the
 hooks. Only if a hint persists after a restart, node is missing from PATH or the install failed (see `~/.ponytail/workflow-kit/.install.log`): then
@@ -55,10 +55,10 @@ in the Workflow Kit repository itself). The snapshot is per user, so every check
 Two more commands run from a hook on its own. First, a checkout that is behind its fetched upstream or `origin/HEAD` with no commits of its own and a clean working tree
 is fast-forwarded (`git merge --ff-only`, nothing is fetched). Then, when `.vendor/workflow-kit/AGENT_RULES.md` is missing
 or the kit is not at the commit the project's gitlink pins (a fresh worktree, or a base merge that moved the pin), the committed SessionStart and SubagentStart
-hooks run `git submodule update --init .vendor/workflow-kit`. Both use `-c core.hooksPath=/dev/null`, so no Git hook of the checkout runs (source `.gitmodules`, the commit
-the gitlink pins). A kit at its pin stays untouched. A lagging kit with local changes or unpublished commits is not updated; that case, a failed update and a missing `git` print a hint with the command, which the hook adds to the agent's context. The hooks locate the project from `CLAUDE_PROJECT_DIR` when the agent sets it, else from the working directory, and the Claude Code hooks additionally check the `cwd` on stdin: Claude Code creates an agent worktree without checkout (no post-checkout hook) and sets `CLAUDE_PROJECT_DIR` to the starting session's project, so only `cwd` names the agent's own worktree. A second SessionStart and SubagentStart handler only reads: it reports such a checkout when local changes stopped the fast-forward (a third SessionStart handler only reads too: it reports a missing `node_modules` next to a `package.json` with dependencies and names the `"setup"` command of `.github/workflow-project.json`, never installing);
+hook module (`scripts/kit-hook.mjs`; the entry in the agent settings only starts it) runs `git submodule update --init .vendor/workflow-kit`. Both use `-c core.hooksPath=/dev/null`, so no Git hook of the checkout runs (source `.gitmodules`, the commit
+the gitlink pins). A kit at its pin stays untouched. A lagging kit with local changes or unpublished commits is not updated; that case, a failed update and a missing `git` print a hint with the command, which the hook adds to the agent's context. The hooks locate the project from `CLAUDE_PROJECT_DIR` when the agent sets it, else from the working directory, and the Claude Code hooks additionally check the `cwd` on stdin: Claude Code creates an agent worktree without checkout (no post-checkout hook) and sets `CLAUDE_PROJECT_DIR` to the starting session's project, so only `cwd` names the agent's own worktree. The same module reports such a checkout when local changes stopped the fast-forward (and, at SessionStart, it reports a missing `node_modules` next to a `package.json` with dependencies and names the `"setup"` command of `.github/workflow-project.json`, never installing);
 then commit or stash them, run `git fetch` and `git merge --ff-only` as it says, and restart so skills load current
-(also after a fast-forward by the hook: skills load at session start). Besides the hook installers above, no
+(also after a fast-forward by the hook: skills load at session start). Besides the hook installers above (started only by the hook module), no
 provisioning or other command runs from a hook. It finds `git` on PATH like every agent command.
 The Git `post-checkout` hook, copied into the clone's Git directory only by an explicit run of `install-git-hooks.mjs` (never taken from the checked-out branch), runs
 the same update after a branch checkout so the kit follows the new gitlink; it skips a kit with local

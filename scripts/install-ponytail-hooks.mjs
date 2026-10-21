@@ -1,13 +1,13 @@
 // Zweck: Einen geprueften Ponytail-Snapshot im Benutzerverzeichnis installieren.
 // Nutzen: Automatische Hooks fuehren weder veraenderliche Checkout-Dateien noch ein Node aus dem PATH aus.
-// Aufruf: Von ensure-hooks.mjs beim Sessionstart oder von Hand im Projekt; persoenliche Hook-Freigabe bleibt getrennt.
+// Aufruf: Von kit-hook.mjs beim Sessionstart oder von Hand im Projekt; persoenliche Hook-Freigabe bleibt getrennt.
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { projectRoot } from './checkout-root.mjs';
 
 const root = projectRoot();
-const version = '5.2.0-1';
+const { ponytail: version } = JSON.parse(readFileSync(new URL('versions.json', import.meta.url), 'utf8'));
 const destination = path.join(homedir(), '.ponytail', 'workflow-kit', version);
 const insideCheckout = directory => {
   for (;; directory = path.dirname(directory)) {
@@ -68,7 +68,7 @@ const hooks = path.join(destination, '.agents', 'hooks');
 const shellQuote = String.raw`'\''`;
 const sh = value => `'${value.replaceAll('\\', '/').replaceAll("'", shellQuote)}'`;
 const cmd = value => value.replaceAll('%', '%%');
-// A removed Node (version manager update) must not switch the hooks off silently: SessionStart says so; ensure-hooks.mjs reinstalls at the same start.
+// A removed Node (version manager update) must not switch the hooks off silently: SessionStart says so; kit-hook.mjs reinstalls at the same start.
 const hint = JSON.stringify({ systemMessage: 'Ponytail hooks are OFF: the pinned Node is gone. They reinstall themselves at session start (needs node on PATH): restart the session once. If still OFF, run node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs (maintainer pre-authorized, writes no trust).' });
 const launchers = {
   'launch.sh': `#!/bin/sh

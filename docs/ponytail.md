@@ -18,8 +18,8 @@ Follow [hook installation and trust](../README.md#hooks).
 `~/.ponytail/workflow-kit/<version>/`, refusing destinations inside any Git checkout.
 Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 
-- The launchers never search PATH and never run checkout files. Only the SessionStart bootstrap
-  `scripts/ensure-hooks.mjs` runs from the checkout with the PATH Node, to install what is missing
+- The launchers never search PATH and never run checkout files. Only the hook module
+  `scripts/kit-hook.mjs` runs from the checkout with the PATH Node, to install what is missing and to start the launchers
   (Milan, 21.10.2026, [#666](https://github.com/snagg-app/workflow-kit/issues/666)).
 - `NODE_OPTIONS` and `NODE_PATH` are cleared.
 - A Node inside a checkout is refused.
