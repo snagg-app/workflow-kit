@@ -3084,7 +3084,8 @@ async function done() {
     assert.ok(gate.doneBaseMerge === undefined || ['always', 'overlap'].includes(gate.doneBaseMerge), 'doneBaseMerge must be always or overlap; omit it for always');
   } catch (error) { return fail(`cannot read the base-merge policy: ${error.message}`); }
   // An untested head applies the target base's policy (#558, #579). A conflict is aborted, the branch stays as it was.
-  if (!isTested()) {
+  // #656: a head the PR does not show yet is pushed even when its tested marker exists (a run that ended after the tests).
+  if (!isTested() || localHead() !== pull.head.sha) {
     const base = `origin/${pull.base.ref}`, failure = error => String(error.stderr || error.message).trim();
     // Only the PR's own branch of this repository is merged into and pushed.
     const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
