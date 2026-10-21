@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
+import { providers } from './agents.mjs';
 import { checkDirectory, materialize } from './provider-links.mjs';
 
 // Check Matt's ownership manifests before another generator changes discovery files.
@@ -16,7 +17,7 @@ const kit = dirname(scripts), root = projectRoot();
 for (const skill of ['find-skills', 'spec-review']) {
   const source = join(kit, '.agents/skills', skill);
   checkDirectory(kit, source);
-  for (const provider of ['.agents', '.claude'])
+  for (const provider of providers)
     materialize(root, join(root, provider, 'skills', skill), source);
 }
 console.log('Skills generated for commit. Hook installation and personal trust are separate explicit steps.');

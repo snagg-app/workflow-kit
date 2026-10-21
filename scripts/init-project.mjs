@@ -7,6 +7,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
+import { agents, hookFiles, hookSettings, providers as skillProviders } from './agents.mjs';
 import { checkDirectory } from './provider-links.mjs';
 
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
@@ -20,7 +21,9 @@ const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 const present = p => lstatSync(p, { throwIfNoEntry: false });
 // Every kit handler carries this id; the template files stay the only place that names it.
 const ours = handler => handler.id === 'workflow-kit';
-const isHooks = name => /^(?:\.(?:codex|cursor)\/hooks\.json|\.claude\/settings\.json|\.github\/hooks\/[\w.-]+\.json)$/.test(name);
+// Cursor and Copilot are no longer supported: their files only lose the kit's handlers.
+const retiredHooks = /^(?:\.cursor\/hooks\.json|\.github\/hooks\/[\w.-]+\.json)$/;
+const isHooks = name => hookFiles.includes(name) || retiredHooks.test(name);
 
 /** A project file below the checkout, reached without links, that is a plain file if it exists. */
 function safe(file) {
@@ -88,18 +91,18 @@ if (root !== kit) linkKit();
 
 const templates = readdirSync(join(kit, 'templates'), { recursive: true })
   .filter(file => lstatSync(join(kit, 'templates', file)).isFile()).map(file => file.split(sep).join('/'));
-for (const name of templates.filter(name => !isHooks(name))) {
+for (const name of templates) {
   // Templates start new projects; afterwards they belong to the project and are never overwritten.
   if (!existing && !existsSync(safe(name))) write(name, text(join(kit, 'templates', name)));
 }
-const hookTemplates = new Map(templates.filter(isHooks).map(name => [name, JSON.parse(text(join(kit, 'templates', name)))]));
-// Cursor and Copilot are no longer supported: without a template, their files only lose the kit's handlers.
+// The kit's handlers come from the agent table; without an entry, a file only loses them.
+const hookTemplates = new Map(Object.entries(agents).map(([name, agent]) => [agent.hooks.file, hookSettings(name)]));
 const githubHooks = existsSync(join(root, '.github/hooks')) ? readdirSync(join(root, '.github/hooks')).map(file => `.github/hooks/${file}`) : [];
-for (const name of new Set([...hookTemplates.keys(), '.claude/settings.json', '.codex/hooks.json', '.cursor/hooks.json', ...githubHooks]))
+for (const name of new Set([...hookTemplates.keys(), '.cursor/hooks.json', ...githubHooks]))
   if (isHooks(name) && (hookTemplates.has(name) || existsSync(safe(name)))) mergeHooks(name, hookTemplates.get(name));
 
 // Includes providers the kit no longer supports: their old ignore lines are still removed.
-const providers = ['.agent', '.agents', '.claude', '.opencode', '.pi'];
+const providers = ['.agent', '.opencode', '.pi', ...skillProviders];
 // Remove only exact obsolete patterns emitted by earlier kit versions; project ignores stay.
 const legacy = new Set(['/.agents/hooks/', ...providers.map(p => `/${p}/skills/ponytail*/`), '/.agents/hooks',
   ...providers.flatMap(p => [`/${p}/skills/ponytail*`, `/${p}/skills/impeccable`]),

@@ -5,13 +5,13 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot } from './checkout-root.mjs';
+import { providers } from './agents.mjs';
 import { adaptCodeReview } from './code-review-failure-paths.mjs';
 import { checkDirectory, localDirectory, materialize, moveAside } from './provider-links.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = projectRoot();
 const source = join(kit, '.vendor/matt-pocock-skills');
-const providers = ['.agents', '.claude'];
 const gitTool = externalTool('git', root, kit, process.cwd());
 const git = (...args) => execFileSync(gitTool.file, args, { cwd: root, env: gitTool.env, encoding: 'utf8' });
 const text = path => readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
