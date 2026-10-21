@@ -12,15 +12,22 @@ notices and reviewed adaptations in generated skills.
 
 ## Install or update in a project
 
-Needs Git, Node 26 and, for the board commands, an authenticated `gh`. Kit commands
-act on the Git checkout they run in; from the project root:
+Needs Git, Node 26 and, for the board commands, an authenticated `gh`. All projects on a
+machine share one kit checkout that always follows `main`; each project reaches it through
+the link `.vendor/workflow-kit`. Kit commands act on the Git checkout they run in. Once per
+machine, clone the kit next to your projects (`WORKFLOW_KIT_DIR` overrides the place), then
+set up each project:
 
 ```sh
-git submodule add https://github.com/snagg-app/workflow-kit.git .vendor/workflow-kit  # first time only
-git submodule update --init --recursive
-node .vendor/workflow-kit/scripts/init-project.mjs --existing  # kit hooks, .gitignore and .ignore
-node .vendor/workflow-kit/scripts/setup-skills.mjs             # skills for Codex and Claude Code
+git clone --recurse-submodules https://github.com/snagg-app/workflow-kit.git <projects>/workflow-kit  # once per machine
+node <projects>/workflow-kit/scripts/init-project.mjs --cwd <project> --existing  # link, kit hooks, .gitignore and .ignore
+node <project>/.vendor/workflow-kit/scripts/setup-skills.mjs                       # skills for Codex and Claude Code
 ```
+
+`init-project` links `.vendor/workflow-kit` to the shared checkout (a junction on Windows,
+else a symlink), adds it to `.gitignore`, and removes a leftover kit submodule of earlier
+versions (gitlink, `.gitmodules` entry and clone; it stops if that clone holds local
+changes or unpublished commits). From then on the hooks do the rest, see [Hooks](#hooks).
 
 Without `--existing`, `init-project` also creates the starter files (AGENTS.md,
 CONTRIBUTING.md, issue and PR templates) that are missing; afterwards they belong to
@@ -36,20 +43,10 @@ path (`rg pattern .claude/skills`), then `.ignore` doesn't apply. A project-owne
 provider directory stays visible with `!/.claude/skills/my-skill/` in `.ignore`. Git doesn't read the file; commit it with the other `init-project` outputs: a clean-diff check after
 the generators (`git diff --exit-code`) fails on an uncommitted `.ignore`.
 
-To update, move the gitlink first. `git submodule update` checks out the commit the
-index records, so run after a bump it silently puts the old kit back, and the
-generators then run against it without an error or a diff:
-
-```sh
-git -C .vendor/workflow-kit fetch origin
-git -C .vendor/workflow-kit checkout <kit-commit>      # the commit to adopt
-git add .vendor/workflow-kit
-git -C .vendor/workflow-kit submodule update --init    # the kit's own submodules only
-git submodule status .vendor/workflow-kit              # must show <kit-commit> without a leading + or -
-```
-
-Then run the two generators above. A generator run that changes nothing after an
-update proves nothing about the new kit; check the status line first.
+There is no kit update step in a project: the next session start pulls the shared checkout, so
+every branch and worktree has the newest kit without a merge. After a kit update, run the
+generators above again and commit what they change; a run that changes nothing proves nothing
+about the new kit.
 
 The kit supports only Codex and Claude Code. Projects from earlier kit versions keep
 their copies for Antigravity, Cursor, OpenCode, Pi and Copilot: `init-project` removes
@@ -60,21 +57,18 @@ of your own), or leave them unused.
 
 ### Generated files and ownership
 
-The kit owns hook handlers pointing into `~/.ponytail/workflow-kit/` or
-`~/.impeccable/workflow-kit/` and the kit init handler (`git ls-files -s -- .vendor/workflow-kit` followed by
-`git submodule update --init --checkout`; keep personal hooks elsewhere), and upstream skills, agents and
+The kit owns every hook handler with the id `workflow-kit` (keep personal hooks elsewhere), and upstream skills, agents and
 commands by name. Generated discovery files are ordinary committed files in
 `.agents` and `.claude`, plus `.codex/agents`. Equal files stay untouched; changed
 content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
 A fresh clone/worktree discovers these files without generation, links or dependency
-installation. Generate only during kit installation/update. An update PR bumps the
-gitlink, reruns both generators above and commits their intended outputs. Changed
+installation. Generate only during kit installation/update. An update PR reruns both generators above and commits their intended outputs. Changed
 hook snapshots also need the [installers](#hooks).
 
 ### Commit generated files
 
-Commit `.gitmodules`, the kit gitlink, hook definitions, `.agents/hooks` sources,
+Commit hook definitions, `.agents/hooks` sources,
 `.ignore` and all generated discovery files. Personal state, download caches and replaced
 files stay ignored. After staging the intended files, preserve Unix launcher modes
 in Git explicitly, including on Windows and with `core.filemode=false`:
@@ -107,14 +101,10 @@ node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs  # Impeccable UI 
 Agents do not run them ([agent rules](AGENT_RULES.md#hooks)); trust stays personal. Review and trust
 project hooks in each agent, then start a new session:
 `/hooks` in Codex CLI or Claude Code, the hooks view in the Codex app settings.
-Missing snapshots produce a SessionStart install hint. Session and subagent starts also run
-`git submodule update --init .vendor/workflow-kit` when the kit checkout is missing (fresh
-worktree) or not at the commit the gitlink pins (a base merge moves the pin, not the checkout); a kit at its pin stays untouched,
-a kit with local changes, unpublished commits or a checked-out branch is not moved (the fast-forward then runs with `submodule.recurse=false`), and both that case and a failure print a hint. The one-line entry itself only does this for a kit that is not there at all (the module lives in the kit). Before that, the module
-fast-forwards (`git merge --ff-only`) a checkout that is behind its upstream or `origin/HEAD`, has no commits of its own and a clean working tree (a worktree or driver started
-from a stale branch), so the kit follows the new pin in the same step. It compares with the last fetched state, so it needs no network, never fetches and never delays the session.
-It also reports such a checkout when local changes stopped the fast-forward. At SessionStart it prints one line when the worktree has a `package.json` with dependencies but no `node_modules` (Node would then resolve modules from a parent checkout); it names the `"setup"` command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`) or, without that field, the project's `AGENTS.md`, and never installs. A SubagentStart in
-a worktree whose kit you deliberately moved ahead of the gitlink resets it, so stage the new pin (`git add .vendor/workflow-kit`) before starting subagents. Claude Code reads hooks once per session: SessionStart stores a fingerprint of `.claude/settings.json` per `session_id` in `~/.claude/hooks-fingerprint/`, and SubagentStart adds the line "Hooks seit Session-Start geändert: Session neu starten" when the last fetched base (upstream or `origin/HEAD`, no network) has other settings. The warning works only in sessions that start after this handler is merged. Files and manual runs don't prove agent loading or
+Missing snapshots produce a SessionStart install hint. The one-line SessionStart and SubagentStart entries only clone the shared checkout (`https://github.com/snagg-app/workflow-kit.git`, no prompts) when it is missing, at `WORKFLOW_KIT_DIR` or else `workflow-kit` next to the project's main checkout (also from a worktree), then start the module, which lives in the kit. The module links `.vendor/workflow-kit` to the shared checkout when the link is missing or points elsewhere. At SessionStart (not on a compaction) it also runs `git pull --ff-only` and `git submodule update --init` in the shared checkout, each with a 40-second limit, no prompts and none of the checkout's Git hooks; a lock directory in the checkout's `.git` makes a parallel session skip the update instead of waiting. A checkout with local changes, unpublished commits, another branch or a fixed revision is never touched: the hook prints a hint (a failed pull prints one too). Work on a fixed revision with `git -C <checkout> checkout <sha>` and return with `git switch main`. Kit work belongs in a worktree of the kit repository, never in the shared checkout. A project that still holds the kit as a submodule is only reported (run `init-project`). The module does nothing in a project without kit hooks and in the kit's own repository. Before that, the module
+fast-forwards (`git merge --ff-only`) a project checkout that is behind its upstream or `origin/HEAD`, has no commits of its own and a clean working tree (a worktree or driver started
+from a stale branch). It compares with the last fetched state, so that step needs no network, never fetches and never delays the session.
+It also reports such a checkout when local changes stopped the fast-forward. At SessionStart it prints one line when the worktree has a `package.json` with dependencies but no `node_modules` (Node would then resolve modules from a parent checkout); it names the `"setup"` command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`) or, without that field, the project's `AGENTS.md`, and never installs. Claude Code reads hooks once per session: SessionStart stores a fingerprint of `.claude/settings.json` per `session_id` in `~/.claude/hooks-fingerprint/`, and SubagentStart adds the line "Hooks seit Session-Start geändert: Session neu starten" when the last fetched base (upstream or `origin/HEAD`, no network) has other settings. The warning works only in sessions that start after this handler is merged. Files and manual runs don't prove agent loading or
 trust; new definitions need personal review and trust. The Edit, Stop and prompt hooks of Ponytail and Impeccable also start through the module, with the `node` on PATH. See
 [Ponytail](docs/ponytail.md) and [Impeccable](docs/impeccable.md) for hook behavior.
 
@@ -148,7 +138,7 @@ Because Git evaluates `includeIf` per worktree and branch, it changes nothing wh
 foreign path in local, global or system config, stays and is reported: integrate
 `.githooks` there yourself. Without `.githooks/` it does nothing.
 
-After a branch checkout (third argument `1`) the kit's `post-checkout` runs
+Only a project that still holds the kit as a submodule needs this (`init-project` ends that, see above): after a branch checkout (third argument `1`) the kit's `post-checkout` runs
 `git submodule update --init --checkout .vendor/workflow-kit`, so the kit follows the gitlink of the
 new branch instead of showing `M .vendor/workflow-kit`. It touches only the kit, not other submodules
 or `submodule.recurse`, disables Git's own prompts like the SessionStart hook (ssh may still ask on the terminal) and runs none of the kit clone's own hooks. Like any checkout it applies the user's Git configuration, including filters.
