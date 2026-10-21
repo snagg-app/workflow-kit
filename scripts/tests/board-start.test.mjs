@@ -213,6 +213,23 @@ test('start --takeover finds a PR that only says "Refs #N" and writes the claim 
   assert.equal(JSON.parse(text('pr.json')).body, `${body}\nAgent: claude, Session: S2\n`);
 });
 
+test('start --takeover continues a pushed branch without a PR and claims it for the new session (#655)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  const ahead = git(checkout, 'commit-tree', '-p', 'main', '-m', 'ahead', 'main^{tree}');
+  git(checkout, 'push', '-q', 'origin', `${ahead}:refs/heads/claude/1-fixture`);
+  writeFileSync(file('branches.json'), JSON.stringify(['claude/1-fixture']));
+  const claim = { createdAt: new Date().toISOString(), url: 'u', body: 'Beansprucht.\nAgent: claude, Session: OLD\nBasis: main\n' };
+  writeIssue({ ...issue('In progress'), updatedAt: new Date().toISOString(), comments: { nodes: [claim] }, branches: [{ name: 'claude/1-fixture' }] });
+
+  let result = run('start', '1', '--session', 'S2');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  result = run('start', '1', '--session', 'S2', '--takeover');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');
+  assert.equal(git(checkout, 'rev-parse', 'HEAD'), ahead);
+  assert.match(JSON.parse(text('backlink-comments-1.json')).at(-1).body, /Session: S2\n/);
+});
+
 test('start --takeover without an open PR stops before it writes anything and names a merged PR (#564)', t => {
   const { run, writeIssue, file } = startFixture(t);
   writeIssue({ ...issue('Ready'), closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'MERGED', repository: { nameWithOwner: 'test/example' } }] } });
