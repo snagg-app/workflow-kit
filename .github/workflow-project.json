@@ -7,5 +7,6 @@
   "optionalReviewers": [
     "coderabbitai"
   ],
-  "reviewerGraceMinutes": 0
+  "reviewerGraceMinutes": 0,
+  "language": "de"
 }

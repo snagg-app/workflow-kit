@@ -215,7 +215,7 @@ and then work in that directory, their relative paths (changed files given to `a
      other open PR that closes the issue) needs no native link and has no issue side (`merge PR` is its gate); two open
      closing PRs stay unknown. Conflicts in any layer of a stack block, a lower layer too (it locks the whole stack, #412): the blocker names the order
      (merge the base into the lowest layer, then each layer into the next one up) and `stack-sync TOP`. When the project file lists `"selfReview"` (for example
-     `["ponytail-review", "code-review"]`), the PR body must also carry a `## Selbstprüfung` section that names each of those checks (`merge` asks for
+     `["ponytail-review", "code-review"]`), the PR body must also carry a self-review section (`## Self-review`; `## Selbstprüfung` with `"language": "de"`) that names each of those checks (`merge` asks for
      it too); a heading of any level counts, quoted templates do not, and whether a check was good is not judged. One run lists every missing point
      together (assignment, handoff comment, self-review section, native link, blockers and threads; a refused issue state, an unreadable read or
      running reviews are reported alone or first), so one fix round suffices. An undetermined merge state (`UNKNOWN`) is read again up to 3 times, 3 s apart,
@@ -289,7 +289,7 @@ and then work in that directory, their relative paths (changed files given to `a
 - `merge PR [--stack] [--stall MINUTES] [--grace MINUTES] [--interval SECONDS] [--max-minutes N]`: the only way for an agent with merge
   authority to merge ([review loop](docs/CONTRIBUTING.md#review-loop) step 7). It applies the review gates of
   `done` (open non-draft PR, CI green, every reviewer with a trace on the head finished or
-  stalled, no `blocker:` line, no open thread, determined merge state, the PR body's `Selbstprüfung` section when the project lists `"selfReview"`) and prints the same
+  stalled, no `blocker:` line, no open thread, determined merge state, the PR body's self-review section when the project lists `"selfReview"`) and prints the same
   lines. Like `wait` it looks again until CI and every reviewer have finished (`--max-minutes`, default 9: then
   `still waiting: call merge again`, exit 4; `--interval SECONDS`, 0 to 60, sets a fixed pause between looks); a red check or
   blocker ends `FAILED` (exit 1), an undetermined merge state `WAITING` (exit 3), and nothing is merged. A single PR is merged as it is, also when the base changed the same files (#552).
@@ -308,7 +308,7 @@ and then work in that directory, their relative paths (changed files given to `a
   with an open layer below it is refused (`FAILED`, exit 1): merging it would merge that layer too. `merge TOP --stack` merges
   the whole stack in one run instead: TOP is the top layer, and before anything else every open layer must hold its own gate (a
   handoff comment for its head, no open thread, no change request, no conflicts (a conflict in a lower layer locks the whole stack), the layer above contains its head, the issues it delivers in Human review, the
-  `Selbstprüfung` section); `FAILED` names the layer and the reason, and nothing is merged. CI and reviewers count for the top head
+  self-review section); `FAILED` names the layer and the reason, and nothing is merged. CI and reviewers count for the top head
   only (it contains every layer), so the stack costs one CI round. The top alone goes to `merge-async` (never a plain `gh pr merge`, which
   would land it in the layer below): GitHub merges every layer below with it, bottom first, and shows each as merged, without retarget.
   A trunk that gained commits under files the stack changes ends `FAILED` with the manual way (`git merge origin/<trunk>` in the top layer,
@@ -382,7 +382,7 @@ and then work in that directory, their relative paths (changed files given to `a
 ### Handoff comment
 
 `done` needs one comment on the PR from the driver (the authenticated GitHub user) that
-has the heading `## Übergabe` on its own line and a line `Head: <SHA>` that starts with the
+has the handoff heading on its own line (`## Handoff`, or `## Übergabe` with `"language": "de"` in [the project file](SETUP.md#3-board-and-labels)) and a line `Head: <SHA>` that starts with the
 first seven characters of the PR's current head commit. The comment names the head it is
 about, so no timestamp is involved: a new head, for example after a review fix, asks for a new
 comment, a comment for an earlier push does not count, and it works the same for a head without

@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
 import { externalTool } from './checkout-root.mjs';
+import { statusNames } from './project-profile.mjs';
 
 const [repo, requestedNumber] = process.argv.slice(2);
 // Only plain names and numbers reach gh: no argument can smuggle in options.
@@ -39,8 +40,8 @@ if (!number) saveProject();
 const fields = JSON.parse(gh('project', 'field-list', String(project.number), '--owner', owner, '--format', 'json', '--limit', '100'));
 const status = fields.fields.find(f => f.name === 'Status');
 assert.deepEqual(status?.options?.map(o => o.name),
-  ['Backlog', 'Ready', 'In progress', 'Automated review', 'Human review', 'Done'],
-  'Existing board must have exactly the six workflow states in order; migrate explicitly, preserving option IDs and cards');
+  Object.values(statusNames(saved ?? {})),
+  'Existing board must have exactly the six workflow states in order ("statuses" in .github/workflow-project.json renames them); migrate explicitly, preserving option IDs and cards');
 const priority = fields.fields.find(f => f.name === 'Priority');
 assert.ok(priority, 'Existing board lacks Priority; add a usable priority scale without replacing foreign fields');
 // Organization issue fields expose their choices on issueField rather than Project options.
