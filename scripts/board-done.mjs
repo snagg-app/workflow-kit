@@ -6,9 +6,19 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { shared } from './board-args.mjs';
+
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'done', run: 'done', writes: true, doc: 'docs/board/done.md', words: [{ name: 'ISSUE', kind: 'number' }, { name: 'PR', optional: true }, { name: 'HANDOFF_FILE', optional: true }],
+    summary: 'Everything from the last push to Human review. Steps: tests, PR ready, acceptance boxes, Automated review, wait for CI and reviewers, handoff comment, gate. A repeated call does what is still open; without HANDOFF_FILE it only prepares.',
+    flags: { '--refs': shared.refs, '--no-pr': { help: 'An exploration without a PR may reach Human review.' }, '--max-minutes': shared.maxMinutes,
+      '--skip-local-tests': { value: 'REASON', help: 'Skip only the local test run and name why (CI and review gates still apply).' }, '--issue-repo': shared.issueRepo } },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createDone(env) {
-  const { git, github, graphql, isSpec, issueName, issueOwner, issueProject, lines, localHead, number, project, projectDirectory, projectStatus, quotaLine, readIssue, rest, restAll, restPost, specRefusal, state, statuses, texts } = env;
+  const { args, git, github, graphql, isSpec, issueName, issueOwner, issueProject, lines, localHead, number, project, projectDirectory, projectStatus, quotaLine, readIssue, rest, restAll, restPost, specRefusal, state, statuses, texts } = env;
   const { baseSettings, currentIssuePr, findHandoffComment, handoff, isPartialPr, onBase, openFirstPr, outcome, poll, postBacklink, ready, resolveOption, reviewsForHead, set, tickAcceptance, useBaseSettings, writeBody } = env.later;
 
   /**
@@ -21,15 +31,14 @@ export function createDone(env) {
    * `--refs`: a PR that only names the issue (a part for another base): its gate runs, the issue status stays.
    */
   async function done() {
-    const args = process.argv.slice(4), skipAt = args.indexOf('--skip-local-tests');
-    const skipReason = skipAt < 0 ? undefined : args[skipAt + 1]?.trim();
-    assert.ok(skipAt < 0 || (skipReason && !skipReason.startsWith('--')), '--skip-local-tests needs a non-empty reason');
-    const words = args.filter((arg, index) => !arg.startsWith('--') && !['--max-minutes', '--skip-local-tests'].includes(args[index - 1]));
+    const skipReason = args.value('--skip-local-tests')?.trim();
+    assert.ok(!args.flag('--skip-local-tests') || skipReason, '--skip-local-tests needs a non-empty reason');
+    const words = args.words.slice(1);
     const given = /^\d+$/.test(words[0] ?? '') ? Number(words.shift()) : undefined, file = words.shift();
     assert.ok(!words.length, 'done takes ISSUE [PR] [FILE]');
     const issue = readIssue(), found = currentIssuePr(issue);
     let prNumber = given ?? found.number;
-    if (prNumber === undefined && !found.unknown && !process.argv.includes('--refs')) prNumber = openFirstPr(issue);
+    if (prNumber === undefined && !found.unknown && !args.flag('--refs')) prNumber = openFirstPr(issue);
     // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch; the later push names that branch, so an upstream on the base is harmless (#651).
     const checkedOut = prNumber === undefined ? '' : git('branch', '--show-current');
     if (onBase(checkedOut)) {
@@ -40,7 +49,7 @@ export function createDone(env) {
     // No open PR but a FILE: a check task whose PR is already closed (or never opened) takes the way of the PR without a change.
     if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}: run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
     const pull = prNumber === undefined ? undefined : rest(`repos/${project.repository}/pulls/${prNumber}`);
-    const partial = prNumber !== undefined && (process.argv.includes('--refs') || isPartialPr(issue, prNumber));
+    const partial = prNumber !== undefined && (args.flag('--refs') || isPartialPr(issue, prNumber));
     assert.ok(partial || !isSpec(issue), specRefusal(number, 'done is refused; agents leave specs untouched (use --refs for a partial PR)'));
     const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
     // A PR without a change (a check task: `start` opened it as the claim) delivers nothing to merge: the result goes to the issue, the PR closes.
@@ -81,7 +90,7 @@ export function createDone(env) {
         assert.equal(linked.number, prNumber, 'the open issue-linked PR changed; run done again');
       } catch (error) { return fail(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
       // #646: no PR delivers nothing for review; only an exploration that says so (--no-pr) gets Human review, otherwise nothing changes.
-      if (!pull && !args.includes('--no-pr')) return fail(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
+      if (!pull && !args.flag('--no-pr')) return fail(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
       restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## ${texts.handoff}\n\n${lines(file)}\n`);
       if (pull) github.run(['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { stdio: 'pipe' });
       writeBody(before => tickAcceptance(before));

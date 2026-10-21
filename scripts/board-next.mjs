@@ -2,6 +2,14 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 
+import { shared } from './board-args.mjs';
+
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'next', run: 'next', doc: 'docs/board/next.md', flags: { '--session': shared.session },
+    summary: 'Lists what to do next. In this order: feedback on your issues, your unfinished work, stale work, the Ready issues.' },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createNext(env) {
   const { ago, baseField, commentClaims, graphql, issueFeedback, loadDeliveries, predecessorFields, project, projectItem, projectStatus, restAll, sessionOption, statuses } = env;

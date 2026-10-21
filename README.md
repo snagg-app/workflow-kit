@@ -156,218 +156,35 @@ the installer, so the kit's current one is copied.
 working directory; `--cwd PROJECT_DIR` as the first argument (`board.mjs --cwd PROJECT_DIR next`) reads
 the project from that directory instead. Other relative paths (`--body-file`) stay relative to the working directory.
 `init-project.mjs`, `setup-skills.mjs` and `affected-tests.mjs` take the same first argument (`takeCwd` in `checkout-root.mjs`),
-and then work in that directory, their relative paths (changed files given to `affected-tests.mjs`) included:
+and then work in that directory, their relative paths (changed files given to `affected-tests.mjs`) included.
 
-- `--help` or `-h` (any command) prints the usage and exits 0 without calling GitHub. A writing command (`start`, `done`, `field`, `new`,
-  `block`, `sub`, `body`, `body-replace`, `merge`, `sweep`) refuses any flag (`--flag` or `-f`) and any extra word it does not
-  take with the usage line (exit 2) before it reads or writes anything. `field` takes further words of its own.
-- `start ISSUE [--session ID]`: everything from Ready to the claim (assignment, In progress, claim comment), each write read back; a repeated call resumes (a step already
-  done is skipped). The session is `--session`, else the `agent-<id>` of a Claude Code worktree, else `CODEX_THREAD_ID`, else
-  `CLAUDE_CODE_SESSION_ID`. It starts with the execution check of the issue, printed (exit 0 STARTABLE, 1 BLOCKED, 2 UNKNOWN, 4 STACKABLE:
-  only an open predecessor PR holds the issue, see [Stacked pull requests](docs/CONTRIBUTING.md#stacked-pull-requests)); BLOCKED and
-  UNKNOWN write nothing. The check shows the open PRs with the session their claim names and one line per native sub-issue; with
-  `"baseBranch": {"field": "Zielrelease", "pattern": "release/{value}"}` it also prints `base: release/0.1.1 (Zielrelease)` from that
-  Project field (an optional `"values": {"main": "main"}` names a fixed branch for such field values instead of the pattern) and a `note:`
-  when the value is no branch name, `origin/<base>` is unknown locally or git cannot answer, or `HEAD` does not descend from
-  `origin/<base>` (that last one only for an issue with no branch yet and no stack); no fetch, never a verdict. Then `start`:
-  sets `submodule.recurse true` and `push.recurseSubmodules no` in the clone (only with a `.gitmodules`) and `push.default simple`, assigns the authenticated user,
-  sets In progress and posts the claim comment (`Agent: claude|codex, Session: ID` and `Basis: BRANCH`, the base: the base PR's branch of a stack,
-  else the Project base field, else the default branch). It creates no branch and no PR: the first `done` pushes your branch
-  (`<agent>/<number>-<title>`, or the checkout's own branch of that shape) and opens the Draft PR (`Closes #N` and the claim line) with its native link.
-  An issue that already has an open PR (a takeover, a resume) continues on that PR's branch (`git switch`). Then it runs `git fetch origin`, brings the kit to its pin, and
-  last the optional `"setup"` shell command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`, run like a `push` command, in the checkout, with `BRANCH`);
-  if it fails, `start` ends with an error and the output, claim and status stay, and `start` again resumes. The claim holds the issue for every session whose ID it does not name; once the PR exists, its body line is the claim. Keep the claim
-  line when you rewrite the PR body. It ends with
-  `START #N session … base … (claim only …)`, or `… branch … base … PR #…` with an existing PR; for a stack it names the PR to link above. Abandoned work (below, `next`) is taken over
-  with the same call: `start` writes the new session into the claim line of its PR, or posts a new claim comment. A handover is the same edit of the claim line by hand. A new start is BLOCKED with `finish #N first` while you have an own unfinished issue (a resume or a stack on its work is not).
-- `done ISSUE [PR] [HANDOFF_FILE] [--refs] [--no-pr] [--max-minutes N] [--skip-local-tests REASON]`: everything from the last push to Human review. PR defaults to the one open PR
-  that closes the issue; without one, own commits on top of the claimed base get their branch and Draft PR first (no commit: the FILE-only path of an exploration needs `--no-pr`, else `done` refuses and leaves the status; `done` also refuses on main or release/** and on a branch tracking one, #646); name it for a partial PR (`Refs #N`, no closing link) or with `--refs` (the PR only names the issue, whether or not another PR closes it: only the PR gate runs, and the issue status, assignment and acceptance boxes stay untouched). In order, each step only if still open, so a repeated call after a push or a wait is the same call:
-  0. The PR base is fetched; an untested head (once per push, not on a repeated call that only waits) that does not contain it gets it merged and pushed, so the tests see what will be merged. A project with [`"doneBaseMerge": "overlap"`](SETUP.md#3-board-and-labels) merges only for shared changed paths or a Git-detected conflict; unrelated base changes leave the head intact. A conflict ends in `FAILED` naming the files, the merge aborted: resolve it, push, call `done` again.
-     Without HANDOFF_FILE and without a handoff comment for the (merged) head, `done` only prepares: steps 1 to 5 run (tests, ready, status Automated review, the wait), then it ends with `PREPARED` (exit 0), without ticking the boxes, handoff comment or Human review. Run the final proof then, and `done ISSUE FILE` takes over the same head (its tests are not repeated; a head pushed since is tested again).
-  1. The targeted tests of the changed files (`affected-tests.mjs --run`, once per head, in the foreground). Each step prints a `run:` line and its duration. The green steps of a head are kept: after a red step the next `done` skips them and a red test file says whether it is in your diff; a push starts all steps anew.
-     With `--skip-local-tests REASON`, the driver explicitly skips only this local run and names why. The reason must be non-empty and cannot start with `--`.
-     The output names the skipped head and reason; no tested-head marker is written or changed. Name any historical proof with its original SHA in the handoff.
-     Base merges, CI, reviews and handoff gates still run. A skipped preparation reports the skip; repeat the flag on later `done` calls to keep skipping.
-  2. The Draft PR ready for exactly the pushed head (the local `HEAD` is compared with the PR head as a prefix; the PR is reread 6 times, 5 s apart,
-     because GitHub can show the previous push for a moment; closed PRs, forks and a head that stays different are refused; written once, only a read-back showing that head ready counts).
-     This comes before any wait: bots and Sonar analyze no Draft, so never close and reopen a PR to start them.
-  3. The acceptance boxes of the issue body ticked (`- [ ]` to `- [x]`; a line that names an issue `#N` or `OWNER/REPO#N` stays open, and code blocks are not touched).
-  4. Status Automated review, after verifying the declared PR's reference and comment backlink on every delivered issue
-     (see [PR backlinks](docs/CONTRIBUTING.md#pr-backlinks)). A missing backlink on an issue of this repository is set: the native link
-     (the GraphQL `addCloseIssueReferences` behind a closing keyword, which acts only on the default branch; read back up to five times, one second
-     apart, because GitHub shows it with a delay) and the PR's URL as a comment (a missing comment after the write exits 2). A partial PR gets only
-     the backlink comment. It never closes the issue: that happens when the PR merges into the default branch.
-  5. The wait for CI and every reviewer, as in `wait` below (`--max-minutes`, default 9: `still waiting: call done again`, exit 4). A red check ends `FAILED` (exit 1).
-  6. The [handoff comment](#handoff-comment) from FILE, unless one for this head exists.
-  7. The gate, then Human review (exit 0 verified, 1 blocked, 2 unreadable or changed state, 3 waiting): the issue is assigned and startable, its PR connection is native
-     (read on every page, including manual links on release branches; text and branch links alone do not count), the PR is open and not a draft, checks and
-     reviews are finished, threads and conflicts resolved, and the handoff comment for the current head exists. A partial PR (`--refs`, or beside exactly one
-     other open PR that closes the issue) needs no native link and has no issue side (`merge PR` is its gate); two open
-     closing PRs stay unknown. Conflicts in any layer of a stack block, a lower layer too (it locks the whole stack, #412): the blocker names the order
-     (merge the base into the lowest layer, then each layer into the next one up) and `stack-sync TOP`. When the project file lists `"selfReview"` (for example
-     `["ponytail-review", "code-review"]`), the PR body must also carry a self-review section (`## Self-review`; `## Selbstprüfung` with `"language": "de"`) that names each of those checks (`merge` asks for
-     it too); a heading of any level counts, quoted templates do not, and whether a check was good is not judged. One run lists every missing point
-     together (assignment, handoff comment, self-review section, native link, blockers and threads; a refused issue state, an unreadable read or
-     running reviews are reported alone or first), so one fix round suffices. An undetermined merge state (`UNKNOWN`) is read again up to 3 times, 3 s apart,
-     before it is reported as waiting. A head that is `UNKNOWN` 10 minutes after its push and has no check and no `pull_request` or `workflow_dispatch`
-     run is a blocker (`wait`, `done`, `merge`): in a native stack it names the likely cause (a conflict in a lower layer) and `stack-sync`, otherwise
-     "push an empty commit". Nothing is dispatched automatically. Session ownership, final proof and whether a finding is justified remain driver responsibilities.
-- `sweep` (merge loop or chief session, at their usual rhythm): sets every Human-review issue whose open PR has merge conflicts (DIRTY) back to Automated review with a comment, and closes every open issue whose linked PR (same repository) is merged into `release/**` (GitHub closes only for the default branch) with a comment, unless a human reopened it after the merge (then it stays open and is named), one line each, else `clean`; see [parallel-drivers.md](docs/parallel-drivers.md).
-  To run it without a person, copy [docs/board-sweep.yml](docs/board-sweep.yml) to `.github/workflows/board-sweep.yml`: it runs `sweep` on every push to
-  the PR bases (`main`, `release/**`; adjust) and hourly. It needs the secret `BOARD_TOKEN` (a token that may write the Project and issues; `GITHUB_TOKEN` cannot).
-  The reset issues then show up in `next` as stale work (below).
-- `next [--session ID]` lists unfinished work before the Ready issues. First **Rückmeldungen**: open issues assigned to you (with a session: whose PR claims it) with a new comment or review on the issue or its PR since your last handoff (`## Übergabe`) or reply (a comment with a line `Agent: claude|codex, Session: ID`), or back in In progress / Automated review after the handoff, and any issue whose comments mention `@login` since then (the last 10 issue comments, 5 PR comments and 5 reviews are read). With a session, `start` of another issue says `finish #N first` while one of your own issues has such feedback. Then, with a session, your own issues (assigned to the login, in In progress or
-  Automated review, an open PR whose claim names your session) under "Finish your own work first"; then abandoned work, a "Stale or conflicting" list of issues in
-  In progress, Automated review or Human review whose open PR had no activity for `"staleHours"` (project file, default 6; 0 or more) or whose
-  Human-review PR has merge conflicts (DIRTY). Activity is the newest update of the issue (comments), its Project item (status) and its open PR
-  (push, comments, reviews), including bots. Work without activity for `staleHours` (or on a Human-review issue whose PR has conflicts) has expired: `start ISSUE --session NEW` then
-  notes the stale PR instead of BLOCKED (its branch holds nothing either) and writes NEW into its claim line; the assignees stay. `start ISSUE --session NEW --takeover` does the same for a fresh PR (a deliberate phase handover); with a pushed branch but no PR yet it continues on that branch and posts the new session's claim comment.
-  Another person than the caller on the issue holds it too, before any PR exists: `check`, `start` and `next` stop with "assigned to LOGIN; pass --takeover to take it over", and `start --takeover` goes on. `start` reads the issue again right before its first write and stops without writing if the check now fails.
-  `start` and `done` take `--issue-repo OWNER/NAME` for an issue of another repository than the PR (a kit issue fixed in the project): issue, board, status and comments are that repository's (its `.github/workflow-project.json`), the PR, branch and tests stay in the checkout's. `start` opens the PR with `Closes OWNER/NAME#N`.
-  `next` lists STACKABLE issues apart, with the base PR; information only.
-- `block ISSUE OWNER/REPO#N`, `sub PARENT CHILD` (native sub-issue, read back; `CHILD` may be
-  `OWNER/REPO#N`; an existing link succeeds again; no removing or reordering).
-- `new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...]`:
-  create an issue with its required metadata in one call and print one line, `NEW URL | milestone | labels |
-  Status | Priority | …`, of the values read back. Title, body file, an open milestone, one label that exists
-  (the REST API would create an unknown one), a Priority and every field named in the optional
-  `"requiredFields"` of `.github/workflow-project.json` (for example `["Size"]`) are required; `Status`
-  and `Priority` are not `--field` values. Everything is validated against the Project and repository before
-  the issue exists, so a missing or invalid value creates nothing (`ERROR - reason`, exit 2). The Status is Backlog, or the Project option given by `--status S` (e.g. `Ready`).
-  A failure after the issue exists names its URL and the failed step: finish by hand, never create it again.
-- `new --from FILE`: create many issues at once. `FILE` is a JSON list (1 to 50 entries) of
-  `{ "title", "bodyFile", "milestone", "priority", "labels": [..], "fields": { "Size": "XS" } }`: the values of
-  the flags above, `bodyFile` relative to the working directory, Status Backlog. Every entry is checked
-  before the first issue exists (an unknown key, label, milestone or option, or a missing required value creates
-  nothing and names the entry). The issues are created over REST, which costs no GraphQL points; their Project items
-  and fields are then written in blocks of 5 issues (aliased mutations: add, write, read back, 3 requests per block),
-  so the GraphQL cost is 1 request for the field definitions plus 3 per block: 4 for up to 5 issues, 10 for 13, 31 for 50
-  (instead of 9 per issue). When GitHub refuses a block with "Resource limits for this query exceeded", `new` halves it
-  and asks again, down to one issue. An issue that is still refused, or whose values do not read back, is listed with
-  the `board.mjs field ISSUE NAME VALUE …` command that finishes it; everything else is complete. The output is one
-  `NEW …` line per issue. A failure after the first issue exists names every issue that exists: finish those by hand and
-  create only the missing ones. The field definitions are also read once per run by a single `new`, which therefore needs 4 requests (before: 8 to 9).
-- `field ISSUE NAME VALUE [NAME VALUE ...] [--spec-review]`: any single-select fields (Status and Priority too), all read back together after writing.
-  Every pair is checked against the field definitions before the first write: one invalid pair writes
-  nothing and names the valid options. It reports failures as one `ERROR - reason` line (exit 2, nothing else printed), not a stack trace.
-  Issue read errors name `OWNER/REPO#N`. `Status "In progress"` needs a startable issue assigned to you, `Status Ready` no decision wait, `Done` is
-  refused for a spec. Every spec status write needs `--spec-review`, used only by a human-invoked `spec-review`; Human review reads every sub-issue over REST immediately before writing and refuses open or unreadable children.
-  `Status "Automated review" PR [OTHER_ISSUE...]` verifies the backlinks as `done` does. `start` and `done` leave specs untouched and set task status themselves;
-  `field` is metadata maintenance.
-- `body ISSUE FILE BASE_FILE`: replace an issue body with `FILE` only if the current body
-  still equals `BASE_FILE` (the body your change is based on; line endings and trailing
-  whitespace are ignored; the text written is `FILE` with LF line endings and no trailing
-  whitespace, sent over stdin so the file name never matters), then read it back. A body that
-  changed meanwhile is refused with
-  a `-`/`+` diff (exit 1, nothing written); a read-back that differs from `FILE` reports
-  that another session overwrote it (exit 1, the write is not repeated); API and file
-  errors exit 2. See [Changing a body](docs/CONTRIBUTING.md#issues).
-- `body-replace ISSUE --from FILE --to FILE`: replace exactly one occurrence of the text in
-  `FILE` after `--from` with the text after `--to` (plain text, no regular expressions, one
-  replacement per call; line endings and trailing whitespace are ignored like in `body`;
-  `--to` may be empty). The body read at that moment is the base, then the write and read-back
-  of `body` apply. No match or several matches are refused with the reason (exit 1, nothing
-  written; several matches are listed by line); an empty `--from` text, unreadable files and API
-  errors exit 2.
-- `quota-wait [--max-minutes N]`: returns (`DONE` with the `quota: …` line, exit 0) once GitHub's shared GraphQL quota has
-  300 points again, sleeping until the reset taken from the response headers; a pause that would end after `--max-minutes`
-  (default 9) is not slept through: it ends `still waiting: call quota-wait again after <time>` (exit 4). Use it, or `wait`, instead of a loop of your own around `gh`:
-  a refused `gh api graphql` prints the error and may still exit 0.
+`board.mjs help` lists the commands and `board.mjs help COMMAND` shows one of them (usage, flags, what it does; 0.3 to 1 KB). `--help` or `-h` after a command does the same,
+without calling GitHub. A call the description of a command does not allow (an unknown flag, a missing or malformed value, a word too many) is refused with the reason and the usage of
+that one command (exit 2) before anything is read or written. The table is generated from the descriptions in `scripts/board-*.mjs` (`node scripts/board-readme.mjs`);
+the long text of a command is in [docs/board](docs/board).
+
+<!-- board-commands:start -->
+| Command | Access | What it does |
+| --- | --- | --- |
+| `start ISSUE [--session ID] [--takeover] [--issue-repo OWNER/NAME]` | writes | Claims a Ready issue. Runs the execution check, then assignment, In progress and the claim comment, each write read back. A repeated call resumes. [Details](docs/board/start.md) |
+| `done ISSUE [PR] [HANDOFF_FILE] [--refs] [--no-pr] [--max-minutes N] [--skip-local-tests REASON] [--issue-repo OWNER/NAME]` | writes | Everything from the last push to Human review. Steps: tests, PR ready, acceptance boxes, Automated review, wait for CI and reviewers, handoff comment, gate. A repeated call does what is still open; without HANDOFF_FILE it only prepares. [Details](docs/board/done.md) |
+| `next [--session ID]` | reads | Lists what to do next. In this order: feedback on your issues, your unfinished work, stale work, the Ready issues. [Details](docs/board/next.md) |
+| `sweep` | writes | Cleans up the board. Human-review issues whose PR has merge conflicts go back to Automated review; issues whose PR merged into release/** are closed. [Details](docs/board/sweep.md) |
+| `field ISSUE NAME VALUE [NAME VALUE ...] [--field NAME=VALUE ...] [--spec-review]` | writes | Sets single-select Project fields (Status and Priority too). All pairs are checked before the first write and read back together. NAME VALUE and --field NAME=VALUE mean the same. [Details](docs/board/field.md) |
+| `new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] [NAME VALUE ...] \| new --from FILE` | writes | Creates an issue with its required metadata in one call, or many with --from. Everything is checked first and read back. Extra fields: NAME VALUE or --field NAME=VALUE. [Details](docs/board/new.md) |
+| `block ISSUE BLOCKER` | writes | Marks ISSUE as blocked by BLOCKER (N, #N or OWNER/REPO#N). [Details](docs/board/block.md) |
+| `sub PARENT CHILD` | writes | Makes CHILD (N, #N or OWNER/REPO#N) a native sub-issue of PARENT, read back. An existing link succeeds again. [Details](docs/board/block.md) |
+| `wait PR [--merged] [--stall MINUTES] [--grace MINUTES] [--head SHA] [--max-minutes N] [--interval SECONDS]` | reads | Waits until CI and every reviewer of the PR head have finished. Exit 0 done, 1 red CI, 3 waiting, 4 call again, 2 error; prints blockers and Sonar issues. [Details](docs/board/wait.md) |
+| `quota-wait [--max-minutes N]` | reads | Waits for the shared GraphQL quota. Returns once it has 300 points again, sleeping until the reset (exit 4 if that is after --max-minutes). [Details](docs/board/quota-wait.md) |
+| `merge PR [--stack] [--stall MINUTES] [--grace MINUTES] [--interval SECONDS] [--max-minutes N]` | writes | Merges a PR (the only way for an agent with merge authority). It applies the gates of `done`, waits for CI and reviewers, merges the checked head and reads the merge back. [Details](docs/board/merge.md) |
+| `stack-sync TOP` | writes | Brings a PR stack up to date. Merges the base into each layer of the stack of PR TOP, bottom first, and pushes (no rebase, no force-push). A conflict stops it. [Details](docs/board/stack-sync.md) |
+| `body ISSUE FILE BASE_FILE` | writes | Replaces the issue body with FILE. Only if the current body still equals BASE_FILE; read back after. A body that changed meanwhile is refused with a diff. [Details](docs/board/body.md) |
+| `body-replace ISSUE --from FILE --to FILE` | writes | Replaces one occurrence of a text in the issue body. The text in --from becomes the text in --to; written and read back like `body`. [Details](docs/board/body.md) |
+<!-- board-commands:end -->
+
 - Cost of a call: `BOARD_TRACE=1 node scripts/board.mjs …` prints one `gql COST QUERY` line per GraphQL request to stderr. The Project's
   field and option ids are cached in the clone's Git directory (`board-project-fields.json`, shared by worktrees) and read again only when a
   name or option is missing or a write with them fails; `BOARD_FIELD_CACHE=0` switches the cache off. Delete the file after recreating a field.
-- `merge PR [--stack] [--stall MINUTES] [--grace MINUTES] [--interval SECONDS] [--max-minutes N]`: the only way for an agent with merge
-  authority to merge ([review loop](docs/CONTRIBUTING.md#review-loop) step 7). It applies the review gates of
-  `done` (open non-draft PR, CI green, every reviewer with a trace on the head finished or
-  stalled, no `blocker:` line, no open thread, determined merge state, the PR body's self-review section when the project lists `"selfReview"`) and prints the same
-  lines. Like `wait` it looks again until CI and every reviewer have finished (`--max-minutes`, default 9: then
-  `still waiting: call merge again`, exit 4; `--interval SECONDS`, 0 to 60, sets a fixed pause between looks); a red check or
-  blocker ends `FAILED` (exit 1), an undetermined merge state `WAITING` (exit 3), and nothing is merged. A single PR is merged as it is, also when the base changed the same files (#552).
-  Only a red check makes it merge the base into the PR branch first (`PUT pulls/N/update-branch` with the checked head as `expected_head_sha`),
-  wait for the new head and its CI the same way, check the gates again and merge that head: when the only red check is one listed in `"updateBranchChecks"`
-  (check names, for example `["Restart CI after retarget"]`; `wait` and `done` still end `FAILED`, naming `board.mjs merge N`),
-  and once for any other red check when the base gained commits since the merge-base (the CI ran on the old merge state, #425); a red check after that update, or on an unmoved base, ends `FAILED`. If GitHub refuses that update with 403 (a PR with stacked children), `merge` ends
-  `FAILED` (exit 1) and tells you to run `git merge origin/<base>` in the PR's worktree, push once and call `merge` again;
-  it never pushes for you. A PR that somebody else merged meanwhile ends `MERGED` (note "already merged", exit 0, no second merge) with the steps after a merge (#556);
-  closed without merge and Draft stay `FAILED`. Otherwise it runs `gh pr merge --merge
-  --match-head-commit <full head id>` once (a push after the check makes gh refuse; a refusal of a PR with stacked children ("part of a stack", "asynchronous merge REST API" or HTTP 403)
-  goes once to `PUT pulls/N/merge-async` with `merge_action=direct_merge`, `merge_method=merge` and `sha` = the same head,
-  and the merge is read back until it shows) and counts
-  only a read-back showing the PR as merged (`MERGED #N head … merge commit …`, exit 0; any other gh
-  refusal or a read-back that differs: `ERROR`, exit 2). A layer of a [stack](docs/CONTRIBUTING.md#stacked-pull-requests)
-  with an open layer below it is refused (`FAILED`, exit 1): merging it would merge that layer too. `merge TOP --stack` merges
-  the whole stack in one run instead: TOP is the top layer, and before anything else every open layer must hold its own gate (a
-  handoff comment for its head, no open thread, no change request, no conflicts (a conflict in a lower layer locks the whole stack), the layer above contains its head, the issues it delivers in Human review, the
-  self-review section); `FAILED` names the layer and the reason, and nothing is merged. CI and reviewers count for the top head
-  only (it contains every layer), so the stack costs one CI round. The top alone goes to `merge-async` (never a plain `gh pr merge`, which
-  would land it in the layer below): GitHub merges every layer below with it, bottom first, and shows each as merged, without retarget.
-  A trunk that gained commits under files the stack changes ends `FAILED` with the manual way (`git merge origin/<trunk>` in the top layer,
-  push once, run again), because `update-branch` of the top would only merge the layer below. The output has a `MERGED #N …` line per
-  layer (`NOT MERGED (STATE) #N …` and exit 2 when GitHub left one open), `issue #N (PR #L): closed` per delivered issue
-  (merge writes no status). Whatever the stack's trunk is (#418), each issue is read again for about 15 s; one that is still open is closed as completed with a comment naming the merged PR (#397). After the merge it deletes the head branch (every layer's with `--stack`, lower layers first; `branch deleted: …`) unless the repository's setting "Automatically delete head branches" does it,
-  the branch is not of this repository, is the default branch or is the base of another open PR (a stack: GitHub would close
-  that PR); it prints `branch kept: …` with the reason. A failed or already done delete is a `note:` or `branch gone:` line,
-  never an error of the merge. Without `--stack` it does not read the issue, claims or the [handoff comment](#handoff-comment).
-  After a merge into `main` or a `release/*` branch it runs the project's `push` commands ([Push commands](#push-commands)).
-- `stack-sync TOP`: for the native stack of the top PR TOP, merges from the bottom layer up the base into each layer (`git merge`, no
-  rebase, no force-push) and pushes it, in a temporary worktree of this checkout. A real conflict stops it with `blocker:`, the layer and the
-  files; the merge stays open in the printed worktree. Run it after a lower layer got conflicts or the base moved.
-- `wait PR`: one look at the head repeated (exit 0 done, 1 red CI, 3 waiting, 2 error); `done` and `merge` use the same look. It prints the merge
-  state and `blocker:` lines (standing change requests, conflicts), because mergeable is not merge-ready. When the PR has a finished
-  SonarCloud check it counts the head's OPEN and CONFIRMED Sonar issues (the quality gate judges new-code conditions only) and prints a
-  `blocker:` line for any, after up to 10 `sonar: RULE file:line message` lines (the rest only counted). The read uses `SONAR_TOKEN` from the
-  environment (the anonymous API reports 0 for private projects); on a refused read the command ends `ERROR` (exit 2), never green.
-  Without the token it reads `N New issues` from the SonarCloud check run's summary instead: only a readable 0 passes, a larger count or an
-  unreadable summary exits 1 with a `blocker:` line that names `SONAR_TOKEN`. Security hotspots stay a manual read. A Sonar comment
-  "analysis has failed" posted after the green check shows as a `sonar:` line, not a blocker: it names no revision and is usually about
-  an older commit, so the head's green check decides. A workflow
-  whose `pull_request` jobs for the head were all skipped before the Ready event (Draft
-  guard), with no executed run since Ready, waits (exit 3): the skip proves nothing
-  about the Ready head. Push a commit to start one: a workflow without a `ready_for_review` trigger never does otherwise.
-  The kit's own CI skips Drafts this way (`pull_request` types incl. `ready_for_review` and `converted_to_draft`, job `if: github.event_name != 'pull_request' || !github.event.pull_request.draft`);
-  projects decide on the same guard themselves, the kit ships no CI template.
-  It prints `correction pushes after ready: N`, the distinct heads pushed (from the branch's push log)
-  after the PR's first Ready event (a PR opened non-draft counts from its creation; the head that set Ready does not count,
-  a force-push is one push, a PR that never was ready prints no line). From `N >= 2` it adds
-  `cap reached: collect non-blocking findings in one follow-up issue` ([review loop](docs/CONTRIBUTING.md#review-loop)).
-  It also reports a moved base: `base moved: N commits since merge-base (BASE)` when the PR's base branch has commits the head lacks
-  (GitHub compare `behind_by`), then `changed on both sides:` with the files the PR and those commits both change (first 10),
-  or `no file is changed on both sides`. Both lines are information only: no exit code changes, an unreadable push log or comparison prints a note,
-  and nothing is merged or rebased for you.
-  `wait` repeats the look (first after 60 s, then at longer intervals up to 5 minutes, again from 60 s
-  when what it awaits changes; twice as long below 1000 quota points; `--interval SECONDS` sets a fixed pause instead), prints `WAITING` lines on change and
-  reads GraphQL only when REST shows a change since the last full read (head, update time, merge state, check runs, check suites,
-  commit statuses), at least every 5 minutes, and confirms every end with a full read; the other rounds cost no GraphQL points.
-  `wait PR --merged` reads REST only. It ends with `DONE`, `FAILED` (as soon as a check fails or a non-draft PR has merge conflicts, `blocker: merge conflicts`) or `ERROR`. Both end
-  with a `quota: …` line (points left, points this run used, reset time). When GitHub's shared GraphQL
-  quota is used up or low (under 300 points for `wait`, 50 for `done`), `done` sleeps until the reset and
-  says so on stderr (`rate limited until 2026-10-07T04:20:34.000Z (in 7 min)`). `wait` does not sleep: it keeps reading the PR and its checks
-  over REST (the `waiting:` line counts pending, failed or cancelled and passed checks, older runs included, and gives no verdict),
-  and reads the threads and the verdict after the reset; at `--max-minutes` it ends `still waiting` with the reset time. Every other command stops with the reset time, also as
-  minutes from now. Points left and the reset come from the `x-ratelimit-remaining` and `x-ratelimit-reset` headers of the
-  command's own GraphQL answers, a refusal included, never from `gh api rate_limit`
-  ([parallel drivers](docs/parallel-drivers.md)). `wait` and `done` take
-  `--stall MINUTES` (default 20) and `--grace MINUTES` (default 3, or `"reviewerGraceMinutes"` of the project file; `0` turns it off): for that long after
-  the PR became ready (Ready event, or creation as non-draft) and after each push of the
-  head (read from the branch's push log, so a reused commit counts too), whichever is later, they keep
-  waiting for reviewers that start on Ready or on new commits, such as Codex, even when CI is already
-  green, unless a required bot has already answered for good on this head (a review, a finished comment, a final reaction, or a limit notice such as "usage limit" or "rate limited" in a comment or check): that ends the grace at once, an optional reviewer never does. `wait PR --head SHA` (the id you just pushed, 7 to 40 characters, `git rev-parse HEAD`)
-  keeps waiting (`waiting: PR still shows head …`) while an open PR still reports another head:
-  right after a push GitHub serves the previous head for a moment, and a plain `wait` would end `DONE` for it.
-  A head that never matches waits on until stopped by hand. `wait PR --merged` waits for the human merge
-  and ends `FAILED: <reasons>` (e.g. `FAILED: check Frontend FAILURE; merge conflicts`) if a check is red or the PR is closed unmerged. After `--max-minutes N` (default 9, `0` = no limit) `wait` stops
-  unfinished with exit 4 and the line `still waiting: call wait again`, so it ends before the 10-minute limit of an agent's
-  shell tool; a quota pause that would end after that time is not slept through, the line then names the reset
-  (`still waiting: call wait again after <time> (GitHub quota pause)`). Call `wait` again on exit 4. Analyzers that create their
-  check only when finished are awaited when listed in `"awaitApps"`
-  ([setup](SETUP.md#3-board-and-labels)).
-  Recognized review traces: checks and statuses, Codex's `Running` summary (its code
-  and security rows end separately: a security result comment never ends a running code
-  review), bot 👀 reactions and review requests. Free-text announcements of other bots are not
-  detected; check such reviewers by hand. Reviewers in `"optionalReviewers"`
-  ([setup](SETUP.md#3-board-and-labels)) are skipped for all of these: their checks, comments and
-  reviews are listed and their 👀 reaction is shown as a note, but they never wait, stall or fail; their open threads and
-  change requests still block, and an analyzer such as SonarCloud listed there still reports open issues as a blocker.
 
 ### Handoff comment
 

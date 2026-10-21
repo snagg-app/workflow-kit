@@ -2,6 +2,12 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'sweep', run: 'sweep', writes: true, doc: 'docs/board/sweep.md',
+    summary: 'Cleans up the board. Human-review issues whose PR has merge conflicts go back to Automated review; issues whose PR merged into release/** are closed.' },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createSweep(env) {
   const { graphql, isSpec, project, projectItem, restAll, statuses, texts } = env;

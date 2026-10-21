@@ -34,6 +34,7 @@ jobs:
       # Regenerate everything, then Git proves the committed outputs were current.
       - run: node scripts/init-project.mjs --existing
       - run: node scripts/setup-skills.mjs
+      - run: node scripts/board-readme.mjs
       # Intent-to-add plus the HEAD comparison also catch new and deleted generated files.
       - run: git add --intent-to-add --all && git diff --exit-code HEAD
       - run: node --test scripts/tests
