@@ -75,6 +75,15 @@ test('start claims without branch or PR; the same call resumes, a foreign claim 
   assert.match(JSON.parse(text('backlink-comments-1.json')).at(-1).body, /Session: S2\n/);
 });
 
+test('start sets push.default to simple in the clone, even when the clone had upstream (#3822)', t => {
+  const { checkout, run, writeIssue, git } = startFixture(t);
+  git(checkout, 'config', 'push.default', 'upstream');
+  writeIssue(issue('Ready'));
+  const result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(checkout, 'config', '--get', 'push.default'), 'simple');
+});
+
 test('start takes over a stale PR of another session: its claim line names the new session', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
   git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
