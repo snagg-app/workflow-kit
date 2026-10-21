@@ -25,7 +25,7 @@ export function fixture(t) {
   mkdirSync(bin);
   // board.mjs only looks for a `gh` (and `ready --local` for a `git`) on PATH outside the checkout; its gh calls go to fake-gh.mjs (see board-worker.mjs).
   for (const tool of ['gh', 'git']) writeFileSync(join(bin, process.platform === 'win32' ? `${tool}.exe` : tool), '');
-  writeFileSync(join(checkout, '.github/workflow-project.json'), JSON.stringify({ repository: 'test/example', id: 'P1' }));
+  writeFileSync(join(checkout, '.github/workflow-project.json'), JSON.stringify({ repository: 'test/example', id: 'P1', language: 'de' }));
   // By default the driver has posted the handoff comment long after any push; tests about it replace this file.
   writeFileSync(join(checkout, 'issues-comments.json'), JSON.stringify([handoffComment()]));
   // The session variables of the running agent must not reach board.mjs; a test names its own session.

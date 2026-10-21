@@ -40,6 +40,23 @@ test('handoff needs the driver handoff comment that names the current head', t =
   assert.equal(readFileSync(join(checkout, 'stored'), 'utf8'), 'Human review');
 });
 
+test('handoff follows the status names and the language of the project file', t => {
+  const { checkout, run, writeIssue } = handoffFixture(t);
+  const config = join(checkout, '.github/workflow-project.json'), { language, ...plain } = JSON.parse(readFileSync(config, 'utf8'));
+  writeFileSync(config, JSON.stringify({ ...plain, statuses: { automatedReview: 'Checks', humanReview: 'QA' } }));
+  writeFileSync(join(checkout, 'status-options.json'), JSON.stringify(['Backlog', 'Ready', 'In progress', 'Checks', 'QA', 'Done']));
+  writeIssue({ ...issue('Checks'), assignees: { nodes: [{ login: 'worker' }] } });
+  writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr()));
+  writeFileSync(join(checkout, 'handoff-fixture'), '');
+  // Without "language" the heading is English: the German one is another heading.
+  assert.equal(run('handoff', '1', '7').status, 1, 'a "## Übergabe" comment is no handoff in an English project');
+  assert.equal(existsSync(join(checkout, 'mutations')), false);
+  writeFileSync(join(checkout, 'issues-comments.json'), JSON.stringify([handoffComment({ body: '## Handoff\n\nHead: abcdef1' })]));
+  const result = run('handoff', '1', '7');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(join(checkout, 'stored'), 'utf8'), 'QA');
+});
+
 
 // The PR body as GitHub renders it: headings and paragraphs, with the checks the "selfReview" field of the project file lists.
 const selfReview = (level, ...lines) => `<h${level} dir="auto">Selbstprüfung</h${level}>\n` + lines.map(line => `<p dir="auto">${line}</p>`).join('\n');
