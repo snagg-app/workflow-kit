@@ -5,6 +5,7 @@
         "matcher": "Edit|Write|apply_patch",
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" PostToolUse --agent codex; exit 0",
             "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; if (-not (Test-Path -LiteralPath $f)) { $f = \"$p/scripts/kit-hook.mjs\" }; if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $f)) { $input | node $f PostToolUse --agent codex; exit $LASTEXITCODE }; exit 0",
@@ -18,6 +19,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" Stop --agent codex; exit 0",
             "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; if (-not (Test-Path -LiteralPath $f)) { $f = \"$p/scripts/kit-hook.mjs\" }; if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $f)) { $input | node $f Stop --agent codex; exit $LASTEXITCODE }; exit 0",
@@ -31,6 +33,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; [ -f \"$f\" ] || { [ \"$(ls -A \"$p/.vendor/workflow-kit\" 2>/dev/null)\" = .git ] && rm -f \"$p/.vendor/workflow-kit/.git\"; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true SSH_ASKPASS=true git -C \"$p\" -c credential.interactive=false -c core.hooksPath=/dev/null submodule update --init --checkout .vendor/workflow-kit >/dev/null 2>&1; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; }; [ -f \"$f\" ] && exec node \"$f\" SessionStart --agent codex; exit 0",
             "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; if (-not (Test-Path -LiteralPath $f)) { $f = \"$p/scripts/kit-hook.mjs\" }; if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Write-Output '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0 }; if (-not (Test-Path -LiteralPath $f)) { $k = \"$p/.vendor/workflow-kit\"; if ((Test-Path -LiteralPath \"$k/.git\" -PathType Leaf) -and @(Get-ChildItem -LiteralPath $k -Force).Count -eq 1) { Remove-Item -LiteralPath \"$k/.git\" -Force }; $env:GIT_TERMINAL_PROMPT = '0'; $env:GIT_ASKPASS = 'true'; $env:SSH_ASKPASS = 'true'; git -C $p -c credential.interactive=false -c core.hooksPath=/dev/null submodule update --init --checkout .vendor/workflow-kit *> $null; $f = \"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\" }; if (Test-Path -LiteralPath $f) { $input | node $f SessionStart --agent codex; exit $LASTEXITCODE }; exit 0",
@@ -43,6 +46,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; [ -f \"$f\" ] || { [ \"$(ls -A \"$p/.vendor/workflow-kit\" 2>/dev/null)\" = .git ] && rm -f \"$p/.vendor/workflow-kit/.git\"; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true SSH_ASKPASS=true git -C \"$p\" -c credential.interactive=false -c core.hooksPath=/dev/null submodule update --init --checkout .vendor/workflow-kit >/dev/null 2>&1; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; }; [ -f \"$f\" ] && exec node \"$f\" SubagentStart --agent codex; exit 0",
             "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; if (-not (Test-Path -LiteralPath $f)) { $f = \"$p/scripts/kit-hook.mjs\" }; if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Write-Output '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0 }; if (-not (Test-Path -LiteralPath $f)) { $k = \"$p/.vendor/workflow-kit\"; if ((Test-Path -LiteralPath \"$k/.git\" -PathType Leaf) -and @(Get-ChildItem -LiteralPath $k -Force).Count -eq 1) { Remove-Item -LiteralPath \"$k/.git\" -Force }; $env:GIT_TERMINAL_PROMPT = '0'; $env:GIT_ASKPASS = 'true'; $env:SSH_ASKPASS = 'true'; git -C $p -c credential.interactive=false -c core.hooksPath=/dev/null submodule update --init --checkout .vendor/workflow-kit *> $null; $f = \"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\" }; if (Test-Path -LiteralPath $f) { $input | node $f SubagentStart --agent codex; exit $LASTEXITCODE }; exit 0",
@@ -55,6 +59,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" UserPromptSubmit --agent codex; exit 0",
             "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; if (-not (Test-Path -LiteralPath $f)) { $f = \"$p/scripts/kit-hook.mjs\" }; if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $f)) { $input | node $f UserPromptSubmit --agent codex; exit $LASTEXITCODE }; exit 0",
