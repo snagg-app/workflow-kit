@@ -121,6 +121,16 @@ test('done overlap policy from the remote target base keeps unrelated moves off 
   assert.equal(text('stored'), 'Human review');
 });
 
+test('done pushes a new local commit even when the overlap policy needs no base merge (#659)', t => {
+  const { run, git, checkout, file, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  moveBase(git, checkout, { 'other.txt': 'base' }, { 'fix.txt': 'fix' });
+  const own = git('rev-parse', 'HEAD');
+  const result = run('done', '1', 'result.md'); // the PR still shows the old head, so ready may refuse; the push must have happened first
+  assert.equal(git('ls-remote', 'origin', 'refs/heads/work').split('\t')[0], own, result.stdout + result.stderr);
+  assert.equal(git('rev-parse', 'HEAD'), own, 'No base merge');
+});
+
 test('done overlap policy merges a shared file even when both edits can merge cleanly', t => {
   const { run, git, checkout, file, json } = delivery(t, handoffFixture);
   baseMergePolicy(file, json);
