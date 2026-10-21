@@ -42,12 +42,12 @@ test('kit handlers are replaced; foreign handlers, groups and settings stay; rer
   assert.deepEqual(readFileSync(path), once);
 });
 
-// The kit is product-neutral. Left out: the license holder, the kit's own board binding, its consumer list and the secret name in the notify workflow.
-const projectConfig = new Set(['LICENSE', '.github/workflow-project.json', '.github/kit-consumers.json', '.github/workflows/notify-consumers.yml']);
+// The kit is product-neutral. Left out: the license holder, the kit's own board binding, its consumer list; the notify workflow may name only its secret.
+const projectConfig = new Set(['LICENSE', '.github/workflow-project.json', '.github/kit-consumers.json']);
 test('no tracked kit file names a consuming product', () => {
   const files = spawnSync('git', ['ls-files', '-z'], { cwd: new URL('../..', import.meta.url), encoding: 'utf8' }).stdout.split('\0').filter(file => file && !projectConfig.has(file) && statSync(new URL(`../../${file}`, import.meta.url), { throwIfNoEntry: false })?.isFile());
   assert.ok(files.length > 50);
-  for (const file of files) assert.doesNotMatch(readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').replaceAll('snagg-app', ''), new RegExp(['vault' + 'dex', 'sna' + 'gg'].join('|'), 'i'), file);
+  for (const file of files) assert.doesNotMatch(readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').replaceAll('snagg-app', '').replaceAll('VAULTDEX_DISPATCH_TOKEN', ''), new RegExp(['vault' + 'dex', 'sna' + 'gg'].join('|'), 'i'), file);
 });
 
 test('retired hook files lose only kit handlers', t => {

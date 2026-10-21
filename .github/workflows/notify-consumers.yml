@@ -19,6 +19,7 @@ jobs:
       - env:
           GH_TOKEN: ${{ secrets.VAULTDEX_DISPATCH_TOKEN }}
         run: |
-          for repo in $(jq -r '.[]' .github/kit-consumers.json); do
+          repos=$(jq -r '.[]' .github/kit-consumers.json)
+          for repo in $repos; do
             gh api "repos/$repo/dispatches" -f event_type=kit-main
           done
