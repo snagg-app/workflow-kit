@@ -51,11 +51,11 @@ test('start claims without branch or PR; the same call resumes, a foreign claim 
   writeIssue(issue('Ready'));
   result = run('start', '1', '--session', 'S1');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /^START #1 session S1 base main \(claim only/m);
+  assert.match(result.stdout, /^START #1 session S1 branch claude\/1-fixture base main \(branch made from origin\/main/m);
   assert.equal(text('stored'), 'In progress');
   assert.equal(JSON.parse(text('issue.json')).assignees.nodes[0].login, 'worker');
   for (const none of ['develops', 'created-pr']) assert.equal(existsSync(file(none)), false, none);
-  assert.equal(git(checkout, 'branch', '--show-current'), 'main', 'no branch switch');
+  assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');
   const claim = JSON.parse(text('backlink-comments-1.json')).map(comment => comment.body).join('');
   assert.match(claim, /Agent: claude, Session: S1\nBasis: main\n/);
 
@@ -114,7 +114,7 @@ test('done opens the branch and the Draft PR with the first push (#643)', t => {
   assert.equal(git(checkout, 'rev-parse', '--abbrev-ref', 'claude/1-fixture@{upstream}'), 'origin/claude/1-fixture', 'the upstream is the branch itself, never the base (#646)');
 });
 
-for (const [setup, expected] of [[undefined, ''], ['echo "setup on $BRANCH" > setup-ran', 'setup on main']]) {
+for (const [setup, expected] of [[undefined, ''], ['echo "setup on $BRANCH" > setup-ran', 'setup on claude/1-fixture']]) {
   test(`start ${setup ? 'runs the setup command of the project' : 'without setup adds no step'} (#567)`, t => {
     const { run, writeIssue, file, text } = startFixture(t);
     writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...JSON.parse(text('.github/workflow-project.json')), setup }));
@@ -124,6 +124,28 @@ for (const [setup, expected] of [[undefined, ''], ['echo "setup on $BRANCH" > se
     assert.equal(text('setup-ran').trim(), expected);
   });
 }
+
+test('start branches from origin/<base> of the Zielrelease and refuses an empty field without a write (#657)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  const project = JSON.parse(text('.github/workflow-project.json'));
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...project, baseBranch: { field: 'Zielrelease', pattern: 'release/{value}' } }));
+  const withField = base => ({ ...issue('Ready'), projectItems: { nodes: [{ ...issue().projectItems.nodes[0], base }] } });
+
+  writeIssue(withField(undefined));
+  let result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /Zielrelease of #1 is empty/);
+  for (const written of ['stored', 'comment-writes']) assert.equal(existsSync(file(written)), false, written);
+
+  git(checkout, 'commit', '--allow-empty', '-q', '-m', 'release only');
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/release/0.1.2');
+  git(checkout, 'reset', '-q', '--hard', 'HEAD~1');
+  writeIssue(withField({ name: '0.1.2' }));
+  result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture', 'the checkout stood on main');
+  assert.equal(git(checkout, 'rev-parse', 'HEAD'), git(checkout, 'rev-parse', 'origin/release/0.1.2'));
+});
 
 test('start with a failing setup ends with an error and shows its output, claim and PR stay (#567)', t => {
   const { run, writeIssue, file, text } = startFixture(t);

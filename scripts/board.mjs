@@ -2863,6 +2863,16 @@ const localBranchExists = name => {
   try { git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`); return true; } catch { return false; }
 };
 
+/** `<agent>/<number>-<title>`, with the session (and a counter) appended while a branch of that name exists locally, on the remote or on the issue. */
+function freeBranchName(issue, agent, session) {
+  const stem = `${agent.toLowerCase()}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
+  let branch = stem;
+  for (let suffix = 1; workBranches(issue).includes(branch) || localBranchExists(branch) || git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`); suffix++) {
+    branch = `${stem}-${session}${suffix === 1 ? '' : `-${suffix}`}`;
+  }
+  return branch;
+}
+
 /**
  * The first push (#643): the claim comment has no branch and no PR yet. Own commits on top of the claimed base get the branch `<agent>/<number>-<title>` (the checkout's own
  * branch when it already has that shape) and the Draft PR that closes the issue, with the claim line in its body. Returns the PR number, or undefined when there is nothing to open
@@ -2875,13 +2885,9 @@ function openFirstPr(issue) {
   git('fetch', 'origin');
   const base = /^Basis:[ \t]*(\S+)[ \t]*$/m.exec(claim.input)?.[1] ?? (baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch));
   if (git('rev-list', '--count', `origin/${base}..HEAD`) === '0') return;
-  const stem = `${claim[1].toLowerCase()}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
   let branch = git('branch', '--show-current');
   if (onBase(branch) || !new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
-    branch = stem;
-    for (let suffix = 1; workBranches(issue).includes(branch) || localBranchExists(branch) || git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`); suffix++) {
-      branch = `${stem}-${claim[2]}${suffix === 1 ? '' : `-${suffix}`}`;
-    }
+    branch = freeBranchName(issue, claim[1], claim[2]);
     git('switch', '-c', branch, '--no-track');
   }
   git('push', '--set-upstream', 'origin', branch);
@@ -2923,6 +2929,9 @@ function start() {
   // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
   const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
+  // #657: an empty base field must not fall back to the default branch silently (a tooling issue says `main` in the field).
+  const unset = baseOf(issue);
+  if (unset.setting && !unset.value && !stacked && !openPr(issue)) assert.fail(`the Project field ${unset.setting.field} of #${number} is empty; set it (main for tooling issues) and start again, nothing was written`);
   if (!fresh.assignees.nodes.some(user => sameLogin(user.login, login))) {
     restPost(`repos/${issueProject.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
     fresh.assignees.nodes.push({ login });
@@ -2953,6 +2962,11 @@ function start() {
     }
   } else {
     git('fetch', 'origin');
+    // #657: the work branch starts on origin/<base> whatever the checkout stands on; an own branch of this issue (a resume) stays.
+    if (onBase(branch) || !new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
+      branch = freeBranchName(fresh, agent, session);
+      git('switch', '-c', branch, '--no-track', `origin/${base}`);
+    }
     if (!isOwn(fresh, session)) {
       restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `Beansprucht.\n${claimLine}\nBasis: ${base}\n`);
       const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).findLast(comment => claimField.test(comment.body ?? ''));
@@ -2966,7 +2980,7 @@ function start() {
   // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
   if (project.setup) try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
   console.log(current ? `START #${number} session ${session} branch ${branch} base ${base} PR #${current.number}`
-    : `START #${number} session ${session} base ${base} (claim only: work on a branch from origin/${base} made with git switch -c <branch> --no-track origin/${base}, never push to ${base}; done opens branch and Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
+    : `START #${number} session ${session} branch ${branch} base ${base} (branch made from origin/${base}, never push to ${base}; done opens the Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
 }
 
 /**
