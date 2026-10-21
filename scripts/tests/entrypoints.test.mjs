@@ -10,9 +10,10 @@ import test from 'node:test';
 const write = (path, value) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, value); };
 const json = (path, value) => write(path, JSON.stringify(value, null, 2) + '\n');
 const read = path => JSON.parse(readFileSync(path, 'utf8'));
-const kitHook = version => ({ command: `sh "$HOME/.ponytail/workflow-kit/${version}/launch.sh" activate` });
+const kitHook = version => ({ id: 'workflow-kit', command: `node kit-hook.mjs ${version}` });
 const foreign = { command: 'sonar hook codex-prompt-submit' };
-const staleBranchHook = { command: 'git -C "$root" merge-base --is-ancestor HEAD "$base" || continue' };
+// A project hook that looks like a kit call but carries no id: it is the project's.
+const lookalike = { command: 'node kit-hook.mjs project' };
 
 /** A consumer with the real installer at .vendor/workflow-kit and an empty template set. */
 function fixture(t) {
@@ -32,11 +33,11 @@ const succeeds = result => assert.equal(result.status, 0, result.stderr);
 
 test('kit handlers are replaced; foreign handlers, groups and settings stay; reruns change nothing', t => {
   const f = fixture(t), path = join(f.root, '.claude/settings.json');
-  json(path, { permissions: { allow: ['x'] }, hooks: { SessionStart: [{ matcher: 'startup', hooks: [foreign, kitHook('old'), staleBranchHook] }] } });
+  json(path, { permissions: { allow: ['x'] }, hooks: { SessionStart: [{ matcher: 'startup', hooks: [foreign, kitHook('old'), lookalike] }] } });
   f.template('.claude/settings.json', { description: 'kit', hooks: { SessionStart: [{ matcher: 'startup', hooks: [kitHook('new')] }] } });
   succeeds(f.run('--existing'));
   assert.deepEqual(read(path), { description: 'kit', permissions: { allow: ['x'] }, hooks: { SessionStart: [
-    { matcher: 'startup', hooks: [foreign] }, { matcher: 'startup', hooks: [kitHook('new')] }] } });
+    { matcher: 'startup', hooks: [foreign, lookalike] }, { matcher: 'startup', hooks: [kitHook('new')] }] } });
   const once = readFileSync(path);
   succeeds(f.run('--existing'));
   assert.deepEqual(readFileSync(path), once);
@@ -48,6 +49,14 @@ test('no tracked kit file names a consuming product', () => {
   const files = spawnSync('git', ['ls-files', '-z'], { cwd: new URL('../..', import.meta.url), encoding: 'utf8' }).stdout.split('\0').filter(file => file && !projectConfig.has(file) && statSync(new URL(`../../${file}`, import.meta.url), { throwIfNoEntry: false })?.isFile());
   assert.ok(files.length > 50);
   for (const file of files) assert.doesNotMatch(readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').replaceAll('snagg-app', '').replaceAll('VAULTDEX_DISPATCH_TOKEN', ''), new RegExp(['vault' + 'dex', 'sna' + 'gg'].join('|'), 'i'), file);
+});
+
+test('every shipped hook handler has the kit id and calls the hook module', () => {
+  for (const file of ['templates/.claude/settings.json', 'templates/.codex/hooks.json', '.claude/settings.json', '.codex/hooks.json']) {
+    const handlers = Object.values(read(new URL(`../../${file}`, import.meta.url)).hooks).flat().flatMap(group => group.hooks);
+    assert.ok(handlers.length >= 5, file);
+    for (const handler of handlers) assert.ok(handler.id === 'workflow-kit' && handler.command.includes('kit-hook.mjs'), file);
+  }
 });
 
 test('retired hook files lose only kit handlers', t => {

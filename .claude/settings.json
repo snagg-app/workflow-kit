@@ -6,6 +6,7 @@
         "matcher": "Edit|Write",
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" PostToolUse --agent claude; exit 0",
             "timeout": 120,
@@ -19,6 +20,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" Stop --agent claude; exit 0",
             "timeout": 120,
@@ -32,6 +34,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; [ -f \"$f\" ] || { [ \"$(ls -A \"$p/.vendor/workflow-kit\" 2>/dev/null)\" = .git ] && rm -f \"$p/.vendor/workflow-kit/.git\"; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true SSH_ASKPASS=true git -C \"$p\" -c credential.interactive=false -c core.hooksPath=/dev/null submodule update --init --checkout .vendor/workflow-kit >/dev/null 2>&1; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; }; [ -f \"$f\" ] && exec node \"$f\" SessionStart --agent claude; exit 0",
             "timeout": 120,
@@ -44,6 +47,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; [ -f \"$f\" ] || { [ \"$(ls -A \"$p/.vendor/workflow-kit\" 2>/dev/null)\" = .git ] && rm -f \"$p/.vendor/workflow-kit/.git\"; GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true SSH_ASKPASS=true git -C \"$p\" -c credential.interactive=false -c core.hooksPath=/dev/null submodule update --init --checkout .vendor/workflow-kit >/dev/null 2>&1; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; }; [ -f \"$f\" ] && exec node \"$f\" SubagentStart --agent claude; exit 0",
             "timeout": 120,
@@ -56,6 +60,7 @@
       {
         "hooks": [
           {
+            "id": "workflow-kit",
             "type": "command",
             "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" UserPromptSubmit --agent claude; exit 0",
             "timeout": 5,
