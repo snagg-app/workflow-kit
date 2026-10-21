@@ -118,6 +118,12 @@ test('adapted hooks preserve explicit host and checkout state and drain stdout o
   const otherCheckout = path.join(temp, 'other-checkout');
   mkdirSync(path.join(otherCheckout, '.git'), { recursive: true });
   assert.equal(activate(otherCheckout, 'claude', {}, 'continue'), '', 'Other checkout has no mode');
+  // A fork inherits the parent's context with the rules already in it (#672); every other subagent still gets them.
+  const subagent = agent_type => spawnSync(process.execPath, [path.join(snapshot, 'ponytail-subagent.js'), 'claude'],
+    { cwd: checkout, env, input: JSON.stringify({ agent_type }), encoding: 'utf8', timeout: hookTimeout });
+  activate(checkout, 'claude');
+  assert.equal(subagent('fork').stdout, '', 'fork gets no second copy');
+  assert.match(subagent('driver').stdout, /lite:/, 'other subagents still get the rules');
   for (const host of ['codex', 'claude']) {
     activate(checkout, host);
     for (const hook of ['mode-tracker', 'subagent']) for (const eof of [true, false]) {

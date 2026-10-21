@@ -39,18 +39,10 @@ try {
   matcherRe = null;
 }
 
-// No matcher → keep the original synchronous, stdin-independent path. On Windows
-// the PowerShell `if {}` wrapper can swallow the piped JSON so stdin 'end' never
-// fires (#443); the default path must not wait on stdin or it would stall every
-// subagent spawn.
-if (!matcherRe) {
-  inject();
-  return; // Let stdout drain before Node exits.
-}
-
-// Matcher set → read agent_type from stdin and skip only on a definite
-// mismatch. Missing/unparseable agent_type, a stdin error, or the timeout all
-// fail open (inject), so scoping never silently drops the persona.
+// Read agent_type from stdin. A fork inherits the parent's context, which
+// already holds the ruleset (kit #672), so it gets none; with a matcher set
+// a definite mismatch is skipped too. Missing/unparseable agent_type, a stdin
+// error, or the timeout all fail open (inject), so scoping never silently drops the persona.
 let input = '';
 let done = false;
 
@@ -66,12 +58,13 @@ function finish() {
   } catch (e) {
     // Unparseable payload — fall through and inject to be safe.
   }
+  if (agentType === 'fork') return;
   // .test() is synchronous, so a backtracking-heavy matcher like (a+)+$ would
   // block the event loop and the fallback timer below could never fire (#658).
   // Run it under a vm timeout; a timeout fails open like every other doubt.
   let matches = true;
   try {
-    if (agentType) {
+    if (agentType && matcherRe) {
       matches = vm.runInNewContext('re.test(s)', { re: matcherRe, s: agentType }, { timeout: 100 });
     }
   } catch (e) {
