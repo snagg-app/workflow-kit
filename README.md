@@ -3,7 +3,7 @@
 Contribution workflow, GitHub Project setup and agent skills: Ponytail,
 Impeccable, Matt Pocock's complete collection, Vercel's `find-skills` and the kit's own
 `spec-review` (`/spec-review <spec>`: spec against code, open work becomes sub-issues).
-Maintained by Snagg under MIT. Pinned upstream submodules and the
+Licensed under MIT. Pinned upstream submodules and the
 [find-skills snapshot](.agents/skills/find-skills/NOTICE.md) retain their licenses,
 notices and reviewed adaptations in generated skills.
 
@@ -509,8 +509,8 @@ command again to port the patch and regenerate the skills, then commit and push.
 a commit by anyone else is left alone; the same command applies.
 
 Renovate merges its pull requests itself once every check on the head is green, all updates
-including skills and hooks ([#244](https://github.com/vaultdex/workflow-kit/issues/244)) and the
-commit-pinned actions of the write-capable regenerate workflow ([#401](https://github.com/vaultdex/workflow-kit/issues/401)). The
+including skills and hooks ([#244](https://github.com/snagg-app/workflow-kit/issues/244)) and the
+commit-pinned actions of the write-capable regenerate workflow ([#401](https://github.com/snagg-app/workflow-kit/issues/401)). The
 risk is accepted: vendored skills and hooks steer agents or load executable code, and nobody
 reads them before the merge. `platformAutomerge` is on (repository setting "Allow auto-merge"):
 GitHub merges as soon as the "Workflow Kit checks" verification required by the "Reviewed main"

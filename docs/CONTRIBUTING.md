@@ -385,7 +385,7 @@ related references do not expand the declared scope. Creating a backlink never c
    set the PR to Draft, batch fixes and rerun affected checks. Push and run `done` again (Ready for Review,
    Automated review, wait). When `done` or `wait` print
    `changed on both sides` with files, merge the base once before the next correction push. Otherwise merge the base
-   only for a conflict: PR CI already tests the merge result. A project may name more cases (Vaultdex: new migrations on
+   only for a conflict: PR CI already tests the merge result. A project may name more cases (for example new migrations on
    both sides).
    After two correction pushes, collect new findings that neither block (P0/P1,
    security, data loss) nor regress against main in one follow-up issue instead of
