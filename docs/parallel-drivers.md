@@ -1,7 +1,7 @@
 # Parallele Driver
 
 Beobachtungen und Verweise für mehrere Agent-Driver, die gleichzeitig auf einem
-Rechner arbeiten (zuerst am 06.10.2026 in vaultdex/Vaultdex). Verbindlich bleibt
+Rechner arbeiten. Verbindlich bleibt
 [AGENT_RULES.md](../AGENT_RULES.md); die [Driver-Regeln](#driver-regeln) am Ende
 legen sie für Driver-Subagenten aus. Ein Briefing verweist darauf und nennt nur die
 Besonderheiten des Issues.
@@ -14,35 +14,20 @@ bekommen begrenzte Aufträge ([Delegation](CONTRIBUTING.md#starting-work)).
 Chief-Session keinen neuen Driver und kein neues Issue: zuerst dort Konflikte lösen, rote Checks
 reparieren, Reviews abarbeiten und nach „Human review“ übergeben.
 
-**Nachweis-Sperre.** Schwere lokale Nachweise (Backend-E2E, Playwright-Suite)
-stören sich gegenseitig, sobald mehrere gleichzeitig laufen. Ein Symptom ist die
-Meldung „Could not find a valid Docker environment“ ohne echten Fehler im Test.
-Die Sperre dafür liegt im
-Projekt, nicht im Kit. In vaultdex/Vaultdex ([#1099](https://github.com/vaultdex/Vaultdex/issues/1099))
-stellen sich `verify-backend.mjs jvm` und die volle Playwright-Suite (`npm run test:e2e`
-in `frontend/web`) selbst in eine Warteschlange: Sie nehmen eine Sperre für den ganzen
-Rechner und warten, bis mindestens 10 GB RAM frei sind
-([`scripts/proof-lock.mjs`](https://github.com/vaultdex/Vaultdex/blob/main/scripts/proof-lock.mjs),
-[Details](https://github.com/vaultdex/Vaultdex/blob/main/docs/guides/backend-verification.md#one-heavy-proof-at-a-time-per-machine)).
-Eine Absprache von Hand (zum Beispiel ein Verzeichnis `.proof-lock`) ist dort nicht mehr
-nötig; fokussierte Playwright-Läufe (`npx playwright test <Datei>`) reihen sich nicht ein.
-Ein Projekt ohne eine solche Sperre spricht schwere Nachweise weiter ab.
+**Nachweis-Sperre.** Schwere lokale Nachweise (zum Beispiel Backend-E2E oder eine
+Browser-Testsuite) stören sich gegenseitig, sobald mehrere gleichzeitig laufen. Ein Symptom ist die
+Meldung „Could not find a valid Docker environment“ ohne echten Fehler im Test. Eine Sperre dafür
+gehört ins Projekt, nicht ins Kit. Ein Projekt ohne eine solche Sperre spricht schwere Nachweise ab.
 
-**Flyway-Migrationsnummern.** Legen zwei Driver parallel Migrationen an, können die
-Nummern kollidieren. Die Regel steht im Projekt, nicht im Kit: Vaultdex
-[Flyway-Versionen](https://github.com/vaultdex/Vaultdex/blob/main/docs/contributing/flyway-versionen.md),
-mechanisch geprüft von der
-Repository-CI ([vaultdex/Vaultdex#980](https://github.com/vaultdex/Vaultdex/issues/980)).
-
-**Sonar.** Null offene Sonar-Issues prüft `board.mjs done` bereits mechanisch
-([#134](https://github.com/vaultdex/workflow-kit/issues/134)); nichts weiter zu tun.
+**Migrationsnummern.** Legen zwei Driver parallel Migrationen an, können die Nummern kollidieren.
+Die Regel und ihre mechanische Prüfung gehören ins Projekt, nicht ins Kit.
 
 **Merge-Vollmacht.** Agents mit Merge-Vollmacht mergen nur über `board.mjs merge PR` und
 bauen kein eigenes Gate nach: der Befehl prüft CI, Reviews, Sonar und offene Threads, zieht bei
 überschneidenden Änderungen die Basis nach, wartet erneut auf die CI und löscht danach den
-Branch ([README](../README.md#board-commands), [#319](https://github.com/vaultdex/workflow-kit/issues/319)).
+Branch ([README](../README.md#board-commands), [#319](https://github.com/snagg-app/workflow-kit/issues/319)).
 Einen ganzen Stapel gestapelter PRs mergt `board.mjs merge OBERSTE --stack` in einem Durchgang
-(jede Ebene wird geprüft, nur der oberste Kopf braucht CI, [#389](https://github.com/vaultdex/workflow-kit/issues/389)).
+(jede Ebene wird geprüft, nur der oberste Kopf braucht CI, [#389](https://github.com/snagg-app/workflow-kit/issues/389)).
 
 **GitHub-Kontingent.** Das GraphQL-Kontingent (5.000 Punkte pro Stunde) gilt für das ganze
 Konto und wird von allen Drivern gemeinsam verbraucht; ist es leer, scheitert jeder
@@ -53,7 +38,7 @@ statt 120 bei festem Minutentakt. Als Budget gilt: Zahl der Driver mal 40 Punkte
 Verbrauch der Agents; höchstens 20 parallele `wait` (rund 800 Punkte pro Stunde, ein Sechstel
 des Kontingents). `wait` fragt GraphQL nur noch, wenn sich laut REST etwas geändert hat (Head, Checks,
 Status, Aktualisierungszeit), spätestens alle 5 Minuten und zur Bestätigung jedes Endes; `wait PR --merged` liest nur REST
-([#324](https://github.com/vaultdex/workflow-kit/issues/324)). `wait` und `done` melden den Rest in einer Zeile (`quota: …`).
+([#324](https://github.com/snagg-app/workflow-kit/issues/324)). `wait` und `done` melden den Rest in einer Zeile (`quota: …`).
 `node scripts/quota-sample.mjs OUT.jsonl` misst den Verbrauch des ganzen Kontos: eine Stunde lang jede Minute `used` und `usedDelta` (die Abfrage kostet selbst einen Punkt pro Minute).
 `done` schläft bei einer Sperre oder bei weniger als 50 Punkten bis zum Reset
 (`rate limited until …`) und fragen danach weiter. `wait` schläft nicht: bei einer Sperre oder unter 300 Punkten liest es
@@ -156,7 +141,7 @@ Modellwahl stehen hier nicht.
      (`node.exe`) gehören auch anderen Drivern.
    - Keine eigenen Schleifen um `gh`: `gh api graphql` meldet die Kontingentsperre als Text und kann mit Exit 0 enden
      (Driver #1095 wartete so 9 Minuten umsonst). Warten mit `board.mjs wait` oder `board.mjs quota-wait`
-     ([#324](https://github.com/vaultdex/workflow-kit/issues/324)).
+     ([#324](https://github.com/snagg-app/workflow-kit/issues/324)).
    - GitHub lesen mit `gh api repos/…` (REST, kostet kein GraphQL-Kontingent) statt `gh pr view|checks|list`
      und `gh issue view|list` (GraphQL); Status und Felder schreibt weiter `board.mjs`.
    - Kommentare eines Issues: `gh api repos/OWNER/REPO/issues/N/comments`.

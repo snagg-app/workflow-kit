@@ -24,7 +24,7 @@ whose `git reset --hard` aborted with `could not reset submodule index` and left
 
 - Humans accept and merge. Never merge, enable auto-merge or set Done before a
   human merged. One exception, decided by the maintainer
-  ([#244](https://github.com/vaultdex/workflow-kit/issues/244)): the Renovate bot merges
+  ([#244](https://github.com/snagg-app/workflow-kit/issues/244)): the Renovate bot merges
   its own dependency PRs of this kit once their CI is green. It binds the bot, never an agent.
 - Agents leave specs (label `spec`, `"specLabel"` in the project file) untouched: only a human-invoked `spec-review`
   or a human changes their status, in any direction. Agents never invoke the skill or reproduce its review as a status-changing audit.

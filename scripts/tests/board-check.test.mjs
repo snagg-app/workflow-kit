@@ -331,7 +331,7 @@ test('"Wartet bis" holds an issue until its tag exists or its UTC time has passe
 });
 
 
-// The Draft PR is the claim (#529): its body names the session. Vaultdex #1178: Codex claimed at the end of a sentence and had an open PR; check said STARTABLE and a second driver began.
+// The Draft PR is the claim (#529): its body names the session. Issue #1178 of a consuming project: Codex claimed at the end of a sentence and had an open PR; check said STARTABLE and a second driver began.
 test('board check blocks an issue another agent works on: an open PR that does not name the own session, or a branch', t => {
   const { checkout, run, writeIssue, queries, env } = fixture(t);
   const pr = (state, changes) => ({ number: 7, state, repository: { nameWithOwner: 'test/example' }, headRefName: 'codex/1-work', ...changes });
@@ -611,7 +611,7 @@ test('--cwd names the project of a command, not the working directory', t => {
 });
 
 
-// Vaultdex #1458, #1484: drivers left issues in Automated review and started new ones.
+// Consuming project #1458, #1484: drivers left issues in Automated review and started new ones.
 test('check of a new issue is BLOCKED with "finish #N first" while the own session has an unfinished issue, unless it stacks on that work (#593)', t => {
   const { checkout, run, writeIssue, queries } = fixture(t);
   // The open PR of #5 is the claim of session S1.
