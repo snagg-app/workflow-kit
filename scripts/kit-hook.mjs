@@ -45,7 +45,8 @@ if (!['SessionStart', 'SubagentStart', 'UserPromptSubmit', 'PostToolUse', 'Stop'
 const user = [], context = [];
 const say = message => { user.push(message); context.push(message); };
 if (Number(process.versions.node.split('.')[0]) < versions.node) {
-  say(`Node ${versions.node} or newer is needed for the Workflow Kit hooks (found ${process.versions.node}); Ponytail, Impeccable and the kit check are off until Node is updated.`);
+  // Only SessionStart may speak: the other events do not accept this output.
+  if (event === 'SessionStart') say(`Node ${versions.node} or newer is needed for the Workflow Kit hooks (found ${process.versions.node}); Ponytail, Impeccable and the kit check are off until Node is updated.`);
   emit();
   process.exit(0);
 }
@@ -69,8 +70,9 @@ function followBase(root, kit) {
     if (!base.ok || !git(root, 'merge-base', '--is-ancestor', 'HEAD', base.out).ok) continue;
     const behind = Number(git(root, 'rev-list', '--count', `HEAD..${base.out}`).out);
     if (!(behind > 0)) continue;
+    const name = base.out.replace(/[^A-Za-z0-9/._-]/g, '');
     if (git(root, '--no-optional-locks', 'status', '--porcelain', '--ignore-submodules').out) {
-      say(`Checkout is ${behind} commit(s) behind ${base.out.replace(/[^A-Za-z0-9/._-]/g, '')} (as of the last fetch) and has no commits of its own but local changes, so it was not fast-forwarded and its rules, skills and board commands may be outdated. Nothing was fetched: commit or stash the changes, run git fetch, then git merge --ff-only ${base.out.replace(/[^A-Za-z0-9/._-]/g, '')}; skills load at session start, so restart after updating.`);
+      say(`Checkout is ${behind} commit(s) behind ${name} (as of the last fetch) and has no commits of its own but local changes, so it was not fast-forwarded and its rules, skills and board commands may be outdated. Nothing was fetched: commit or stash the changes, run git fetch, then git merge --ff-only ${name}; skills load at session start, so restart after updating.`);
     } else {
       // A kit on its own branch keeps it: the project moves, the kit does not follow.
       const branched = existsSync(path.join(kit, '.git')) && git(kit, 'symbolic-ref', '-q', 'HEAD').ok;
