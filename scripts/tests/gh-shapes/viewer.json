@@ -1,0 +1,10 @@
+{
+ "viewer": {
+  "login": "x"
+ },
+ "rateLimit": {
+  "cost": 1,
+  "remaining": 1,
+  "resetAt": "x"
+ }
+}

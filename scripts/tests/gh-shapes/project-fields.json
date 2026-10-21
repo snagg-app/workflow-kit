@@ -1,0 +1,19 @@
+{
+ "node": {
+  "fields": {
+   "nodes": [
+    {
+     "id": "x",
+     "name": "x",
+     "options": [
+      {
+       "id": "x",
+       "name": "x"
+      }
+     ],
+     "issueField": null
+    }
+   ]
+  }
+ }
+}

@@ -1,0 +1,147 @@
+{
+ "repository": {
+  "pullRequest": {
+   "id": "x",
+   "url": "x",
+   "number": 1,
+   "state": "MERGED",
+   "isDraft": false,
+   "createdAt": "x",
+   "headRefName": "x",
+   "headRefOid": "x",
+   "baseRefName": "x",
+   "mergeStateStatus": "UNKNOWN",
+   "reviewDecision": null,
+   "isCrossRepository": false,
+   "headRepository": {
+    "nameWithOwner": "x"
+   },
+   "body": "x",
+   "bodyHTML": "x",
+   "mergeCommit": {
+    "oid": "x"
+   },
+   "readyEvents": {
+    "nodes": [
+     {
+      "createdAt": "x"
+     }
+    ]
+   },
+   "firstReadyEvents": {
+    "nodes": [
+     {
+      "createdAt": "x"
+     }
+    ]
+   },
+   "convertEvents": {
+    "nodes": []
+   },
+   "latestOpinionatedReviews": {
+    "totalCount": 1,
+    "nodes": []
+   },
+   "reviewThreads": {
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": null
+    },
+    "nodes": []
+   },
+   "closingIssuesReferences": {
+    "totalCount": 1,
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": "x"
+    },
+    "nodes": [
+     {
+      "id": "x",
+      "number": 1
+     }
+    ]
+   },
+   "commits": {
+    "nodes": [
+     {
+      "commit": {
+       "oid": "x",
+       "committedDate": "x",
+       "checkSuites": {
+        "totalCount": 1,
+        "nodes": [
+         {
+          "createdAt": "x",
+          "status": "QUEUED",
+          "conclusion": "SKIPPED",
+          "app": {
+           "slug": "x"
+          },
+          "workflowRun": {
+           "databaseId": 1,
+           "workflow": {
+            "id": "x"
+           }
+          },
+          "checkRuns": {
+           "totalCount": 1
+          }
+         }
+        ]
+       },
+       "statusCheckRollup": {
+        "contexts": {
+         "totalCount": 1,
+         "nodes": [
+          {
+           "__typename": "CheckRun",
+           "name": "x",
+           "status": "COMPLETED",
+           "conclusion": "SKIPPED",
+           "title": null,
+           "summary": null,
+           "detailsUrl": "x",
+           "startedAt": "x",
+           "completedAt": "x",
+           "checkSuite": {
+            "databaseId": 1,
+            "createdAt": "x",
+            "app": {
+             "slug": "x"
+            },
+            "workflowRun": {
+             "databaseId": 1,
+             "event": "pull_request",
+             "workflow": {
+              "id": "x",
+              "name": "x"
+             }
+            }
+           },
+           "context": "x",
+           "state": "SUCCESS",
+           "description": "x",
+           "createdAt": "x",
+           "creator": {
+            "login": "x"
+           }
+          }
+         ]
+        }
+       }
+      }
+     }
+    ]
+   },
+   "reviewRequests": {
+    "totalCount": 1,
+    "nodes": []
+   },
+   "requestEvents": {
+    "totalCount": 1,
+    "nodes": []
+   }
+  }
+ }
+}

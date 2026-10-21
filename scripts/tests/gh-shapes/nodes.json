@@ -1,0 +1,66 @@
+{
+ "nodes": [
+  {
+   "closedByPullRequestsReferences": {
+    "totalCount": 1,
+    "nodes": [
+     {
+      "number": 1,
+      "state": "MERGED",
+      "isDraft": false,
+      "isCrossRepository": false,
+      "repository": {
+       "nameWithOwner": "x"
+      },
+      "baseRefName": "x",
+      "headRefName": "x",
+      "headRefOid": "x"
+     }
+    ]
+   },
+   "assignees": {
+    "nodes": [
+     {
+      "login": "x"
+     }
+    ]
+   },
+   "projectItems": {
+    "nodes": [
+     {
+      "id": "x",
+      "project": {
+       "id": "x"
+      }
+     }
+    ]
+   },
+   "issueFieldValues": {
+    "nodes": []
+   },
+   "fieldValues": {
+    "nodes": [
+     {
+      "name": "x",
+      "field": {
+       "name": "x"
+      }
+     }
+    ]
+   },
+   "id": "x",
+   "comments": {
+    "nodes": [
+     {
+      "createdAt": "x",
+      "url": "x",
+      "body": "x"
+     }
+    ]
+   },
+   "reviews": {
+    "nodes": []
+   }
+  }
+ ]
+}
