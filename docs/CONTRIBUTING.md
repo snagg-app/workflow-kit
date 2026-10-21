@@ -349,7 +349,7 @@ related references do not expand the declared scope. Creating a backlink never c
    human; add cases that review uncovers. Pure text or configuration changes need
    no section. Where the project lists `"selfReview"` ([setup](../SETUP.md#3-board-and-labels)),
    run those checks on the diff before Ready for Review, once per PR, and name each in the PR body
-   section **Selbstprüfung**; `done` and `merge` check that each name appears there, but do not judge
+   self-review section (**Self-review**, **Selbstprüfung** with `"language": "de"`); `done` and `merge` check that each name appears there, but do not judge
    whether a check ran or whether its result was good.
 2. Keep the PR Draft only while implementation or focused checks are unfinished.
    Then `board.mjs done` marks it Ready for Review for the commit you just pushed (it waits until GitHub reports that head, so CI

@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot, takeCwd } from './checkout-root.mjs';
+import { statusNames, textsFor } from './project-profile.mjs';
 import { isRateLimited, quotaOf, retryAt, splitResponse, untilText, waitInterval } from './quota.mjs';
 
 // Taken off here: the commands below read their arguments by position.
@@ -36,6 +37,9 @@ const project = JSON.parse(readFileSync(projectFile, 'utf8'));
 const [owner, name] = project.repository.split('/');
 // The repository and board of the issue: the project's own unless --issue-repo names another one (read once by useIssueRepo, before start and done).
 let issueProject = project, [issueOwner, issueName] = [owner, name];
+// The status names of the issue's board and the texts written into issues and PRs (`statuses`, `language` in the project file).
+let statuses = statusNames(project);
+const texts = textsFor(project);
 // `new` has no issue yet and assigns the number it creates.
 let number = Number(String(ref).replace(/^#/, ''));
 const gh = externalTool('gh', process.cwd(), projectDirectory);
@@ -213,7 +217,7 @@ function loadDeliveries(predecessors) {
 }
 const projectItem = issue => issue.projectItems.nodes.find(item => item.project.id === issueProject.id);
 // Existing boards use either spelling; unknown statuses keep their value and fail closed.
-const statusName = name => String(name).toLowerCase() === 'auto review' ? 'Automated review' : name;
+const statusName = name => String(name).toLowerCase() === 'auto review' ? statuses.automatedReview : name;
 const projectStatus = issue => statusName(projectItem(issue)?.status?.name);
 
 // "specLabel" in the project file (default "spec") marks a spec. Only a human closes a spec or sets it to Done (AGENT_RULES.md, Hard rules).
@@ -238,9 +242,9 @@ const specRefusal = (issueNumber, what) => `BLOCKED: #${issueNumber} is a spec (
 /** Specs are untouched outside a human-invoked spec-review; re-read children immediately before Human review. */
 function guardSpecStatus(issue, { fieldName, option }) {
   if (fieldName !== 'Status' || !isSpec(issue)) return;
-  assert.ok(option.name !== 'Done', specRefusal(issue.number, 'Status Done is refused'));
+  assert.ok(option.name !== statuses.done, specRefusal(issue.number, 'Status Done is refused'));
   assert.ok(command === 'field' && process.argv.includes('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
-  if (option.name === 'Human review') {
+  if (option.name === statuses.humanReview) {
     const children = restAll(`repos/${issueProject.repository}/issues/${issue.number}/sub_issues`);
     assert.ok(children.every(child => Number.isSafeInteger(child?.number) && ['open', 'closed'].includes(child.state)), 'Spec sub-issues are unreadable');
     const open = children.filter(child => child.state === 'open');
@@ -275,7 +279,7 @@ const conflictLine = pr => {
   try { lower = dependentPrs(pr.headRefName).length > 0; } catch { /* the plain verdict stands */ }
   return `blocker: merge conflicts${lower ? ` in a lower stack layer, which locks the whole stack: ${stackOrderText}` : ''}`;
 };
-const conflicting = issue => projectItem(issue)?.status?.name === 'Human review' && openPr(issue)?.mergeStateStatus === 'DIRTY';
+const conflicting = issue => projectItem(issue)?.status?.name === statuses.humanReview && openPr(issue)?.mergeStateStatus === 'DIRTY';
 /** Abandoned: no activity for staleHours, or a Human-review PR with conflicts (it is not mergeable, so nobody finishes it). Work on such an issue has expired. */
 const isStale = (issue, idle = idleMs(issue)) => idle > staleHours * 3_600_000 || conflicting(issue);
 // A PR that only says "Refs #N" is no native closer; `start --takeover` finds it (#649) and holds it here for the rest of the run.
@@ -567,7 +571,7 @@ function startReasons(issue, session, takeover) {
 
 /** Unfinished work of the caller: rows (number, assignees, projectItems, closedByPullRequestsReferences) in In progress or Automated review that are assigned to the login and whose open PR names SESSION. */
 function ownWork(rows, login, session) {
-  return rows.filter(row => ['In progress', 'Automated review'].includes(projectStatus(row))
+  return rows.filter(row => [statuses.inProgress, statuses.automatedReview].includes(projectStatus(row))
     && row.assignees.nodes.some(assignee => assignee.login.toLowerCase() === login.toLowerCase()) && isOwn(row, session));
 }
 
@@ -576,7 +580,7 @@ function ownWork(rows, login, session) {
 const feedbackNode = 'createdAt url body';
 const issueFeedback = `comments(last:10){nodes{${feedbackNode}}}`;
 const prFeedback = `comments(last:5){nodes{${feedbackNode}}} reviews(last:5){nodes{${feedbackNode}}}`;
-const handoffHeading = /^## Übergabe\s*$/m, replyLine = /^Agent:[ \t]*(claude|codex)\b/im;
+const handoffHeading = new RegExp(`^## ${RegExp.escape(texts.handoff)}\\s*$`, 'm'), replyLine = /^Agent:[ \t]*(claude|codex)\b/im;
 
 function loadPrFeedback(issues) {
   const linked = issues.flatMap(issue => issue.closedByPullRequestsReferences?.nodes ?? []);
@@ -596,7 +600,7 @@ function loadPrFeedback(issues) {
 }
 
 /**
- * What happened on a ticket since the agent's last word, or undefined. The agent's word is the "## Übergabe" handoff or a comment with an "Agent: claude|codex" line,
+ * What happened on a ticket since the agent's last word, or undefined. The agent's word is the handoff (a heading with texts.handoff) or a comment with an "Agent: claude|codex" line,
  * never the login: agents and humans share it. Counts for an issue assigned to the login (and, with SESSION, claimed by it): everything after that word, and the issue
  * back in In progress or Automated review after the handoff. Any issue: an @mention of the login after it.
  * ponytail: reads the last 10 issue comments, 5 PR comments and 5 reviews, and any agent's marker answers; replace when feedback is missed or a second agent shares a ticket.
@@ -608,7 +612,7 @@ function feedback(issue, login, session) {
   const anchor = events.findLastIndex(event => handoffHeading.test(event.body) || replyLine.test(event.body));
   const mention = new RegExp(`(?<![\\w-])@${RegExp.escape(login)}(?![\\w-])`, 'i'), status = projectStatus(issue), tracked = mine && anchor >= 0;
   const seen = events.slice(anchor + 1).filter(event => tracked || mention.test(event.body));
-  const why = [tracked && handoffHeading.test(events[anchor].body) && ['In progress', 'Automated review'].includes(status) && `back in ${status} after the handoff`,
+  const why = [tracked && handoffHeading.test(events[anchor].body) && [statuses.inProgress, statuses.automatedReview].includes(status) && `back in ${status} after the handoff`,
     seen.length && (tracked ? `${seen.length} new comment(s) or review(s) since your last reply or handoff` : `mentions @${login}`)].filter(Boolean);
   return why.length ? { reason: why.join('; '), url: (seen.at(-1) ?? events[anchor]).url } : undefined;
 }
@@ -653,8 +657,8 @@ function issueReasons(issue) {
   if (issue.state !== 'OPEN') blocked.push('issue is closed');
   if (!projectItem(issue)) unknown.push(`issue is not on ${issueProject.url}`);
   else if (!status) unknown.push('the Project status is unset');
-  else if (['Backlog', 'Done'].includes(status)) blocked.push(`status is ${status}`);
-  else if (!['Ready', 'In progress', 'Automated review', 'Human review'].includes(status)) unknown.push(`unknown status ${status}`);
+  else if ([statuses.backlog, statuses.done].includes(status)) blocked.push(`status is ${status}`);
+  else if (![statuses.ready, statuses.inProgress, statuses.automatedReview, statuses.humanReview].includes(status)) unknown.push(`unknown status ${status}`);
   const predecessors = predecessorReasons(issue.blockedBy);
   blocked.push(...predecessors.blocked);
   unknown.push(...predecessors.unknown);
@@ -814,22 +818,22 @@ function sweep() {
       }
       if (delivered) {
         graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id,
-          body: `Geliefert mit #${delivered.number} in \`${delivered.baseRefName}\`. Der Release-PR nach \`main\` veröffentlicht die Version.` });
+          body: texts.delivered(delivered.number, delivered.baseRefName) });
         graphql('mutation($issue:ID!){closeIssue(input:{issueId:$issue,stateReason:COMPLETED}){clientMutationId}}', { issue: issue.id });
         console.log(`#${issue.number} closed: delivered with PR #${delivered.number} in ${delivered.baseRefName}`);
         resets++;
         continue;
       }
-      if (projectItem(issue)?.status?.name !== 'Human review') continue;
+      if (projectItem(issue)?.status?.name !== statuses.humanReview) continue;
       assert.ok(linked.totalCount <= linked.nodes.length, `#${issue.number} has more linked PRs than sweep reads; it would be reported clean`);
       const pr = own.find(node => node.state === 'OPEN' && node.mergeStateStatus === 'DIRTY');
       if (!pr) continue;
-      plan ??= resolveOption('Status', 'Automated review');
+      plan ??= resolveOption('Status', statuses.automatedReview);
       // The comment first: a failed comment must not leave an issue out of Human review that nobody was told about.
       graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id,
-        body: `Der PR ${pr.url} hat Konflikte mit seiner Basis, ein Issue in Human review muss aber mergebar sein. Das Issue geht zurück auf Automated review. Konflikt lösen, dann neu übergeben (\`board.mjs done\`).` });
+        body: texts.conflict(pr.url, statuses) });
       writeOption(issue, plan);
-      console.log(`#${issue.number} reset to Automated review: PR #${pr.number} has merge conflicts`);
+      console.log(`#${issue.number} reset to ${statuses.automatedReview}: PR #${pr.number} has merge conflicts`);
       resets++;
     }
     read += search.nodes.length;
@@ -875,7 +879,7 @@ function next() {
   const rank = selectField('Priority').choices.map(choice => choice.name);
   const order = priority => rank.includes(priority) ? rank.indexOf(priority) : rank.length;
   const ready = nodes.map(issue => ({ ...issue, item: projectItem(issue) }))
-    .filter(issue => issue.item?.status?.name === 'Ready')
+    .filter(issue => issue.item?.status?.name === statuses.ready)
     .map(issue => {
       const predecessors = predecessorReasons(issue.blockedBy), waits = waitReasons(issue.body);
       return { ...issue, predecessors, reasons: [...predecessors.blocked, ...waits.blocked, ...predecessors.unknown, ...waits.unknown], priority: issue.item.priority?.name
@@ -900,7 +904,7 @@ function next() {
   // which a new session may take over (start ISSUE --session ID).
   const status = projectStatus;
   const session = sessionOption(), mine = session ? ownWork(nodes, login, session) : [];
-  const abandoned = nodes.filter(issue => ['In progress', 'Automated review', 'Human review'].includes(status(issue)) && !mine.includes(issue) && (openPr(issue) || commentClaims(issue).length) && isStale(issue));
+  const abandoned = nodes.filter(issue => [statuses.inProgress, statuses.automatedReview, statuses.humanReview].includes(status(issue)) && !mine.includes(issue) && (openPr(issue) || commentClaims(issue).length) && isStale(issue));
   const work = (issue, note) => `#${issue.number} [${status(issue)}] ${issue.title} (PR #${openPr(issue)?.number ?? '-'}${note ? `, ${note}` : ''})`;
   const replies = nodes.map(issue => ({ issue, ...feedback(issue, login, session) })).filter(row => row.reason);
   if (replies.length) console.log(`Rückmeldungen (answer in the ticket with a comment that starts with your "Agent: …, Session: …" line, or hand off again with done; start ISSUE is BLOCKED while one of your session's is open):\n${replies.map(row => `#${row.issue.number} [${status(row.issue)}] ${row.issue.title}: ${row.reason} ${row.url}`).join('\n')}\n`);
@@ -990,12 +994,12 @@ function resolveOption(fieldName, optionName) {
 /** Guards of a transition; a refusal throws. They print (backlinks), so run them only after every pair is valid. */
 function guardOption(issue, { fieldName, option }) {
   guardSpecStatus(issue, { fieldName, option });
-  if (fieldName === 'Status' && option.name === 'Ready') {
+  if (fieldName === 'Status' && option.name === statuses.ready) {
     // Ready contradicts an open decision wait: it stays Backlog until the line is removed (#514).
     const decisions = waitReasons(issue.body).blocked.filter(reason => reason.startsWith(decisionWait));
     if (decisions.length) throw new Error(`#${issue.number} cannot be Ready: ${decisions.join('; ')}`);
   }
-  if (fieldName === 'Status' && option.name === 'In progress') {
+  if (fieldName === 'Status' && option.name === statuses.inProgress) {
     // Assignment first, so a missing assignment is named even when the issue is also blocked.
     const viewer = issue.viewer; // read with the issue
     assert.ok(viewer?.login, 'Cannot verify the authenticated GitHub user');
@@ -1004,13 +1008,13 @@ function guardOption(issue, { fieldName, option }) {
     // A refusal is an error like the others: its verdict lines become the one ERROR line instead of a second output format.
     const log = console.log, verdict = [];
     // An open issue in Done was reopened by a human (a merge closes it): it may leave Done, with a note (#510). A closed one stays blocked.
-    const wasDone = issue.state === 'OPEN' && projectItem(issue)?.status?.name === 'Done';
-    const judged = wasDone ? { ...issue, projectItems: { nodes: issue.projectItems.nodes.map(item => item === projectItem(issue) ? { ...item, status: { name: 'Ready' } } : item) } } : issue;
+    const wasDone = issue.state === 'OPEN' && projectItem(issue)?.status?.name === statuses.done;
+    const judged = wasDone ? { ...issue, projectItems: { nodes: issue.projectItems.nodes.map(item => item === projectItem(issue) ? { ...item, status: { name: statuses.ready } } : item) } } : issue;
     console.log = (...parts) => verdict.push(parts.join(' '));
     try { if (!mayStart(check(judged))) throw new Error(verdict.join('; ')); } finally { console.log = log; }
     if (wasDone) log(`note: #${issue.number} is open again and was Done; it moves to In progress`);
   }
-  if (fieldName === 'Status' && statusName(option.name) === 'Automated review') verifyBacklinks(issue);
+  if (fieldName === 'Status' && statusName(option.name) === statuses.automatedReview) verifyBacklinks(issue);
 }
 
 function writeOption(issue, plan) {
@@ -1126,7 +1130,7 @@ function newOptions(args) {
  */
 let repositoryLists;
 const sameTitle = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
-function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields }, status = 'Backlog') {
+function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields }, status = statuses.backlog) {
   for (const [what, text] of [['title', title], ['body file', bodyFile], ['milestone', milestone], ['priority', priority]]) assert.ok(text, `${what} is required`);
   assert.ok(wanted.length, 'at least one label is required');
   const text = readFileSync(bodyFile, 'utf8').replaceAll('\r\n', '\n').trimEnd();
@@ -1137,7 +1141,7 @@ function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields 
     assert.ok(pairs.some(([fieldName]) => fieldName.toLowerCase() === required.toLowerCase()), `the project requires ${required}: give a value for it`);
   }
   const plans = planFields(pairs);
-  assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || plans.find(plan => plan.fieldName === 'Status').option.name === 'Backlog', 'A new spec starts in Backlog; only a human-invoked spec-review changes its status');
+  assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || plans.find(plan => plan.fieldName === 'Status').option.name === statuses.backlog, 'A new spec starts in Backlog; only a human-invoked spec-review changes its status');
   // Open issues over REST, not the search index, which misses one created seconds ago by a parallel session (#618). PRs are listed too.
   repositoryLists ??= { milestones: restAll(`repos/${project.repository}/milestones`), labels: restAll(`repos/${project.repository}/labels`),
     issues: restAll(`repos/${project.repository}/issues`).filter(item => !item.pull_request) };
@@ -1281,7 +1285,7 @@ function create() {
   if (args[0] === '--from') return createMany(args.slice(1));
   const options = newOptions(args);
   // Status is set by the command: Backlog or --status (checked against the Project options by planFields).
-  const plan = named('new', () => planNew(options, options.status ?? 'Backlog'));
+  const plan = named('new', () => planNew(options, options.status ?? statuses.backlog));
   const created = post(plan);
   number = created.number;
   let step = 'reading it back';
@@ -1381,6 +1385,7 @@ function useIssueRepo() {
   assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${issueRepoOption} is unreadable`);
   issueProject = { ...JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')), repository: issueRepoOption };
   [issueOwner, issueName] = issueRepoOption.split('/');
+  statuses = statusNames(issueProject);
 }
 /** Every page, so an early bot summary on a long PR is never cut off. */
 function restAll(path, expected) {
@@ -2078,7 +2083,7 @@ function handoffIssueReasons(issue, viewer, reviewedHead, currentPrNumber) {
       if (pr?.baseRefName !== lowerRef) reasons.push(`the open predecessor PR #${lowerNumber} is not merged: PR #${value} must target its branch ${lowerRef}, not ${pr?.baseRefName}`);
     }
   }
-  if (!['Automated review', 'Human review'].includes(status)) reasons.push(`status is ${status ?? 'unset'}: when the work is done, run board.mjs done ISSUE`);
+  if (![statuses.automatedReview, statuses.humanReview].includes(status)) reasons.push(`status is ${status ?? 'unset'}: when the work is done, run board.mjs done ISSUE`);
   if (!issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === viewer.login.toLowerCase())) {
     reasons.push(`the issue is not assigned to the authenticated driver: gh issue edit ${issue.number} --repo ${issueProject.repository} --add-assignee "@me"`);
   }
@@ -2096,12 +2101,12 @@ function handoffIssue(issue, viewer, reviewedHead, currentPrNumber) {
 }
 
 /**
- * The driver's handoff comment: a "## Übergabe" heading and a "Head: <SHA>" line in a PR comment by the authenticated
+ * The driver's handoff comment: a "## " heading with texts.handoff and a "Head: <SHA>" line in a PR comment by the authenticated
  * user. The comment names the head it is about, so a new head asks for a new comment however (and whenever) the push
  * happened, which no timestamp reliably tells. With several matching comments the newest counts.
  */
 const findHandoffComment = (comments, viewer, headRefOid) => comments.findLast(comment => comment.user?.login?.toLowerCase() === viewer.login.toLowerCase()
-  && /^## Übergabe\s*$/m.test(comment.body ?? '') && new RegExp(`^Head:\\s*${headRefOid.slice(0, 7)}`, 'im').test(comment.body ?? ''));
+  && handoffHeading.test(comment.body ?? '') && new RegExp(`^Head:\\s*${headRefOid.slice(0, 7)}`, 'im').test(comment.body ?? ''));
 
 // ponytail: relies on GitHub's markup (h1-h6, li, issue-link); replace when GitHub changes it.
 const text = html => html.replace(/<\/?(?:br|p|div|li|h[1-6]|ul|ol|blockquote)\b[^>]*>/gi, ' ')
@@ -2116,7 +2121,7 @@ function withoutQuotes(html) {
 
 /**
  * Why the PR body, as GitHub renders it, does not carry the self-review the project asks for: the project file's
- * "selfReview" lists the checks (for example "ponytail-review", "code-review") that the section "Selbstprüfung" (a heading of
+ * "selfReview" lists the checks (for example "ponytail-review", "code-review") that the section texts.selfReview (a heading of
  * any level; its sub-headings belong to it) must name. Whether a check was good is not judged. Without the field nothing is asked.
  */
 // ponytail: a name counts when the section mentions it, the section is not proof the check ran; replace when a check leaves a trace.
@@ -2129,13 +2134,13 @@ function selfReviewReasons(bodyHtml, checks) {
   if (!checks.length) return [];
   assert.equal(typeof bodyHtml, 'string', 'The rendered PR body is unreadable');
   const parts = withoutQuotes(bodyHtml).split(/(?=<h[1-6][\s>])/), level = part => Number(/^<h([1-6])[\s>]/.exec(part)?.[1]);
-  const start = parts.findIndex(part => level(part) && headingText(part) === 'Selbstprüfung');
-  if (start < 0) return [`the PR body needs a "## Selbstprüfung" section that names ${checks.join(', ')} (docs/CONTRIBUTING.md#review-loop, step 1)`];
+  const start = parts.findIndex(part => level(part) && headingText(part) === texts.selfReview);
+  if (start < 0) return [`the PR body needs a "## ${texts.selfReview}" section that names ${checks.join(', ')} (docs/CONTRIBUTING.md#review-loop, step 1)`];
   let end = start + 1;
   while (end < parts.length && level(parts[end]) > level(parts[start])) end++;
   const section = text(parts.slice(start, end).join(''));
   const missing = checks.filter(check => !new RegExp(`(?<![\\p{L}\\p{M}\\p{N}_-])${RegExp.escape(check.trim())}(?![\\p{L}\\p{M}\\p{N}_-])`, 'iu').test(section));
-  return missing.length ? [`the "Selbstprüfung" section of the PR body does not name: ${missing.join(', ')}`] : [];
+  return missing.length ? [`the "${texts.selfReview}" section of the PR body does not name: ${missing.join(', ')}`] : [];
 }
 
 /**
@@ -2248,13 +2253,13 @@ function handoff() {
   const pr = handoffPr(issue.id, viewer, undefined, prior, partial);
   if (!pr) return;
   if (partial) return console.log(`HANDOFF #${number} PR #${value} head ${pr.headRefOid} (partial PR: the issue status stays, the closing PR hands it off)`);
-  if (!set('Status', 'Human review', () => {
+  if (!set('Status', statuses.humanReview, () => {
     if (!handoffPr(issue.id, viewer, pr.headRefOid)) return;
     const current = readIssue();
     assert.equal(current?.id, issue.id, 'Issue identity changed during handoff');
     return handoffIssue(current, viewer, pr.headRefOid, currentPrNumber) ? current : undefined;
   })) return;
-  assert.equal(projectItem(readIssue())?.status?.name, 'Human review', 'Human review status read-back differs');
+  assert.equal(projectItem(readIssue())?.status?.name, statuses.humanReview, `${statuses.humanReview} status read-back differs`);
   console.log(`HANDOFF #${number} PR #${value} head ${pr.headRefOid}`);
 }
 
@@ -2279,7 +2284,7 @@ function layerReasons(layer, viewer) {
   if (pr.state !== 'OPEN' || pr.isDraft) return ['is not an open, non-draft PR'];
   const reasons = [];
   if (!findHandoffComment(restAll(`repos/${project.repository}/issues/${layer}/comments`), viewer, pr.headRefOid)) {
-    reasons.push(`has no handoff comment for head ${pr.headRefOid.slice(0, 7)} (a "## Übergabe" heading and a "Head: ${pr.headRefOid.slice(0, 7)}" line)`);
+    reasons.push(`has no handoff comment for head ${pr.headRefOid.slice(0, 7)} (a "## ${texts.handoff}" heading and a "Head: ${pr.headRefOid.slice(0, 7)}" line)`);
   }
   const threads = unresolvedThreads(layer, pr.reviewThreads);
   if (threads.length) reasons.push(`has ${threads.length} unresolved review thread${threads.length === 1 ? '' : 's'}`);
@@ -2295,7 +2300,7 @@ function layerReasons(layer, viewer) {
   for (const { number: issueNumber } of nodes) {
     const linked = readIssue(false, issueNumber), status = projectItem(linked)?.status?.name;
     if (isSpec(linked)) reasons.push(`delivers spec #${issueNumber}, which only a human closes (AGENT_RULES.md, Hard rules): unlink it and write "Refs #${issueNumber}"`);
-    if (status !== 'Human review') reasons.push(`delivers issue #${issueNumber}, whose status is ${status ?? 'unset'}, not Human review`);
+    if (status !== statuses.humanReview) reasons.push(`delivers issue #${issueNumber}, whose status is ${status ?? 'unset'}, not ${statuses.humanReview}`);
   }
   stackLayers.set(layer, { pr, issues: nodes.map(issue => issue.number) });
   return reasons;
@@ -2944,7 +2949,7 @@ function start() {
     fresh.assignees.nodes.push({ login });
   }
   // The read seconds ago is the one `set` would take now; the read-back at the end of start still reads the issue again.
-  set('Status', 'In progress', () => fresh);
+  set('Status', statuses.inProgress, () => fresh);
   const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
     : baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch);
   const claimLine = `Agent: ${agent}, Session: ${session}`;
@@ -2987,7 +2992,7 @@ function start() {
   }
   if (existsSync(modules) && readFileSync(modules, 'utf8').includes('.vendor/workflow-kit')) git('submodule', 'update', '--init', '.vendor/workflow-kit');
   const final = readIssue();
-  assert.equal(projectItem(final)?.status?.name, 'In progress', 'In progress status read-back differs');
+  assert.equal(projectItem(final)?.status?.name, statuses.inProgress, `${statuses.inProgress} status read-back differs`);
   assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');
   // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
   if (project.setup) try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
@@ -3068,14 +3073,14 @@ async function done() {
     } catch (error) { return fail(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
     // #646: no PR delivers nothing for review; only an exploration that says so (--no-pr) gets Human review, otherwise nothing changes.
     if (!pull && !args.includes('--no-pr')) return fail(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
-    restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## Übergabe\n\n${lines(file)}\n`);
+    restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## ${texts.handoff}\n\n${lines(file)}\n`);
     if (pull) execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
     writeBody(before => tickAcceptance(before));
-    set('Status', 'Human review');
+    set('Status', statuses.humanReview);
     return console.log(pull ? `CLOSED PR #${prNumber} (no change); the result is in the comment on #${number}` : `DONE #${number} (no PR); the result is in the comment on #${number}`);
   }
   // Validate the review destination before a base merge/push or ready mutation; backlinks still run after ready.
-  if (!partial) resolveOption('Status', 'Automated review');
+  if (!partial) resolveOption('Status', statuses.automatedReview);
   // The tests of a head run once: a call that only waits (after exit 4) neither repeats them nor merges a base that moved meanwhile.
   const tested = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-tested'));
   const isTested = () => existsSync(tested) && readFileSync(tested, 'utf8') === localHead();
@@ -3140,7 +3145,7 @@ async function done() {
   const status = projectStatus(issue);
   if (partial) postBacklink(number, pull.html_url);
   // A head prepared after an earlier handoff has no handoff yet: it leaves Human review.
-  else if (status !== 'Automated review' && (prepare || status !== 'Human review')) set('Status', 'Automated review');
+  else if (status !== statuses.automatedReview && (prepare || status !== statuses.humanReview)) set('Status', statuses.automatedReview);
   console.log('done: waiting for CI and reviews');
   const waitStart = Date.now(), result = await poll(() => reviewsForHead(prNumber));
   took('CI and reviews', waitStart);
@@ -3154,7 +3159,7 @@ async function done() {
   // Boxes are ticked only once the checks of the head are green.
   if (!partial) writeBody(before => tickAcceptance(before));
   if (file && !findHandoffComment(result.comments, issue.viewer, head)) {
-    restPost(`repos/${project.repository}/issues/${prNumber}/comments`, ['-F', 'body=@-'], `## Übergabe\n\nHead: ${head.slice(0, 7)}\n\n${lines(file)}\n`);
+    restPost(`repos/${project.repository}/issues/${prNumber}/comments`, ['-F', 'body=@-'], `## ${texts.handoff}\n\nHead: ${head.slice(0, 7)}\n\n${lines(file)}\n`);
   }
   handoff();
 }
