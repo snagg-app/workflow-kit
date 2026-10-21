@@ -3,29 +3,30 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'new', run: 'create', writes: true, oneLine: true, doc: 'docs/board/new.md', rest: { usage: '[NAME VALUE ...]', kind: 'printable' },
+    usage: 'new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] [NAME VALUE ...] | new --from FILE',
+    summary: 'Creates an issue with its required metadata in one call, or many with --from. Everything is checked first and read back. Extra fields: NAME VALUE or --field NAME=VALUE.',
+    flags: { '--title': { value: 'T', help: 'Issue title (an open issue with that title is refused).' }, '--body-file': { value: 'FILE', help: 'File with the body.' }, '--milestone': { value: 'M', help: 'An open milestone.' },
+      '--label': { value: 'L', many: true, help: 'An existing label, repeatable.' }, '--priority': { value: 'P', help: 'Priority option.' }, '--status': { value: 'S', help: 'Status option (default Backlog).' },
+      '--field': { value: 'NAME=VALUE', kind: 'printable', many: true, help: 'Another Project field, repeatable (not Status or Priority).' },
+      '--from': { value: 'FILE', help: 'A JSON list of 1 to 50 issues; takes no other option.' } },
+    check: args => args.flag('--from') && (args.names().length > 1 || args.rest.length) ? 'new --from takes one FILE and no other option' : undefined },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createNew(env) {
-  const { github, graphql, named, project, rest, restAll, specLabel, statuses } = env;
-  const { dropFieldsCache, planFields } = env.later;
+  const { args, github, graphql, named, project, rest, restAll, specLabel, statuses } = env;
+  const { dropFieldsCache, fieldWords, planFields } = env.later;
 
-  /** Flags of `new`; unknown or repeated single flags are errors, never ignored. */
-  function newOptions(args) {
-    const given = {}, single = ['--title', '--body-file', '--milestone', '--priority', '--status'];
-    for (let index = 0; index < args.length; index++) {
-      const flag = args[index];
-      assert.ok([...single, '--label', '--field'].includes(flag), `new: unknown option ${flag}`);
-      const text = args[++index];
-      assert.ok(text !== undefined && !text.startsWith('--'), `new: ${flag} needs a value`);
-      (given[flag] ??= []).push(text);
-    }
-    for (const flag of single) assert.ok((given[flag]?.length ?? 0) <= 1, `new: ${flag} may appear once`);
-    const [title, bodyFile, milestone, priority, status] = single.map(flag => given[flag]?.[0]);
-    const fields = (given['--field'] ?? []).map(pair => {
-      const split = pair.indexOf('=');
-      assert.ok(split > 0 && split < pair.length - 1, `new: --field wants NAME=VALUE, got "${pair}"`);
-      return [pair.slice(0, split), pair.slice(split + 1)];
-    });
-    return { title, bodyFile, milestone, priority, status, fields, labels: given['--label'] ?? [] };
+  /** The values of one `new` call; unknown or repeated flags were refused by the parser. The extra fields are `--field NAME=VALUE` and free `NAME VALUE` words alike. */
+  function newOptions() {
+    const words = fieldWords();
+    assert.ok(words.length % 2 === 0, 'new takes NAME VALUE pairs after its flags');
+    const fields = Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
+    return { title: args.value('--title'), bodyFile: args.value('--body-file'), milestone: args.value('--milestone'), priority: args.value('--priority'), status: args.value('--status'),
+      fields, labels: args.values('--label') };
   }
 
   /**
@@ -185,9 +186,8 @@ export function createNew(env) {
    */
   function create() {
     dropFieldsCache(); // the issue is created before its fields are written: a stale cached id would leave it half done
-    const args = process.argv.slice(3);
-    if (args[0] === '--from') return createMany(args.slice(1));
-    const options = newOptions(args);
+    if (args.flag('--from')) return createMany(args.value('--from'));
+    const options = newOptions();
     // Status is set by the command: Backlog or --status (checked against the Project options by planFields).
     const plan = named('new', () => planNew(options, options.status ?? statuses.backlog));
     const created = post(plan);
@@ -212,8 +212,7 @@ export function createNew(env) {
    * creates nothing. The issues are created over REST, then all of them get their Project fields in blocks of issues
    * (setFields), and one line per issue is printed after everything was read back. Later failures name every issue that exists.
    */
-  function createMany([file, ...extra]) {
-    assert.ok(file && !file.startsWith('--') && !extra.length, 'new --from takes one FILE and no other option');
+  function createMany(file) {
     const list = named(`new --from: ${file}`, () => JSON.parse(readFileSync(file, 'utf8')));
     assert.ok(Array.isArray(list) && list.length && list.length <= manyLimit, `new --from: ${file} must hold a JSON list of 1 to ${manyLimit} issues`);
     const plans = list.map((entry, index) => named(`new --from: entry ${index + 1}${typeof entry?.title === 'string' ? ` "${entry.title}"` : ''}`, () => {

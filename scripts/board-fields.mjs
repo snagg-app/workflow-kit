@@ -2,16 +2,26 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'field', run: 'setField', writes: true, oneLine: true, doc: 'docs/board/field.md', words: [{ name: 'ISSUE', kind: 'number' }],
+    rest: { usage: 'NAME VALUE [NAME VALUE ...]', kind: 'printable' },
+    summary: 'Sets single-select Project fields (Status and Priority too). All pairs are checked before the first write and read back together. NAME VALUE and --field NAME=VALUE mean the same.',
+    flags: { '--field': { value: 'NAME=VALUE', kind: 'printable', many: true, help: 'The same pair as NAME VALUE, repeatable.' },
+      '--spec-review': { help: 'Only a human-invoked spec-review changes the status of a spec.' } },
+    check: args => args.rest.length >= 2 || args.values('--field').length ? undefined : 'field needs at least one pair: NAME VALUE or --field NAME=VALUE' },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createFields(env) {
-  const { command, decisionWait, github, graphql, isSpec, issueName, issueOwner, issueProject, number, projectItem, readIssue, restAll, specRefusal, state, statusName, statuses } = env;
+  const { args, command, decisionWait, github, graphql, isSpec, issueName, issueOwner, issueProject, number, projectItem, readIssue, restAll, specRefusal, state, statusName, statuses } = env;
   const { check, mayStart, verifyBacklinks, waitReasons } = env.later;
 
   /** Specs are untouched outside a human-invoked spec-review; re-read children immediately before Human review. */
   function guardSpecStatus(issue, { fieldName, option }) {
     if (fieldName !== 'Status' || !isSpec(issue)) return;
     assert.ok(option.name !== statuses.done, specRefusal(issue.number, 'Status Done is refused'));
-    assert.ok(command === 'field' && process.argv.includes('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
+    assert.ok(command === 'field' && args.flag('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
     if (option.name === statuses.humanReview) {
       const children = restAll(`repos/${issueProject.repository}/issues/${issue.number}/sub_issues`);
       assert.ok(children.every(child => Number.isSafeInteger(child?.number) && ['open', 'closed'].includes(child.state)), 'Spec sub-issues are unreadable');
@@ -149,13 +159,22 @@ export function createFields(env) {
     return plan.option.name;
   }
 
+  /** NAME=VALUE of one `--field`; the name may not hold "=". */
+  function splitPair(text) {
+    const split = text.indexOf('=');
+    assert.ok(split > 0 && split < text.length - 1, `--field wants NAME=VALUE, got "${text}"`);
+    return [text.slice(0, split), text.slice(split + 1)];
+  }
+
+  /** The words after the issue of `field` and `new` in one list: the `--field NAME=VALUE` pairs first, then the free `NAME VALUE` words. */
+  const fieldWords = () => [...args.values('--field').flatMap(splitPair), ...args.rest];
+
   /** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing arguments. */
   function fieldPairs() {
-    const args = process.argv.slice(4).filter(arg => arg !== '--spec-review');
-    if (args[0].toLowerCase() === 'status' && statusName(args[1]).toLowerCase() === 'automated review') return [args.slice(0, 2)];
-    assert.ok(args.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
-    const pairs = Array.from({ length: args.length / 2 }, (_, index) => args.slice(index * 2, index * 2 + 2));
-    return pairs;
+    const words = fieldWords();
+    if (words[0].toLowerCase() === 'status' && statusName(words[1]).toLowerCase() === 'automated review') return [words.slice(0, 2)];
+    assert.ok(words.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
+    return Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
   }
 
   /** Resolve NAME VALUE pairs against the Project's fields; nothing is written. */
@@ -188,5 +207,5 @@ export function createFields(env) {
     return written;
   }
 
-  return { dropFieldsCache, selectField, resolveOption, writeOption, set, planFields, setField };
+  return { dropFieldsCache, selectField, resolveOption, writeOption, set, planFields, setField, fieldWords };
 }

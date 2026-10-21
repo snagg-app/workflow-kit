@@ -7,6 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { externalTool } from './checkout-root.mjs';
 
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'stack-sync', run: 'stackSync', writes: true, doc: 'docs/board/stack-sync.md', words: [{ name: 'TOP', kind: 'number' }],
+    summary: 'Brings a PR stack up to date. Merges the base into each layer of the stack of PR TOP, bottom first, and pushes (no rebase, no force-push). A conflict stops it.' },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStack(env) {
   const { graphql, isSpec, loadDeliveries, name, number, owner, project, projectDirectory, projectItem, readIssue, rest, restAll, stackOrderText, statuses, texts } = env;

@@ -65,7 +65,7 @@ export function kitCheckout(t) {
   const env = isolatedGit(root);
   const git = (cwd, ...args) => execFileSync('git', args, { cwd, env, encoding: 'utf8' }).trim();
   git(root, 'init', '-q');
-  for (const path of ['.gitattributes', '.gitmodules', '.agents/skills/find-skills', '.agents/skills/spec-review', 'scripts'])
+  for (const path of ['.gitattributes', '.gitmodules', '.agents/skills/find-skills', '.agents/skills/spec-review', 'scripts', 'templates'])
     cpSync(join(kit, path), join(root, path), { recursive: true, filter: source => !source.endsWith('tests') });
   for (const line of git(kit, 'ls-files', '-s', '--', '.vendor').split('\n')) {
     const [mode, sha, , path] = line.split(/\s+/);

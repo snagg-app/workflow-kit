@@ -347,7 +347,7 @@ export function createReviews(env) {
     for (const check of live.filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && check.conclusion !== 'SKIPPED')) {
       const { total: open, lines: found } = sonarIssues(check.detailsUrl, pr.number, check.summary);
       if (open === null) {
-        lines.push('blocker: the Sonar issue count is unreadable: SONAR_TOKEN is not set and the SonarCloud check summary has no "N New issues"; set SONAR_TOKEN (README, Board commands) and run done again');
+        lines.push('blocker: the Sonar issue count is unreadable: SONAR_TOKEN is not set and the SonarCloud check summary has no "N New issues"; set SONAR_TOKEN (docs/board/wait.md) and run done again');
         continue;
       }
       lines.push(`sonar: ${open} open issue${open === 1 ? '' : 's'}`, ...found);

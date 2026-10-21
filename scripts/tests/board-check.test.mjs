@@ -601,7 +601,7 @@ test('--cwd names the project of a command, not the working directory', t => {
   mkdirSync(sub);
   const board = () => spawnSync(process.execPath, [fileURLToPath(new URL('../board.mjs', import.meta.url)), 'nosuchcommand'],
     { cwd: sub, encoding: 'utf8', env: { ...process.env, PATH: join(checkout, '..', 'bin') } });
-  assert.match(board().stderr, /^Usage: board\.mjs/);
+  assert.match(board().stderr, /^unknown command "nosuchcommand"\nUsage: board\.mjs/);
   // Without the project file the command names it and prints no stack.
   rmSync(join(checkout, '.github/workflow-project.json'));
   const missing = board();

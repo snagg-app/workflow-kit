@@ -150,7 +150,8 @@ driver runs `start` and `done`.
 | Human review | `done` handed off. A human accepts and merges; feedback meanwhile shows up in `next` (Rückmeldungen). |
 | Done | Merged and accepted. |
 
-Run [board commands](README.md#board-commands) in the project with authenticated `gh`.
+Run board commands in the project with authenticated `gh`. `board.mjs help` lists them and `board.mjs help COMMAND` shows one
+(usage and flags, about 1 KB): read that, not the README ([table of commands](README.md#board-commands)).
 
 ## Session start
 

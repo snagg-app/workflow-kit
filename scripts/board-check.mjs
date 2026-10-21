@@ -4,9 +4,15 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { externalTool } from './checkout-root.mjs';
 
+/** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
+export const specs = [
+  { name: 'check', run: 'checkCommand', hidden: true, summary: 'The start verdict of an issue (STARTABLE, BLOCKED, UNKNOWN, STACKABLE) and its reasons; `start` runs it first.',
+    words: [{ name: 'ISSUE', kind: 'number' }], flags: { '--session': { value: 'ID', kind: 'id', help: 'The own session (default: the worktree, CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID).' } } },
+];
+
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createCheck(env) {
-  const { baseSetting, claimOf, commentClaims, decisionWait, feedbackNode, graphql, handoffHeading, issueFeedback, issueProject, logins, project, projectDirectory, projectItem, projectStatus, readIssue, refOf, replyLine, rest, state, statuses, validTagName } = env;
+  const { baseSetting, claimOf, commentClaims, decisionWait, feedbackNode, graphql, handoffHeading, issueFeedback, issueProject, logins, project, projectDirectory, projectItem, projectStatus, readIssue, refOf, replyLine, rest, sessionOption, state, statuses, validTagName } = env;
   const { currentIssuePr, isOwn, openPrs, ownWork, stackBase, startReasons } = env.later;
 
   /** Why native predecessors still hold an issue: open, closed without delivery, or unreadable. */
@@ -253,5 +259,7 @@ export function createCheck(env) {
     return verdict;
   }
 
-  return { predecessorReasons, waitReasons, loadPrFeedback, feedback, heldOnlyByOpenPredecessors, mayStart, baseOf, check };
+  const checkCommand = () => check(readIssue(true), { session: sessionOption() });
+
+  return { predecessorReasons, waitReasons, loadPrFeedback, feedback, heldOnlyByOpenPredecessors, mayStart, baseOf, check, checkCommand };
 }

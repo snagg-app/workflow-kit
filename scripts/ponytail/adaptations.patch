@@ -350,19 +350,33 @@ index 27e9cee..82241ae 100644
    }
    if (isCodex) {
 diff --git a/hooks/ponytail-subagent.js b/hooks/ponytail-subagent.js
-index f2d9fe2..f94d4ca 100644
+index f2d9fe2..e1845c6 100644
 --- a/hooks/ponytail-subagent.js
 +++ b/hooks/ponytail-subagent.js
-@@ -45,7 +45,7 @@ try {
- // subagent spawn.
- if (!matcherRe) {
-   inject();
--  process.exit(0);
-+  return; // Let stdout drain before Node exits.
+@@ -39,18 +39,10 @@ try {
+   matcherRe = null;
  }
  
- // Matcher set → read agent_type from stdin and skip only on a definite
-@@ -61,7 +61,8 @@ function finish() {
+-// No matcher → keep the original synchronous, stdin-independent path. On Windows
+-// the PowerShell `if {}` wrapper can swallow the piped JSON so stdin 'end' never
+-// fires (#443); the default path must not wait on stdin or it would stall every
+-// subagent spawn.
+-if (!matcherRe) {
+-  inject();
+-  process.exit(0);
+-}
+-
+-// Matcher set → read agent_type from stdin and skip only on a definite
+-// mismatch. Missing/unparseable agent_type, a stdin error, or the timeout all
+-// fail open (inject), so scoping never silently drops the persona.
++// Read agent_type from stdin. A fork inherits the parent's context, which
++// already holds the ruleset (kit #672), so it gets none; with a matcher set
++// a definite mismatch is skipped too. Missing/unparseable agent_type, a stdin
++// error, or the timeout all fail open (inject), so scoping never silently drops the persona.
+ let input = '';
+ let done = false;
+ 
+@@ -61,34 +53,36 @@ function finish() {
    let agentType = '';
    try {
      // Strip UTF-8 BOM some shells prepend when piping (breaks JSON.parse)
@@ -372,7 +386,16 @@ index f2d9fe2..f94d4ca 100644
    } catch (e) {
      // Unparseable payload — fall through and inject to be safe.
    }
-@@ -76,19 +77,19 @@ function finish() {
++  if (agentType === 'fork') return;
+   // .test() is synchronous, so a backtracking-heavy matcher like (a+)+$ would
+   // block the event loop and the fallback timer below could never fire (#658).
+   // Run it under a vm timeout; a timeout fails open like every other doubt.
+   let matches = true;
+   try {
+-    if (agentType) {
++    if (agentType && matcherRe) {
+       matches = vm.runInNewContext('re.test(s)', { re: matcherRe, s: agentType }, { timeout: 100 });
+     }
    } catch (e) {
      matches = true;
    }

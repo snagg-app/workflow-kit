@@ -1,16 +1,17 @@
 // Board commands, so agents don't rediscover Project, priority and dependency APIs on every task.
-// Run in the project: board.mjs start | done | next | sweep | field | new | block | sub | wait | quota-wait | merge | stack-sync | body | body-replace (see usage in board-args.mjs).
+// Run in the project: `board.mjs help` lists the commands, `board.mjs help COMMAND` shows one (derived from the descriptions in board-commands.mjs).
 // `--cwd PATH` as the first argument runs it for the project in PATH from any directory: without it the
 // working directory decides the project, and a driver in another project would read and write the wrong board.
 // This file only translates the call: it reads the project, checks the arguments and runs one command. Each command is a module
-// `board-<name>.mjs` with a factory `createX(env)` that runs nothing when imported; the modules reach each other through `env.later`.
+// `board-<name>.mjs` with its description (`specs`) and a factory `createX(env)` that runs nothing when imported; the modules reach each other through `env.later`.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { externalTool, projectRoot, takeCwd } from './checkout-root.mjs';
 import { statusNames, textsFor } from './project-profile.mjs';
 import { createGithub } from './github.mjs';
-import { createArgs } from './board-args.mjs';
+import { configError, createOptions, helpOf, listOf, parseArgs, usageOf } from './board-args.mjs';
+import { commandSpecs } from './board-commands.mjs';
 import { createProcess } from './board-process.mjs';
 import { createCommon } from './board-common.mjs';
 import { createClaims } from './board-claims.mjs';
@@ -29,9 +30,20 @@ import { createDone } from './board-done.mjs';
 import { createReviews } from './board-reviews.mjs';
 import { createMerge } from './board-merge.mjs';
 
-// Taken off here: the commands below read their arguments by position.
+// Taken off here, so the parser sees the command first.
 // A subfolder of the checkout (or of --cwd) works like its root: the project file is found there.
 const startDirectory = takeCwd();
+const call = process.argv.slice(2);
+// `--issue-repo OWNER/NAME` may stand anywhere in the call (before the command too); the parser reads it after the command.
+const issueRepoAt = call.indexOf('--issue-repo');
+if (issueRepoAt >= 0) call.push(...call.splice(issueRepoAt, 2));
+// Help reads nothing: not the project, not GitHub. `help COMMAND` and `COMMAND --help` show that one command, everything else the list.
+if (call[0] === 'help' || call.includes('--help') || call.includes('-h')) {
+  const target = commandSpecs.find(spec => spec.name === (call[0] === 'help' ? call[1] : call[0]));
+  const unknown = call[0] === 'help' && call[1] !== undefined && !target;
+  (unknown ? console.error : console.log)(unknown ? `unknown command "${call[1]}"\n${listOf(commandSpecs)}` : target ? helpOf(target) : listOf(commandSpecs));
+  process.exit(unknown ? 2 : 0);
+}
 let projectDirectory;
 try { projectDirectory = projectRoot(startDirectory); } catch (error) {
   // Only the two expected misses get a short line; any other failure (EACCES, ELOOP) keeps its own message.
@@ -40,11 +52,7 @@ try { projectDirectory = projectRoot(startDirectory); } catch (error) {
   console.error(`${startDirectory}: ${missing ? 'is not a directory' : 'is not inside a Git checkout'}`);
   process.exit(2);
 }
-// `--issue-repo OWNER/NAME` (start, done), anywhere in the arguments: the issue lives in that repository and on its board (a kit issue fixed in
-// the project); PR, branch and tests stay in the project's. Taken off here like --cwd, so the commands read their arguments by position.
-const issueRepoAt = process.argv.indexOf('--issue-repo');
-const issueRepoOption = issueRepoAt < 0 ? undefined : process.argv.splice(issueRepoAt, 2)[1];
-const [command, ref, typed] = process.argv.slice(2);
+const command = call[0];
 const projectFile = join(projectDirectory, '.github/workflow-project.json');
 if (!existsSync(projectFile)) {
   console.error(`${projectFile} is missing: run board.mjs inside the project, or name it with --cwd PROJECT_DIR`);
@@ -57,22 +65,35 @@ let issueProject = project, [issueOwner, issueName] = [owner, name];
 // The status names of the issue's board and the texts written into issues and PRs (`statuses`, `language` in the project file).
 let statuses = statusNames(project);
 const texts = textsFor(project);
+const commandNames = commandSpecs.map(spec => spec.name);
+// A call the description does not allow ends here with the reason and the usage of that one command, before any read or write.
+const parsed = parseArgs(commandSpecs, call, project);
+const configProblem = parsed.args && configError(command, project);
+if (configProblem) {
+  console.error(configProblem);
+  process.exit(2);
+}
+if (!parsed.args) {
+  console.error([parsed.error, parsed.spec ? usageOf(parsed.spec) : listOf(commandSpecs)].filter(Boolean).join('\n'));
+  process.exit(2);
+}
+const { spec, args } = parsed;
+const options = createOptions({ project, args });
+// `--issue-repo OWNER/NAME` (start, done): the issue lives in that repository and on its board (a kit issue fixed in
+// the project); PR, branch and tests stay in the project's.
+const issueRepoOption = args.value('--issue-repo');
 // `new` has no issue yet and assigns the number it creates.
-const number = Number(String(ref).replace(/^#/, ''));
+const number = Number(String(args.words[0]).replace(/^#/, ''));
 const gh = externalTool('gh', process.cwd(), projectDirectory);
 const { git, localHead, sleep, runShell } = createProcess({ projectDirectory });
 
 // The first argument after the PR; `ready PR --local` (the step `done` takes) reads the head from the checkout, so a shell never has to splice `$(git rev-parse HEAD)` into the call.
 // The PR must still show exactly that head before it is marked ready, so a commit that was not pushed is refused like a mistyped id.
-const value = command === 'ready' && typed === '--local' && Number.isSafeInteger(number) ? localHead() : typed;
+const value = command === 'ready' && args.flag('--local') ? localHead() : args.words[1];
 
 const startedAt = Date.now();
 const github = createGithub({ tool: gh, command, projectDirectory, sleep });
 const { graphql, rest, restAll } = github;
-
-const commandNames = ['start', 'done', 'next', 'sweep', 'check', 'block', 'sub', 'field', 'new', 'reviews', 'wait', 'quota-wait', 'handoff', 'merge', 'stack-sync', 'ready', 'link', 'body', 'body-replace'];
-const { validate, options } = createArgs({ project, command, number, value, issueRepoAt, issueRepoOption, commandNames });
-validate();
 
 /** The issue lives in another repository when --issue-repo says so: its board and statuses replace the project's (read once, before the modules are made). */
 function useIssueRepo() {
@@ -87,7 +108,7 @@ function useIssueRepo() {
 // field and new report a failure as one "ERROR - reason" line: their output (verdicts, backlinks, confirmations)
 // is held until the command succeeds, so no failed call shows a write or a check as confirmed. The other commands keep ERROR
 // with "- reason" below it.
-const oneLine = ['field', 'new'].includes(command), print = console.log, held = [];
+const oneLine = spec.oneLine, print = console.log, held = [];
 if (oneLine) console.log = (...parts) => held.push(parts.join(' '));
 let quotaLine = () => undefined;
 try {
@@ -100,7 +121,7 @@ try {
   const registry = {};
   const later = new Proxy(registry, { get: (target, key) => (...parts) => target[key](...parts) });
   const shared = { project, owner, name, number, command, github, graphql, rest, restAll, gh, projectDirectory, issueProject, issueOwner, issueName, statuses, texts,
-    startedAt, state, git, localHead, sleep, runShell, ...options, later };
+    startedAt, state, git, localHead, sleep, runShell, args, ...options, later };
   const common = createCommon(shared);
   const env = { ...shared, ...common };
   quotaLine = common.quotaLine;
@@ -113,11 +134,8 @@ try {
   Object.assign(registry, createMerge({ project, owner, name, github, projectDirectory, number, stack: options.stack, stackState: registry.stackState, numberOption: options.numberOption,
     sleep, readyQuery: common.readyQuery, dependentPrs: later.dependentPrs, runShell, mergeGate: later.mergeGate, stackReasons: later.stackReasons, reviewsForHead: later.reviewsForHead,
     poll: later.poll, readPr: later.readPr, baseMovement: later.baseMovement, filesText: later.filesText }));
-  // check, reviews, handoff, ready and link are the steps `start` and `done` take; they stay callable for those two and for the tests, but nobody runs them by hand, so the usage leaves them out.
-  const commands = { start: registry.start, done: registry.done, next: registry.next, sweep: registry.sweep, check: () => registry.check(common.readIssue(true), { session: options.sessionOption() }),
-    block: registry.block, sub: registry.sub, field: registry.setField, new: registry.create, reviews: registry.reviewsOnce, wait: registry.wait, 'quota-wait': registry.quotaWait,
-    handoff: registry.handoff, merge: registry.merge, 'stack-sync': registry.stackSync, ready: registry.ready, link: registry.link, body: registry.body, 'body-replace': registry.bodyReplace };
-  await commands[command]();
+  // check, reviews, handoff, ready and link are the steps `start` and `done` take (`hidden` in their description): callable for those two and for the tests, but not listed.
+  await registry[spec.run]();
   console.log = print;
   for (const line of held) print(line);
 } catch (error) {
