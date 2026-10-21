@@ -143,6 +143,38 @@ function checkKit(dir, update) {
     } catch (error) { if (real(link) === real(kit)) return; /* a parallel session linked it first */ return say(`${root}: could not link .vendor/workflow-kit to ${kit} (${error.code ?? error.message}).`); }
   }
   if (update) updateKit(kit);
+  return kit;
+}
+
+/** Commit of the shared kit read from its files (no process); '' when unreadable, so a stamp never matches by accident. */
+function kitHead(kit) {
+  try {
+    const gitDir = path.join(kit, '.git'), head = readFileSync(path.join(gitDir, 'HEAD'), 'utf8').trim();
+    if (!head.startsWith('ref: ')) return head;
+    const ref = head.slice(5);
+    try { return readFileSync(path.join(gitDir, ref), 'utf8').trim(); } catch { /* packed */ }
+    return readFileSync(path.join(gitDir, 'packed-refs'), 'utf8').split('\n').find(line => line.endsWith(` ${ref}`))?.split(' ')[0] ?? '';
+  } catch { return ''; }
+}
+
+/** After a clean full check the git dir of the checkout gets a stamp (`kit-ok`). While project commit, kit commit and kit path are unchanged and the stamp is young,
+ * the next start skips the check and the pull: one git call plus file reads. Time is only an addition, never the key. */
+function checkKitStamped(dir, update) {
+  const fresh = Number(process.env.KIT_HOOK_FRESH_SECONDS ?? 600) * 1000;
+  const [gitDir, head] = git(dir, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');
+  const file = gitDir && path.join(gitDir, 'kit-ok');
+  if (file) {
+    try {
+      const stamp = JSON.parse(readFileSync(file, 'utf8'));
+      if (stamp.git === gitDir && stamp.head === head && Date.now() - stamp.at < fresh && (stamp.pulled || !update)
+        && (!process.env.WORKFLOW_KIT_DIR || path.resolve(process.env.WORKFLOW_KIT_DIR) === stamp.kit) && kitHead(stamp.kit) === stamp.kitHead) return;
+    } catch { /* no or broken stamp: full check */ }
+  }
+  const spoken = user.length, kit = checkKit(dir, update);
+  if (file && kit && user.length === spoken) {
+    // The check may have fast-forwarded the project, so the commit is read again.
+    try { writeFileSync(file, JSON.stringify({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() })); } catch { /* best effort */ }
+  }
 }
 
 function checkNodeModules(dir) {
@@ -209,7 +241,7 @@ else {
   const fresh = !['resume', 'compact', 'fork'].includes(input.source);
   if (agent === 'claude') fingerprint(project, input);
   // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
-  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) checkKit(dir, event === 'SessionStart' && input.source !== 'compact');
+  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) checkKitStamped(dir, event === 'SessionStart' && input.source !== 'compact');
   if (event === 'SessionStart') {
     checkNodeModules(project);
     if (fresh) spawn(process.execPath, [self, '--install'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();

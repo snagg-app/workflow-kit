@@ -5,6 +5,7 @@ import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync,
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { externalTool, projectRoot } from "./checkout-root.mjs";
+import { agents, providers } from "./agents.mjs";
 import { checkDirectory, localDirectory, materialize, moveAside } from "./provider-links.mjs";
 
 // Explicit setup from a reviewed checkout, never an install/agent/Git hook.
@@ -13,7 +14,7 @@ const root = projectRoot();
 const source = join(kit, ".vendor/impeccable");
 const state = join(root, ".impeccable");
 const security = join(kit, "scripts/impeccable");
-const providers = [".agents", ".claude"];
+const folders = Object.values(agents).map((agent) => agent.agents);
 const skills = providers.map((provider) => `${provider}/skills/impeccable`);
 const text = (path) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
 // Resolve installed Git once; neither it nor child commands may come from checkout/PATH-relative entries.
@@ -21,7 +22,7 @@ const gitTool = externalTool("git", root, kit, process.cwd());
 const git = (...args) => execFileSync(gitTool.file, args, { cwd: root, env: gitTool.env, encoding: "utf8" });
 
 function companionFiles(base) {
-  return [".claude/agents", ".codex/agents"]
+  return folders
     .flatMap((directory) => existsSync(join(base, directory))
       ? readdirSync(join(base, directory)).filter((name) => /^impeccable[-_.][\w.-]+$/.test(name))
         .map((name) => `${directory}/${name}`) : []);
@@ -77,11 +78,10 @@ try {
       "Upstream engine changed: review VERSION, SHA256SUMS and fixed hook definitions together");
     generateSkill(skill, join(next, skill));
   }
-  copyTracked(".claude/agents", join(next, ".claude/agents"));
-  copyTracked(".agents/skills/impeccable/agents", join(next, ".codex/agents"));
+  for (const agent of Object.values(agents)) copyTracked(agent.upstreamAgents, join(next, agent.agents));
   const revision = git("-C", source, "rev-parse", "HEAD").trim();
   // Reject redirected ancestors before replacing output or inspecting existing companion files.
-  for (const directory of [".claude/agents", ".codex/agents"])
+  for (const directory of folders)
     checkDirectory(root, join(root, directory));
   const fresh = companionFiles(next), stale = companionFiles(root).filter((file) => !fresh.includes(file));
   for (const file of [...skills, ...stale, ...fresh]) localDirectory(root, dirname(join(root, file)));

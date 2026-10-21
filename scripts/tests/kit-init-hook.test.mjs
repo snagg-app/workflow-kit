@@ -4,11 +4,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
+import { hookSettings } from '../agents.mjs';
 import { rename } from '../provider-links.mjs';
 import { isolatedGit, run as spawn, temporary } from './fixtures.mjs';
 
 const hook = fileURLToPath(new URL('../kit-hook.mjs', import.meta.url));
-const templates = fileURLToPath(new URL('../../templates/', import.meta.url));
 
 /** The process entry of the hooks: hook JSON in, output out. SubagentStart does the kit check and installs nothing;
  * a personal home without snapshots keeps Ponytail and Impeccable silent. */
@@ -21,7 +21,7 @@ describe('kit hook', { concurrency: true }, () => {
 /** A project whose hooks name the kit, a shared kit checkout (a clone of `upstream` on main) and the env that points the hook at it. */
 async function shared(t, label, { link = false, kitDir = true } = {}) {
   const temp = temporary(t, label);
-  const env = { ...isolatedGit(temp), HOME: home(temp), CLAUDE_PROJECT_DIR: '', WORKFLOW_KIT_DIR: join(temp, 'kit') };
+  const env = { ...isolatedGit(temp), HOME: home(temp), CLAUDE_PROJECT_DIR: '', WORKFLOW_KIT_DIR: join(temp, 'kit'), KIT_HOOK_FRESH_SECONDS: '0' };
   const git = async (cwd, ...a) => {
     const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env });
     assert.equal(result.status, 0, result.stderr);
@@ -58,6 +58,21 @@ test('a fresh project gets the link to the shared kit and a clean git status; th
   result = await f.trial();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(await f.head(), tip, 'the next session start has the new kit commit, without a merge in the project');
+});
+
+test('a valid stamp skips the check and the pull; a changed project commit runs the full check again', async t => {
+  const f = await shared(t, 'kit-stamp ');
+  const young = { KIT_HOOK_FRESH_SECONDS: '600' };
+  assert.equal((await f.trial(young)).status, 0);
+  assert.ok(existsSync(join(f.project, '.git/kit-ok')), 'a clean check leaves the stamp in the git dir');
+
+  const before = await f.head(), tip = await f.newer();
+  assert.equal((await f.trial(young)).status, 0);
+  assert.equal(await f.head(), before, 'the stamp matches: no pull');
+
+  await f.git(f.project, 'commit', '--quiet', '--allow-empty', '-m', 'moved');
+  assert.equal((await f.trial(young)).status, 0);
+  assert.equal(await f.head(), tip, 'the project moved: full check, the kit is pulled');
 });
 
 test('the shared kit is found next to the main checkout, also from a worktree', async t => {
@@ -307,15 +322,15 @@ const sh = process.platform === 'win32' ? spawnSync('where', ['sh']).stdout?.toS
 // Absolute: the Node-missing trial runs the shell with an empty PATH.
 const powershell = process.platform === 'win32' ? join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : spawnSync('which', ['pwsh']).stdout?.toString().trim();
 const entries = [
-  ['.claude/settings.json', 'command', sh, ['-c']],
-  ['.codex/hooks.json', 'command', sh, ['-c']],
-  ['.codex/hooks.json', 'commandWindows', powershell, ['-NoProfile', '-NonInteractive', '-Command']],
+  ['claude', 'command', sh, ['-c']],
+  ['codex', 'command', sh, ['-c']],
+  ['codex', 'commandWindows', powershell, ['-NoProfile', '-NonInteractive', '-Command']],
 ];
-for (const [file, key, shell, args] of entries) {
+for (const [agent, key, shell, args] of entries) {
   const available = Boolean(shell) && spawnSync(shell, args.at(-1) === '-c' ? ['-c', 'exit 0'] : ['-NoProfile', '-Command', 'exit 0']).status === 0;
-  test(`${file} ${key}: Node missing is a clear message, a missing kit is cloned, then kit-hook.mjs gets event and agent`, { skip: !available && `${shell} unavailable` }, async t => {
+  test(`${agent} ${key}: Node missing is a clear message, a missing kit is cloned, then kit-hook.mjs gets event and agent`, { skip: !available && `${shell} unavailable` }, async t => {
     const temp = temporary(t, 'kit-entry ');
-    const handler = event => Object.values(JSON.parse(readFileSync(join(templates, file), 'utf8')).hooks[event]).flatMap(group => group.hooks)[0][key];
+    const handler = event => hookSettings(agent).hooks[event].flatMap(group => group.hooks)[0][key];
     const origin = join(temp, 'origin'), project = join(temp, 'project');
     // The kit's address is rewritten to a local repository, so the trial needs no network.
     const rewrite = to => ({ GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.longpaths', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_KEY_1: `url.${to.replaceAll('\\', '/')}.insteadOf`, GIT_CONFIG_VALUE_1: 'https://github.com/snagg-app/workflow-kit.git' });
@@ -332,7 +347,6 @@ for (const [file, key, shell, args] of entries) {
     await git(origin, 'init', '--quiet'); await git(origin, 'add', '.'); await git(origin, 'commit', '--quiet', '-m', 'kit');
     mkdirSync(project); await git(project, 'init', '--quiet');
     const run = (command, extra) => spawn(shell, [...args, command], { cwd: project, env: { ...env, CLAUDE_PROJECT_DIR: project, ...extra }, input: '{}' });
-    const agent = file.startsWith('.claude') ? 'claude' : 'codex';
 
     const noNode = await run(handler('SessionStart'), { PATH: mkdtempSync(join(temp, 'empty ')) });
     assert.equal(noNode.status, 0, noNode.stderr);

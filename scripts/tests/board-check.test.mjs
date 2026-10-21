@@ -99,7 +99,7 @@ test('an issue held only by open predecessors is STACKABLE on the one open, read
   writeFileSync(join(checkout, 'stack-prs.json'), JSON.stringify({ 6: middle }));
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr({ baseRefName: 'release/0.1.1' })));
   rejected('a PR on the release branch while its base is open');
-  for (const fork of [{ isCrossRepository: true, headRepository: { nameWithOwner: 'someone/example' } }, { headRepository: { nameWithOwner: 'someone/example' } }, { isCrossRepository: undefined }]) {
+  for (const fork of [{ isCrossRepository: true, headRepository: { nameWithOwner: 'someone/example' } }, { headRepository: { nameWithOwner: 'someone/example' } }, { isCrossRepository: null }]) {
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr({ ...upper, ...fork })));
     rejected('a fork PR');
   }
@@ -271,7 +271,7 @@ test('a native stack selects its tip for new work and the immediate lower layer 
   assert.doesNotMatch(incomplete.stdout, /^stack base:/m);
 
   const missingLinks = issue('Ready', [basePredecessor]);
-  delete missingLinks.closedByPullRequestsReferences;
+  missingLinks.closedByPullRequestsReferences = null;
   writeIssue(missingLinks);
   const missing = checkWithSession();
   assert.equal(missing.status, 2, missing.stdout + missing.stderr);

@@ -389,7 +389,7 @@ test('merge --stack gates every layer, merges only the top through merge-async a
       pull_requests: [{ number: 3, state: 'closed', merged_at: '2026-10-08T00:00:00Z' }, ...members.map(number => ({ number, state: 'open' }))] }]);
     json('stack-prs.json', { 5: lower });
     json('issues-comments.json', comments);
-    json('issue.json', { ...issue(status), labels: { nodes: labels.map(name => ({ name })) } });
+    json('issue.json', { ...issue(status), labels: { totalCount: labels.length, nodes: labels.map(name => ({ name })) } });
   };
   const asyncMerges = () => readFileSync(join(checkout, 'async-merges'), 'utf8');
 
