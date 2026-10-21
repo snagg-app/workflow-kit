@@ -1,0 +1,82 @@
+[
+  {
+    "name": "viewer",
+    "query": ["query{viewer{login} rateLimit{cost remaining resetAt}}"]
+  },
+  {
+    "name": "issue",
+    "per": "issue",
+    "query": [
+      "query($owner:String!,$name:String!,$number:Int!,$branch:String!){repository(owner:$owner,name:$name){",
+      "refs(refPrefix:\"refs/heads/\",query:$branch,first:20){nodes{name}}",
+      "issue(number:$number){id number title state stateReason body updatedAt repository{nameWithOwner} assignees(first:10){nodes{login}}",
+      "parent{number repository{nameWithOwner}}",
+      "projectItems(first:100){nodes{id project{id} updatedAt status:fieldValueByName(name:\"Status\"){...on ProjectV2ItemFieldSingleSelectValue{name}}",
+      "base:fieldValueByName(name:\"Zielrelease\"){...on ProjectV2ItemFieldSingleSelectValue{name} ...on ProjectV2ItemFieldTextValue{text}}",
+      "fieldValues(first:100){nodes{...on ProjectV2ItemFieldSingleSelectValue{name field{...on ProjectV2FieldCommon{name}}}}}}}",
+      "issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}",
+      "blockedBy(first:100){totalCount nodes{id number state stateReason repository{nameWithOwner}}}",
+      "labels(first:20){totalCount nodes{name}}",
+      "comments(last:50){nodes{createdAt url body}}",
+      "subIssues(first:30){totalCount nodes{id number title state stateReason body updatedAt repository{nameWithOwner} assignees(first:10){nodes{login}} projectItems(first:100){nodes{id project{id} updatedAt status:fieldValueByName(name:\"Status\"){...on ProjectV2ItemFieldSingleSelectValue{name}} base:fieldValueByName(name:\"Zielrelease\"){...on ProjectV2ItemFieldSingleSelectValue{name} ...on ProjectV2ItemFieldTextValue{text}}}} blockedBy(first:100){totalCount nodes{id number state stateReason repository{nameWithOwner}}}}}",
+      "closedByPullRequestsReferences(first:100,includeClosedPrs:true){totalCount nodes{id number url state merged mergedAt body updatedAt isDraft isCrossRepository mergeStateStatus baseRefName headRefName headRefOid mergeCommit{oid} repository{nameWithOwner}}}}}}"
+    ]
+  },
+  {
+    "name": "pull-request",
+    "per": "pr",
+    "query": [
+      "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){",
+      "id url number state isDraft createdAt headRefName headRefOid baseRefName mergeStateStatus reviewDecision isCrossRepository headRepository{nameWithOwner} body bodyHTML mergeCommit{oid}",
+      "readyEvents:timelineItems(last:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}",
+      "firstReadyEvents:timelineItems(first:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}",
+      "convertEvents:timelineItems(last:1,itemTypes:[CONVERT_TO_DRAFT_EVENT]){nodes{...on ConvertToDraftEvent{createdAt}}}",
+      "latestOpinionatedReviews(first:100){totalCount nodes{state author{login}}}",
+      "reviewThreads(first:100){pageInfo{hasNextPage endCursor} nodes{isResolved comments(first:1){nodes{url}}}}",
+      "closingIssuesReferences(first:100){totalCount pageInfo{hasNextPage endCursor} nodes{id number}}",
+      "commits(last:1){nodes{commit{oid committedDate checkSuites(first:30){totalCount nodes{createdAt status conclusion app{slug} workflowRun{databaseId workflow{id}} checkRuns(first:1){totalCount}}}",
+      "statusCheckRollup{contexts(first:100){totalCount nodes{__typename",
+      "...on CheckRun{name status conclusion title summary detailsUrl startedAt completedAt checkSuite{databaseId createdAt app{slug} workflowRun{databaseId event workflow{id name}}}}",
+      "...on StatusContext{context state description createdAt creator{login}}}}}}}}",
+      "reviewRequests(first:100){totalCount nodes{requestedReviewer{__typename ...on User{login} ...on Bot{login} ...on Team{name}}}}",
+      "requestEvents:timelineItems(last:100,itemTypes:[REVIEW_REQUESTED_EVENT]){totalCount nodes{...on ReviewRequestedEvent{createdAt requestedReviewer{...on User{login} ...on Bot{login} ...on Team{name}}}}}}}}"
+    ]
+  },
+  {
+    "name": "search",
+    "query": [
+      "query($q:String!){viewer{login} search(query:$q,type:ISSUE_ADVANCED,first:30){issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{id number title body updatedAt",
+      "assignees(first:10){nodes{login}} comments(last:10){nodes{createdAt url body}} labels(first:20){totalCount nodes{name}}",
+      "blockedBy(first:100){totalCount nodes{id number state stateReason repository{nameWithOwner}}}",
+      "issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}",
+      "closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{id number url state body merged mergedAt updatedAt mergeStateStatus baseRefName headRefName repository{nameWithOwner}}}",
+      "projectItems(first:100){nodes{id project{id} updatedAt status:fieldValueByName(name:\"Status\"){...on ProjectV2ItemFieldSingleSelectValue{name}}",
+      "priority:fieldValueByName(name:\"Priority\"){...on ProjectV2ItemFieldSingleSelectValue{name}}",
+      "base:fieldValueByName(name:\"Zielrelease\"){...on ProjectV2ItemFieldSingleSelectValue{name} ...on ProjectV2ItemFieldTextValue{text}}}}}}}}"
+    ]
+  },
+  {
+    "name": "project-fields",
+    "query": [
+      "query($project:ID!){node(id:$project){...on ProjectV2{fields(first:100){nodes{...on ProjectV2SingleSelectField{",
+      "id name options{id name} issueField{...on IssueFieldSingleSelect{id options{id name}}}}}}}}}"
+    ]
+  },
+  {
+    "name": "nodes",
+    "query": [
+      "query{nodes(ids:$IDS){...on Issue{closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{number state isDraft isCrossRepository repository{nameWithOwner} baseRefName headRefName headRefOid}}",
+      "assignees(first:5){nodes{login}} projectItems(first:100){nodes{id project{id}}}",
+      "issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}}",
+      "...on PullRequest{id comments(last:5){nodes{createdAt url body}} reviews(last:5){nodes{createdAt url body}}}",
+      "...on ProjectV2Item{fieldValues(first:100){nodes{...on ProjectV2ItemFieldSingleSelectValue{name field{...on ProjectV2FieldCommon{name}}}}}}}}"
+    ]
+  },
+  {
+    "name": "read-back",
+    "query": [
+      "query{items:nodes(ids:$IDS){...on ProjectV2Item{fieldValues(first:100){nodes{...on ProjectV2ItemFieldSingleSelectValue{name field{...on ProjectV2FieldCommon{name}}}}}}}",
+      "issues:nodes(ids:$IDS){...on Issue{issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}}}}"
+    ]
+  }
+]

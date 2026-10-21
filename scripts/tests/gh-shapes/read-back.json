@@ -1,0 +1,23 @@
+{
+ "items": [
+  {
+   "fieldValues": {
+    "nodes": [
+     {
+      "name": "x",
+      "field": {
+       "name": "x"
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "issues": [
+  {
+   "issueFieldValues": {
+    "nodes": []
+   }
+  }
+ ]
+}

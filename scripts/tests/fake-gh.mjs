@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { answerFrom, unknownFields } from './gh-shapes.mjs';
 
 // The fake `gh` of the board tests: what `gh api …` and `gh pr merge …` answer, read from files in the working directory
 // (the checkout of the test). board-worker.mjs hands every gh call of board.mjs to fakeGh instead of starting a process.
@@ -309,6 +310,10 @@ function api(argv, input, stdout, stderr, exit) {
     stderr('gh: API rate limit already exceeded for user ID 1.\n');
     exit(1);
   }
+  // A query may only ask for fields that the recorded GitHub answers (gh-shapes/) have: a field GitHub does not know would pass here and fail live.
+  // Not thrown as gh's exit: a board command may tolerate a failed call, this must never be tolerated.
+  const unknown = unknownFields(query);
+  if (unknown.length) throw new Error(`The query asks for fields no recorded GitHub answer has: ${unknown.join(', ')}. Add them to scripts/tests/gh-shapes/probes.json and run scripts/record-gh-shapes.mjs.`);
   // Every query that reached GitHub, one JSON string per line: what a test reads to count queries and see what they ask for.
   fs.appendFileSync('queries', JSON.stringify(query) + '\n');
   // The repository each issue or PR query named ("issue owner=a/name=b"): what a test reads to see where the issue was looked up.
@@ -394,7 +399,7 @@ function api(argv, input, stdout, stderr, exit) {
       }
       data = { addProjectV2ItemById: { item: { id: 'PI1' } } };
     } else data = {};
-  } else if (query.startsWith('query{viewer')) data = { viewer: { login: 'worker' } };
+  } else if (query.startsWith('query{viewer')) data = answerFrom(query, { viewer: { login: 'worker' } });
   else if (query.includes('items:nodes(ids:') || query.includes('issues:nodes(ids:')) {
     // The read-back of a batch: the values of the items (PI-<issue id>) and of the issues, as the mutations stored them.
     // lost: the API accepted the writes but every field reads back as this value.

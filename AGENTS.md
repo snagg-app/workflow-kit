@@ -14,6 +14,9 @@ kit paths drop the `.vendor/workflow-kit/` prefix (`node scripts/board.mjs start
 - Fresh clone: run `git submodule update --init --recursive` before the tests; they stop with that line if it is missing.
 - Board tests: add a case to the file of its command (`scripts/tests/board-<command>.test.mjs`), helpers in
   `board-fixture.mjs`. `board.mjs` runs in a worker with a fake gh (`fake-gh.mjs`), not as a process per call.
+  The fake refuses a query that asks for a field the recorded real GitHub answers (`scripts/tests/gh-shapes/*.json`) lack: add the
+  field to `gh-shapes/probes.json`, then renew the recordings with `node scripts/record-gh-shapes.mjs --issue N --pr N`
+  (read-only, repeatable flags; names and texts never reach the files). A mutation cannot be recorded without writing, so it is not checked.
   Every `gh` call, the GraphQL quota logic and the field cache live in `scripts/github.mjs`; the worker gives it the fake with `useGhAdapter`.
 - Tests write only in their own temp directories, never in the checkout (`.git/modules`), so
   concurrent runs stay green; `scripts/tests/fixtures.mjs` has the helpers. Slow Git scenarios
