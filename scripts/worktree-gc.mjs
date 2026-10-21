@@ -5,7 +5,8 @@
 //   node scripts/worktree-gc.mjs [--cwd PROJECT_DIR] --rm --only DIR  one worktree, e.g. a driver's own after its PR is merged
 // Options: --list (one line per worktree), --min-age MINUTES (default 120), --jobs N (default 8), --volume-prefix P (repeatable).
 // Volumes: `worktreeVolumePrefixes` in .github/workflow-project.json lists the name prefixes; a volume is
-// `<prefix><sha256(worktree root)[0:12]>[-suffix]`. Only those names are ever touched, and never a name containing "snagg331".
+// `<prefix><sha256(worktree root)[0:12]>[-suffix]`. Only those names are ever touched, and never a name containing
+// one of `worktreeVolumeProtect` (the project's long-lived volumes; also --volume-protect, repeatable).
 // A worktree is deleted only if ALL hold: no local changes, no commits missing on the remote (or in a closed/merged PR),
 // no running process, not locked by a living session, older than --min-age. Anything unclear is kept.
 import assert from 'node:assert/strict';
@@ -34,8 +35,8 @@ export function keepReason(w, { minAge = 120, explicit = false } = {}) {
 }
 
 /** Volumes of vanished roots: starts with a configured prefix, then 12 hex digits of a root hash nobody lives in. */
-export function orphanVolumes(names, prefixes, liveHashes) {
-  return names.filter(name => !/snagg331/i.test(name) && prefixes.some(prefix => {
+export function orphanVolumes(names, prefixes, liveHashes, protect = []) {
+  return names.filter(name => !protect.some(word => name.toLowerCase().includes(word.toLowerCase())) && prefixes.some(prefix => {
     const id = name.startsWith(prefix) && name.slice(prefix.length).match(/^([0-9a-f]{12})(?![0-9a-f])/)?.[1];
     return id && !liveHashes.has(id);
   }));
@@ -71,7 +72,7 @@ async function main() {
   enterCwd();
   const { values: option } = parseArgs({ options: {
     rm: { type: 'boolean' }, list: { type: 'boolean' }, only: { type: 'string' }, 'min-age': { type: 'string', default: '120' },
-    jobs: { type: 'string', default: '8' }, 'volume-prefix': { type: 'string', multiple: true },
+    jobs: { type: 'string', default: '8' }, 'volume-prefix': { type: 'string', multiple: true }, 'volume-protect': { type: 'string', multiple: true },
   } });
   const root = projectRoot();
   const git = externalTool('git', root);
@@ -140,8 +141,12 @@ async function main() {
   }
 
   // Volumes
-  let prefixes = option['volume-prefix'] ?? [];
-  try { prefixes = [...prefixes, ...(JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8')).worktreeVolumePrefixes ?? [])]; } catch { /* no project file */ }
+  let prefixes = option['volume-prefix'] ?? [], protect = option['volume-protect'] ?? [];
+  try {
+    const project = JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8'));
+    prefixes = [...prefixes, ...(project.worktreeVolumePrefixes ?? [])];
+    protect = [...protect, ...(project.worktreeVolumeProtect ?? [])];
+  } catch { /* no project file */ }
   if (!prefixes.length || only) return;
   const docker = { file: 'docker', env: process.env };
   const names = await exec(docker, ['volume', 'ls', '-q']);
@@ -149,9 +154,9 @@ async function main() {
   const all = names.out.split(/\s+/).filter(Boolean);
   const livePaths = existsSync(root) ? worktrees.filter(w => !w.missing && (!option.rm || !removed.includes(w))) : [];
   const hashesOf = list => new Set(list.flatMap(w => rootHashes(w.path)));
-  const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths));
-  const afterRm = orphanVolumes(all, prefixes, hashesOf(livePaths.filter(w => !finished.includes(w))));
-  console.log(`Volumes: ${all.length} in total, ${all.filter(n => /snagg331/i.test(n)).length} of snagg331 (never touched), ${orphans.length} orphaned${option.rm ? '' : `, ${afterRm.length - orphans.length} more once the finished worktrees are gone`}`);
+  const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths), protect);
+  const afterRm = orphanVolumes(all, prefixes, hashesOf(livePaths.filter(w => !finished.includes(w))), protect);
+  console.log(`Volumes: ${all.length} in total, ${all.filter(n => protect.some(word => n.toLowerCase().includes(word.toLowerCase()))).length} protected (never touched),${orphans.length} orphaned${option.rm ? '' : `, ${afterRm.length - orphans.length} more once the finished worktrees are gone`}`);
   if (option.rm) {
     let deleted = 0;
     await pool(orphans, async name => { if ((await exec(docker, ['volume', 'rm', name])).ok) deleted++; });

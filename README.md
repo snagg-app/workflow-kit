@@ -465,8 +465,9 @@ A driver removes its own worktree after its PR is merged: from the main checkout
 (the lock and age checks are skipped for that one worktree, the safety checks are not).
 
 Docker volumes named `<prefix><sha256(root)[0:12]>[-suffix]` (the project's `"worktreeVolumePrefixes"` in
-`.github/workflow-project.json`, for example `["snagg-proof-gradle-cache-"]`; the hash is of the checkout path) are shown, and
-with `--rm` deleted, once no worktree has that root any more. A name containing `snagg331` is never touched; a volume in use
+`.github/workflow-project.json`, for example `["gradle-cache-"]`; the hash is of the checkout path) are shown, and
+with `--rm` deleted, once no worktree has that root any more. A name containing a word of `"worktreeVolumeProtect"` (the
+project's long-lived volumes, also `--volume-protect`) is never touched; a volume in use
 is refused by Docker and stays.
 
 ## Developing the kit

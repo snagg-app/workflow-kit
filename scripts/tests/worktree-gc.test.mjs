@@ -26,12 +26,12 @@ test('only a clean, pushed, idle, old worktree is finished; each guard keeps it'
   assert.ok(keepReason({ ...finished, dirty: true }, { explicit: true }), '--only never skips the safety checks');
 });
 
-test('volumes: snagg331 is never touched, living roots keep theirs, other names are ignored', () => {
+test('volumes: protected names are never touched, living roots keep theirs, other names are ignored', () => {
   const live = new Set(rootHashes('/work/live'));
   const gone = rootHashes('/work/gone')[0];
-  const names = [`cache-${live.values().next().value}`, `cache-${gone}`, `cache-${gone}-build-api`, `other-${gone}`, 'cache-nothex000000', `snagg331_${gone}`];
+  const names = [`cache-${live.values().next().value}`, `cache-${gone}`, `cache-${gone}-build-api`, `other-${gone}`, 'cache-nothex000000', `keepme_${gone}`];
   assert.deepEqual(orphanVolumes(names, ['cache-'], live), [`cache-${gone}`, `cache-${gone}-build-api`]);
-  assert.deepEqual(orphanVolumes(names, ['snagg331_'], live), [], 'a prefix naming snagg331 deletes nothing');
+  assert.deepEqual(orphanVolumes(names, ['keepme_'], live, ['KEEPME']), [], 'a protected name is never listed, even under a matching prefix');
 });
 
 test('dry run is the default and deletes nothing; --rm deletes only finished worktrees', async t => {
