@@ -24,7 +24,7 @@ const NOT_BOARD = /^(?!board-).*\.test\.mjs$/;
 // Source path pattern -> test files (names inside scripts/tests, or a pattern over those names).
 // A changed test file always runs itself; a file that matches no row is reported on stderr.
 export const TABLE = [
-  [/^scripts\/(board|quota|project-profile)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
+  [/^scripts\/(board(-[a-z]+)?|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
   [/^scripts\/tests\/(gh-shapes\.mjs$|gh-shapes\/)/, [BOARD, 'gh-shapes.test.mjs']],
   [/^scripts\/record-gh-shapes\.mjs$/, ['gh-shapes.test.mjs']],
   [/^scripts\/quota-sample\.mjs$/, ['quota-sample.test.mjs']],
@@ -36,9 +36,9 @@ export const TABLE = [
   [/^scripts\/init-project\.mjs$|^templates\//, ['entrypoints.test.mjs', 'kit-init-hook.test.mjs', 'impeccable-update.test.mjs']],
   [/^scripts\/setup-ponytail\.mjs$/, ['ponytail-batch.test.mjs', 'setup.test.mjs', 'matt-pocock.test.mjs']],
   [/^scripts\/(update-ponytail\.mjs|ponytail\/)/, ['update-ponytail.test.mjs', 'ponytail-batch.test.mjs']],
-  [/^scripts\/(install-ponytail-hooks|ensure-hooks)\.mjs$|^\.agents\/hooks\/|^\.github\/hooks\/ponytail\.json$/, ['ponytail-hooks.test.mjs']],
-  [/^scripts\/install-impeccable-hooks\.mjs$/, ['impeccable-install.test.mjs']],
-  [/^\.github\/hooks\/impeccable\.json$/, ['impeccable-hooks.test.mjs']],
+  [/^scripts\/(install-ponytail-hooks\.mjs|versions\.json)$|^\.agents\/hooks\/|^\.github\/hooks\/ponytail\.json$/, ['ponytail-hooks.test.mjs']],
+  [/^scripts\/kit-hook\.mjs$/, ['kit-init-hook.test.mjs', 'ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
+  [/^scripts\/(install-impeccable-hooks\.mjs|versions\.json)$/, ['impeccable-install.test.mjs', 'impeccable-hooks.test.mjs']],
   [/^scripts\/(update-impeccable\.mjs|impeccable\/)|^\.vendor\/impeccable$/, ['impeccable-update.test.mjs']],
   [/^scripts\/setup-impeccable\.mjs$/, ['impeccable-update.test.mjs', 'matt-pocock.test.mjs']],
   [/^scripts\/(setup-matt-pocock|setup-skills|code-review-failure-paths)\.mjs$/, ['matt-pocock.test.mjs', 'setup.test.mjs']],

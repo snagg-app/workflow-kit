@@ -10,7 +10,6 @@ import { checkDirectory } from './provider-links.mjs';
 const providers = ['.agents', '.claude'];
 const assets = ['impeccable-darwin-arm64', 'impeccable-darwin-x64',
   'impeccable-linux-arm64', 'impeccable-linux-x64', 'impeccable-windows-x64.exe'];
-const hooks = ['.codex/hooks.json', '.claude/settings.json'];
 const kitRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const text = file => readFileSync(file, 'utf8').replaceAll('\r\n', '\n');
 const download = async url => {
@@ -80,13 +79,8 @@ export async function updateImpeccable(kit, { release, checksum } = {}) {
   assert.equal(git('-C', source, 'rev-parse', `${tag}^{commit}`), revision, 'Skill tag does not match the proposed pin');
   release ??= JSON.parse(await download(`https://api.github.com/repos/pbakaus/impeccable/releases/tags/engine-v${version}`));
   const pins = await releasePins(release, version, checksum);
-  const changes = new Map([['scripts/impeccable/VERSION', `${version}\n`], ['scripts/impeccable/SHA256SUMS', pins]]);
-  for (const name of hooks) {
-    const file = `templates/${name}`, before = read(file);
-    JSON.parse(before);
-    assert.match(before, /engine-\d+\.\d+\.\d+/, `Missing fixed hook engine: ${name}`);
-    changes.set(file, before.replaceAll(/engine-\d+\.\d+\.\d+/g, `engine-${version}`));
-  }
+  const manifest = JSON.parse(read('scripts/versions.json'));
+  const changes = new Map([['scripts/versions.json', JSON.stringify({ ...manifest, impeccable: version }, null, 2) + '\n'], ['scripts/impeccable/SHA256SUMS', pins]]);
   const doc = read('docs/impeccable.md');
   assert.match(doc, /pinned to `skill-v\d+\.\d+\.\d+`/);
   assert.match(doc, /Engine \d+\.\d+\.\d+/);

@@ -19,6 +19,12 @@ test('a board.mjs change selects the board tests, not the Git hook tests', () =>
   assert.ok(selected.every(name => name.startsWith('board-') || name === 'text-files.test.mjs'), selected.join());
 });
 
+test('the GitHub adapter and every board command module select the board tests', () => {
+  for (const file of ['scripts/github.mjs', 'scripts/board-reviews.mjs', 'scripts/board-merge.mjs']) {
+    assert.ok(names(affectedTests([file])).includes('board-wait.test.mjs'), file);
+  }
+});
+
 test('a hook change selects the hook tests and nothing slower than needed', () => {
   assert.deepEqual(names(affectedTests(['scripts/git-hooks/post-checkout'])), ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']);
 });

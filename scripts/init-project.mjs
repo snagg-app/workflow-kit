@@ -1,6 +1,6 @@
 // Zweck: Kit-Hooks, .gitignore und .ignore (Suche) in das Projekt übernehmen; neue Projekte erhalten die Vorlagen.
 // Aufruf: Bei Einrichtung oder Kit-Updates; --existing lässt die Vorlagen weg.
-// Nutzen: Kit-Handler werden am Befehl erkannt und ersetzt; fremde Hooks und Einstellungen bleiben.
+// Nutzen: Kit-Handler werden an ihrer Kennung erkannt und ersetzt; fremde Hooks und Einstellungen bleiben.
 import assert from 'node:assert/strict';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
@@ -18,12 +18,8 @@ if (root !== kit) assert.equal(relative(root, kit).split(sep).join('/'), '.vendo
 const existing = process.argv.includes('--existing');
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 const present = p => lstatSync(p, { throwIfNoEntry: false });
-// Kit handlers call the personal snapshots under ~/.ponytail/workflow-kit or ~/.impeccable/workflow-kit; older ones only printed the installer hint;
-// the kit init handler is recognized by its gitlink check followed by the submodule init,
-// the stale-branch handler by its ancestor test of HEAD against the fetched base,
-// the node_modules handler by its message.
-const ours = handler => /node_modules is missing in this worktree|\.(?:ponytail|impeccable)(?:[\\/]+|',\s*')workflow-kit(?:[\\/]|')|install-(?:ponytail|impeccable)-hooks\.mjs|ensure-hooks\.mjs|merge-base --is-ancestor HEAD|ls-files -s -- \.vendor\/workflow-kit[\s\S]*submodule update --init --checkout \.vendor\/workflow-kit/
-  .test(JSON.stringify(handler));
+// Every kit handler carries this id; the template files stay the only place that names it.
+const ours = handler => handler.id === 'workflow-kit';
 const isHooks = name => /^(?:\.(?:codex|cursor)\/hooks\.json|\.claude\/settings\.json|\.github\/hooks\/[\w.-]+\.json)$/.test(name);
 
 /** A project file below the checkout, reached without links, that is a plain file if it exists. */
@@ -90,6 +86,6 @@ write('.gitignore', ignore.trimEnd() + (additions.length ? '\n' + additions.join
 const searchIgnore = existsSync(safe('.ignore')) ? text(safe('.ignore')) : '';
 const missing = text(join(kit, 'templates/.ignore')).split('\n').filter(line => line && !searchIgnore.split('\n').includes(line));
 if (missing.length) write('.ignore', searchIgnore + (searchIgnore && !searchIgnore.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
-// Earlier kit versions tracked ownership in a receipt; handlers are now recognized by their commands.
+// Earlier kit versions tracked ownership in a receipt; handlers are now recognized by their id.
 if (existsSync(safe('.github/workflow-kit.json'))) unlinkSync(safe('.github/workflow-kit.json'));
 console.log('Project files configured. Generate and commit skills for this kit update; install and trust hooks explicitly.');

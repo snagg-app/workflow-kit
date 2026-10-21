@@ -4,9 +4,9 @@ import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, r
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// Setup from the checkout's pinned kit: run by ensure-hooks.mjs at session start, or by hand. The edit and Stop hooks never run this file.
+// Setup from the checkout's pinned kit: run by kit-hook.mjs at session start, or by hand. The edit and Stop hooks never run this file.
 const scripts = new URL("./impeccable/", import.meta.url);
-const version = readFileSync(new URL("VERSION", scripts), "utf8").trim();
+const { impeccable: version } = JSON.parse(readFileSync(new URL("versions.json", import.meta.url), "utf8"));
 assert.match(version, /^\d+\.\d+\.\d+$/);
 const windows = process.platform === "win32";
 const asset = `impeccable-${windows ? "windows" : process.platform}-${windows ? "x64" : process.arch}${windows ? ".exe" : ""}`;
