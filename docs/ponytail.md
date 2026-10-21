@@ -21,7 +21,8 @@ Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 - Hooks never search PATH and never run checkout files.
 - `NODE_OPTIONS` and `NODE_PATH` are cleared.
 - A Node inside a checkout is refused.
-- If that Node is removed later, rerun the installer.
+- If that Node is removed later, SessionStart reports the hooks as off; rerun the installer.
+- The installers list older installations they no longer need; they never delete them.
 
 Snapshots are immutable per version; changed same-version snapshots are refused.
 New versions change hook commands and need trust again. Execution policies stay

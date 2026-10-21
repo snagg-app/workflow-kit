@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -44,4 +44,8 @@ assert.equal(digest(readFileSync(target)), expected,
   "Installed hook engine differs from reviewed pin; inspect/remove it explicitly before reinstalling");
 // A verified engine that lost its executable bit would keep the SessionStart hint alive: restore the mode on Unix.
 if (!windows) chmodSync(target, 0o555);
+// Name, never delete: other checkouts may still pin an older engine.
+const list = (dir) => readdirSync(dir).filter((name) => !name.startsWith(".")).map((name) => join(dir, name));
+const unused = list(join(directory, "..", "..")).flatMap((dir) => dir === join(directory, "..") ? list(dir).filter((old) => old !== directory) : [dir]);
+if (unused.length) console.log(`Unused older Impeccable installations, delete when no checkout pins them: ${unused.join(", ")}`);
 console.log(`Verified hook engine: ${target}\nReview and enable the project hooks in your agent.`);

@@ -44,7 +44,7 @@ whose `git reset --hard` aborted with `could not reset submodule index` and left
 
 ## Hooks
 
-A SessionStart hint "Ponytail hooks missing" or "Impeccable hooks missing" says the
+A SessionStart hint "Ponytail hooks are OFF" or "Impeccable hooks are OFF" says the
 hooks are unavailable; it does not prove the per-user snapshot is absent (an
 Impeccable engine without its executable bit raises it too). The maintainer authorizes
 the agent to install at once, without asking, by running exactly `node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs`
