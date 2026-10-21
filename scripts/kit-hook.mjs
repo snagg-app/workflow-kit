@@ -140,7 +140,7 @@ function checkKit(dir, update) {
       rmSync(link, { force: true });
       mkdirSync(path.dirname(link), { recursive: true });
       symlinkSync(kit, link, 'junction');
-    } catch (error) { return say(`${root}: could not link .vendor/workflow-kit to ${kit} (${error.code ?? error.message}).`); }
+    } catch (error) { if (real(link) === real(kit)) return; /* a parallel session linked it first */ return say(`${root}: could not link .vendor/workflow-kit to ${kit} (${error.code ?? error.message}).`); }
   }
   if (update) updateKit(kit);
 }

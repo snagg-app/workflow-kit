@@ -150,7 +150,10 @@ test('.vendor/workflow-kit becomes a link to the shared kit; reruns change nothi
   assert.ok(readFileSync(join(f.root, '.gitignore'), 'utf8').split('\n').includes('/.vendor/workflow-kit'));
   succeeds(f.run('--existing'));
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
-  rmSync(link); mkdirSync(other); symlinkSync(other, link, 'junction');
+  rmSync(link); mkdirSync(link); writeFileSync(join(link, 'mine.txt'), 'x');
+  assert.notEqual(f.run('--existing').status, 0, 'a folder with files that is no kit clone stays');
+  assert.ok(existsSync(join(link, 'mine.txt')));
+  rmSync(link, { recursive: true }); mkdirSync(other); symlinkSync(other, link, 'junction');
   succeeds(f.run('--existing'));
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
   assert.ok(existsSync(other));

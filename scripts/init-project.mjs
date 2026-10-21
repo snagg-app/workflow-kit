@@ -70,6 +70,8 @@ function linkKit() {
         || execFileSync('git', ['-C', link, 'rev-list', '-n', '1', 'HEAD', '--not', '--remotes'], { encoding: 'utf8' }).trim();
       assert.ok(!lost, '.vendor/workflow-kit has local changes or unpublished commits: commit, push or discard them, then run init-project again');
     }
+    // A folder that is no clone is only removed when empty (an uninitialized submodule).
+    assert.ok(existsSync(kitGit) || !entry.isDirectory() || !readdirSync(link).length, '.vendor/workflow-kit is a folder with files that are no kit clone: move it away, then run init-project again');
     if (git('ls-files', '-s', '--', '.vendor/workflow-kit').startsWith('160000')) git('rm', '-f', '-q', '--', '.vendor/workflow-kit');
     rmSync(link, { recursive: true, force: true });
     rmSync(join(git('rev-parse', '--absolute-git-dir'), 'modules/.vendor/workflow-kit'), { recursive: true, force: true });
