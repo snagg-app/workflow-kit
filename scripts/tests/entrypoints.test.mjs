@@ -10,7 +10,9 @@ import test from 'node:test';
 const write = (path, value) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, value); };
 const json = (path, value) => write(path, JSON.stringify(value, null, 2) + '\n');
 const read = path => JSON.parse(readFileSync(path, 'utf8'));
-const kitHook = version => ({ command: `sh "$HOME/.ponytail/vaultdex/${version}/launch.sh" activate` });
+const kitHook = version => ({ command: `sh "$HOME/.ponytail/workflow-kit/${version}/launch.sh" activate` });
+// Kits before the neutral namespace wrote the project name into the snapshot path.
+const vaultdexHook = version => ({ command: `sh "$HOME/.ponytail/vaultdex/${version}/launch.sh" activate` });
 const foreign = { command: 'sonar hook codex-prompt-submit' };
 const staleBranchHook = { command: 'git -C "$root" merge-base --is-ancestor HEAD "$base" || continue' };
 // Handler shape of the 4.10.0-5 templates, before the snapshot path was spelled out.
@@ -34,7 +36,7 @@ const succeeds = result => assert.equal(result.status, 0, result.stderr);
 
 test('kit handlers are replaced; foreign handlers, groups and settings stay; reruns change nothing', t => {
   const f = fixture(t), path = join(f.root, '.claude/settings.json');
-  json(path, { permissions: { allow: ['x'] }, hooks: { SessionStart: [{ matcher: 'startup', hooks: [foreign, kitHook('old'), legacyHook, staleBranchHook] }] } });
+  json(path, { permissions: { allow: ['x'] }, hooks: { SessionStart: [{ matcher: 'startup', hooks: [foreign, vaultdexHook('old'), kitHook('old'), legacyHook, staleBranchHook] }] } });
   f.template('.claude/settings.json', { description: 'kit', hooks: { SessionStart: [{ matcher: 'startup', hooks: [kitHook('new')] }] } });
   succeeds(f.run('--existing'));
   assert.deepEqual(read(path), { description: 'kit', permissions: { allow: ['x'] }, hooks: { SessionStart: [
@@ -42,6 +44,12 @@ test('kit handlers are replaced; foreign handlers, groups and settings stay; rer
   const once = readFileSync(path);
   succeeds(f.run('--existing'));
   assert.deepEqual(readFileSync(path), once);
+});
+
+test('generated consumer outputs carry no project name', () => {
+  const files = ['templates/.claude/settings.json', 'templates/.codex/hooks.json', 'scripts/install-ponytail-hooks.mjs', 'scripts/install-impeccable-hooks.mjs',
+    '.agents/hooks/ponytail-activate.js', '.agents/hooks/ponytail-runtime.js', '.agents/skills/ponytail/NOTICE.md'];
+  for (const file of files) assert.doesNotMatch(readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8'), /vaultdex/i, file);
 });
 
 test('retired hook files lose only kit handlers', t => {

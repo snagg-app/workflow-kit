@@ -8,7 +8,7 @@ import { projectRoot } from './checkout-root.mjs';
 
 const root = projectRoot();
 const version = '5.2.0-1';
-const destination = path.join(homedir(), '.ponytail', 'vaultdex', version);
+const destination = path.join(homedir(), '.ponytail', 'workflow-kit', version);
 const insideCheckout = directory => {
   for (;; directory = path.dirname(directory)) {
     if (existsSync(path.join(directory, '.git'))) return true;

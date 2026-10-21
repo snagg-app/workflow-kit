@@ -17,7 +17,7 @@ const version = '5.2.0-1';
 
 test('installed hooks run every manifest command without executing checkout programs', async t => {
   assert.ok(git, 'Git must be available on an absolute PATH');
-  const temp = mkdtempSync(path.join(tmpdir(), 'vaultdex ponytail '));
+  const temp = mkdtempSync(path.join(tmpdir(), 'workflow-kit ponytail '));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
   const checkout = path.join(temp, 'checkout with spaces');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
@@ -30,7 +30,7 @@ test('installed hooks run every manifest command without executing checkout prog
   const install = (extra = {}, node = process.execPath) => spawnSync(node, [installer], { cwd: checkout, env: { ...env, ...extra }, encoding: 'utf8' });
 
   // The snapshot and the Node it pins stay outside Git checkouts; identical reruns are fine.
-  const oldSnapshot = path.join(env.HOME, '.ponytail/vaultdex/4.10.0-9');
+  const oldSnapshot = path.join(env.HOME, '.ponytail/workflow-kit/4.10.0-9');
   mkdirSync(oldSnapshot, { recursive: true });
   writeFileSync(path.join(oldSnapshot, 'trusted.txt'), 'Previously trusted snapshot');
   const installed = install();
@@ -100,7 +100,7 @@ public class Shim { public static void Main() { System.IO.File.WriteAllText(Syst
   assert.equal(existsSync(marker), false, 'a checkout program ran');
 
   // A failing installed hook stays a failure through every launcher.
-  const activate = path.join(env.HOME, '.ponytail/vaultdex', version, '.agents/hooks/ponytail-activate.js');
+  const activate = path.join(env.HOME, '.ponytail/workflow-kit', version, '.agents/hooks/ponytail-activate.js');
   const [{ handler: claudeStart }] = handlers('.claude/settings.json');
   writeFileSync(activate, 'process.exit(7);');
   if (windows) assert.equal((await execute(shells[0], handlers('.codex/hooks.json')[0].handler.commandWindows)).status, 7, 'Codex preserves launcher failure');

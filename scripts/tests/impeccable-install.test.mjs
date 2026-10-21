@@ -21,7 +21,7 @@ test('an installed engine without its executable bit is made executable again', 
   copyFileSync(join(kit, 'scripts/install-impeccable-hooks.mjs'), join(root, 'kit/scripts/install-impeccable-hooks.mjs'));
   writeFileSync(join(root, 'kit/scripts/impeccable/VERSION'), '0.0.1\n');
   writeFileSync(join(root, 'kit/scripts/impeccable/SHA256SUMS'), `${createHash('sha256').update(bytes).digest('hex')}  ${asset}\n`);
-  const directory = join(root, 'home/.impeccable/vaultdex/engine-0.0.1');
+  const directory = join(root, 'home/.impeccable/workflow-kit/engine-0.0.1');
   mkdirSync(directory, { recursive: true });
   const engine = join(directory, 'impeccable');
   writeFileSync(engine, bytes, { mode: 0o644 });

@@ -36,16 +36,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate codex; else printf '%s\\n' '{\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}}'; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" activate codex) else (echo {\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate codex; else printf '%s\\n' '{\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}}'; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" activate codex) else (echo {\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 5,
             "statusMessage": "Loading Ponytail mode"
           },
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ ! -x \"$engine\" ]; then printf '%s\\n' '{\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}}'; fi",
             "timeout": 5,
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if not exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" (echo {\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE"
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if not exist \"%USERPROFILE%\\.impeccable\\workflow-kit\\engine-0.1.15\\impeccable.exe\" (echo {\"systemMessage\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Impeccable hooks missing, UI checks are off: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE"
           }
         ]
       },
@@ -54,8 +54,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate codex continue; else printf '%s\\n' '{\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}}'; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" activate codex continue) else (echo {\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate codex continue; else printf '%s\\n' '{\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}}'; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" activate codex continue) else (echo {\"systemMessage\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\",\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Ponytail hooks missing: run git submodule update --init --recursive .vendor/workflow-kit, then node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs and trust the hooks.\"}})'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 5,
             "statusMessage": "Loading Ponytail mode"
           }
@@ -87,8 +87,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" subagent codex; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" subagent codex) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" subagent codex; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" subagent codex) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 5,
             "statusMessage": "Loading Ponytail mode"
           }
@@ -100,8 +100,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "launcher=\"$HOME/.ponytail/vaultdex/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" mode-tracker codex; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\vaultdex\\5.2.0-1\\launch.cmd\" mode-tracker codex) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" mode-tracker codex; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" (\"%USERPROFILE%\\.ponytail\\workflow-kit\\5.2.0-1\\launch.cmd\" mode-tracker codex) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 5
           }
         ]
@@ -113,8 +113,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\workflow-kit\\engine-0.1.15\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\workflow-kit\\engine-0.1.15\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }
@@ -126,8 +126,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "engine=\"$HOME/.impeccable/vaultdex/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
-            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\vaultdex\\engine-0.1.15\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "commandWindows": "$input | & (Join-Path $env:SystemRoot \"System32/cmd.exe\") /d /s /c 'if exist \"%USERPROFILE%\\.impeccable\\workflow-kit\\engine-0.1.15\\impeccable.exe\" (\"%USERPROFILE%\\.impeccable\\workflow-kit\\engine-0.1.15\\impeccable.exe\" hook) else (exit /b 0)'; if (-not $? -and -not $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE",
             "timeout": 120,
             "statusMessage": "Impeccable UI check (verified user installation)"
           }

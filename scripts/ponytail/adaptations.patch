@@ -216,7 +216,7 @@ index 3680e2e..432a6ba 100644
 -  }
 -  activate(source === 'compact' ? (readMode() || 'off') : getDefaultMode());
 -}
-+// Vaultdex: no global statusline setup, personal-settings reads or codebase map (the kit packages no ponytail-map.js).
++// Workflow Kit: no global statusline setup, personal-settings reads or codebase map (the kit packages no ponytail-map.js).
  
 -process.stdin.on('data', chunk => { input += chunk; });
 -// Never hang the session start (#443, #790): like the mode tracker, recover on a
@@ -323,7 +323,7 @@ index 27e9cee..82241ae 100644
 +  // use session-keyed state if independent concurrent modes become necessary.
 +  let checkout = fs.realpathSync(process.cwd());
 +  while (!fs.existsSync(path.join(checkout, '.git')) && path.dirname(checkout) !== checkout) checkout = path.dirname(checkout);
-+  stateDir = path.join(getConfigDir(), 'vaultdex', createHash('sha256').update(checkout).digest('hex'), projectHost);
++  stateDir = path.join(getConfigDir(), 'workflow-kit', createHash('sha256').update(checkout).digest('hex'), projectHost);
 +}
  
  const statePath = path.join(stateDir, STATE_FILE);

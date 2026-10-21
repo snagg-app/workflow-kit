@@ -15,7 +15,7 @@ choose one source in the agent's settings.
 
 Follow [hook installation and trust](../README.md#hooks).
 `install-ponytail-hooks.mjs` copies generated hooks to
-`~/.ponytail/vaultdex/<version>/`, refusing destinations inside any Git checkout.
+`~/.ponytail/workflow-kit/<version>/`, refusing destinations inside any Git checkout.
 Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 
 - Hooks never search PATH and never run checkout files.
