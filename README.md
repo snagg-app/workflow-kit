@@ -441,6 +441,25 @@ On Windows the commands run through `cmd.exe`, so a bare path or a `./` prefix d
 The commands run with the permissions of whoever runs the script, like a `package.json` script; change the
 file only through a reviewed pull request.
 
+## Clean up finished worktrees
+
+`node .vendor/workflow-kit/scripts/worktree-gc.mjs` is a dry run: it counts the worktrees of the project, which ones are
+finished and why the others stay. `--rm` deletes the finished ones in parallel (8 at once; `rd /s /q` on Windows), their
+local branch, and calls `git worktree prune`. `--list` prints one line per worktree.
+
+A worktree is finished only if it has no local changes, no commit missing on the remote (a commit that a closed or merged PR
+ended on counts as saved), no running process, no lock of a living session, and is older than `--min-age` (120 minutes).
+Whatever is unclear stays. Ignored files (`node_modules`, local `.env`) do not count as changes and go with the worktree.
+
+A driver removes its own worktree after its PR is merged: from the main checkout, `worktree-gc.mjs --rm --only <worktree>`
+(the lock and age checks are skipped for that one worktree, the safety checks are not).
+
+Docker volumes named `<prefix><sha256(root)[0:12]>[-suffix]` (the project's `"worktreeVolumePrefixes"` in
+`.github/workflow-project.json`, for example `["gradle-cache-"]`; the hash is of the checkout path) are shown, and
+with `--rm` deleted, once no worktree has that root any more. A name containing a word of `"worktreeVolumeProtect"` (the
+project's long-lived volumes, also `--volume-protect`) is never touched; a volume in use
+is refused by Docker and stays.
+
 ## Developing the kit
 
 ```sh
