@@ -4,11 +4,11 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
+import { hookSettings } from '../agents.mjs';
 import { rename } from '../provider-links.mjs';
 import { isolatedGit, run as spawn, temporary } from './fixtures.mjs';
 
 const hook = fileURLToPath(new URL('../kit-hook.mjs', import.meta.url));
-const templates = fileURLToPath(new URL('../../templates/', import.meta.url));
 
 /** The process entry of the hooks: hook JSON in, output out. SubagentStart does the kit check and installs nothing;
  * a personal home without snapshots keeps Ponytail and Impeccable silent. */
@@ -322,15 +322,15 @@ const sh = process.platform === 'win32' ? spawnSync('where', ['sh']).stdout?.toS
 // Absolute: the Node-missing trial runs the shell with an empty PATH.
 const powershell = process.platform === 'win32' ? join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : spawnSync('which', ['pwsh']).stdout?.toString().trim();
 const entries = [
-  ['.claude/settings.json', 'command', sh, ['-c']],
-  ['.codex/hooks.json', 'command', sh, ['-c']],
-  ['.codex/hooks.json', 'commandWindows', powershell, ['-NoProfile', '-NonInteractive', '-Command']],
+  ['claude', 'command', sh, ['-c']],
+  ['codex', 'command', sh, ['-c']],
+  ['codex', 'commandWindows', powershell, ['-NoProfile', '-NonInteractive', '-Command']],
 ];
-for (const [file, key, shell, args] of entries) {
+for (const [agent, key, shell, args] of entries) {
   const available = Boolean(shell) && spawnSync(shell, args.at(-1) === '-c' ? ['-c', 'exit 0'] : ['-NoProfile', '-Command', 'exit 0']).status === 0;
-  test(`${file} ${key}: Node missing is a clear message, a missing kit is cloned, then kit-hook.mjs gets event and agent`, { skip: !available && `${shell} unavailable` }, async t => {
+  test(`${agent} ${key}: Node missing is a clear message, a missing kit is cloned, then kit-hook.mjs gets event and agent`, { skip: !available && `${shell} unavailable` }, async t => {
     const temp = temporary(t, 'kit-entry ');
-    const handler = event => Object.values(JSON.parse(readFileSync(join(templates, file), 'utf8')).hooks[event]).flatMap(group => group.hooks)[0][key];
+    const handler = event => hookSettings(agent).hooks[event].flatMap(group => group.hooks)[0][key];
     const origin = join(temp, 'origin'), project = join(temp, 'project');
     // The kit's address is rewritten to a local repository, so the trial needs no network.
     const rewrite = to => ({ GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.longpaths', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_KEY_1: `url.${to.replaceAll('\\', '/')}.insteadOf`, GIT_CONFIG_VALUE_1: 'https://github.com/snagg-app/workflow-kit.git' });
@@ -347,7 +347,6 @@ for (const [file, key, shell, args] of entries) {
     await git(origin, 'init', '--quiet'); await git(origin, 'add', '.'); await git(origin, 'commit', '--quiet', '-m', 'kit');
     mkdirSync(project); await git(project, 'init', '--quiet');
     const run = (command, extra) => spawn(shell, [...args, command], { cwd: project, env: { ...env, CLAUDE_PROJECT_DIR: project, ...extra }, input: '{}' });
-    const agent = file.startsWith('.claude') ? 'claude' : 'codex';
 
     const noNode = await run(handler('SessionStart'), { PATH: mkdtempSync(join(temp, 'empty ')) });
     assert.equal(noNode.status, 0, noNode.stderr);
