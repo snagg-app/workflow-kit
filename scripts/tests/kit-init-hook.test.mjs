@@ -375,7 +375,8 @@ test('a subagent is warned when the base changed the hook settings since the ses
 
 // The one-line entries of the agent settings: they only find Node and the kit, then hand over to kit-hook.mjs.
 const sh = process.platform === 'win32' ? spawnSync('where', ['sh']).stdout?.toString().split(/\r?\n/)[0] : '/bin/sh';
-const powershell = process.platform === 'win32' ? join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : 'pwsh';
+// Absolute: the Node-missing trial runs the shell with an empty PATH.
+const powershell = process.platform === 'win32' ? join(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe') : spawnSync('which', ['pwsh']).stdout?.toString().trim();
 const entries = [
   ['.claude/settings.json', 'command', sh, ['-c']],
   ['.codex/hooks.json', 'command', sh, ['-c']],
