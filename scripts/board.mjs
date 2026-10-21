@@ -4,13 +4,14 @@
 // working directory decides the project, and a driver in another project would read and write the wrong board.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot, takeCwd } from './checkout-root.mjs';
 import { statusNames, textsFor } from './project-profile.mjs';
-import { isRateLimited, quotaOf, retryAt, splitResponse, untilText, waitInterval } from './quota.mjs';
+import { QuotaPause, StillWaiting, createGithub, sleepers } from './github.mjs';
+import { untilText, waitInterval } from './quota.mjs';
 
 // Taken off here: the commands below read their arguments by position.
 // A subfolder of the checkout (or of --cwd) works like its root: the project file is found there.
@@ -76,82 +77,9 @@ function localHead() {
 // `done` sets it to the PR it found, so the handoff steps it calls read their PR where they read it for a called `handoff`.
 let value = command === 'ready' && typed === '--local' && Number.isSafeInteger(number) ? localHead() : typed;
 
-// The account's GraphQL quota (5000 points an hour) is shared by every agent on it. Every response carries what is left and when it
-// resets in its headers (`gh api -i`, also on a refusal), so no extra request asks for it; a query reads its own cost.
-// wait, reviews and handoff sleep until the reset instead of failing when it runs out or falls below their reserve;
-// every other command stops with the reset time.
-const sleepers = { wait: 300, reviews: 50, handoff: 50, done: 50, 'quota-wait': 300 };
-let quota, spent = 0, graphqlCalls = 0; // the latest quota, this run's reported cost and actual request count
-// `wait` gives up at this time (--max-minutes), before the 10-minute limit of an agent's shell tool would push it into the background.
-let deadline = Infinity;
 const startedAt = Date.now();
-/** A quota pause that would end after the deadline: `wait` ends "still waiting" instead of sleeping through it. */
-class StillWaiting extends Error {
-  constructor(resetAt) { super('still waiting'); this.resetAt = resetAt; }
-}
-
-/** The quota is used up until `resetAt`: `wait` does not sleep through it but keeps looking over REST (pausedRound). */
-class QuotaPause extends Error {
-  constructor(resetAt) { super('quota pause'); this.resetAt = resetAt; }
-}
-
-/** Say so in one line (stderr keeps stdout for the verdict) and sleep until the reset. */
-function sleepUntilReset(resetAt) {
-  if (command === 'wait') throw new QuotaPause(resetAt);
-  if (Date.parse(resetAt) > deadline) throw new StillWaiting(resetAt);
-  console.error(`rate limited until ${untilText(resetAt)}`);
-  sleep(Math.max(1, (Date.parse(resetAt) - Date.now()) / 1000 + 1));
-}
-
-/**
- * One GraphQL request. `tolerate` is a pattern for a failure whose partial answer is still wanted (one of several aliased mutations
- * failed): gh then exits non-zero, but the data of the others is in its output. `beforeSend` runs after pauses, on every attempt.
- */
-function graphql(query, variables = {}, tolerate, beforeSend) {
-  // Organization-linked Priority fields live on the issue and need this preview header.
-  const args = ['api', 'graphql', '-i', '-H', 'GraphQL-Features: issue_fields', '-f',
-    `query=${query.startsWith('query') ? `${query.slice(0, query.lastIndexOf('}'))} rateLimit{cost remaining resetAt}}` : query}`];
-  for (const [key, val] of Object.entries(variables)) args.push(typeof val === 'number' ? '-F' : '-f', `${key}=${val}`);
-  for (let sleeps = 0; ; sleeps++) {
-    if (command in sleepers && quota?.remaining < sleepers[command] && Date.parse(quota.resetAt) > Date.now()) sleepUntilReset(quota.resetAt);
-    try {
-      beforeSend?.();
-      graphqlCalls++;
-      // stderr piped: a tolerated refusal ("already exists") is no failure, and a real one reaches the error message.
-      const response = execFileSync(gh.file, args, { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, stdio: 'pipe' });
-      const { headers, body } = splitResponse(response);
-      const { data, errors } = JSON.parse(body);
-      // The body's rateLimit is what a real `{rateLimit{remaining}}` query returns (#625); the headers were seen 4400 points too high.
-      const { remaining, resetAt } = data?.rateLimit ?? {};
-      quota = (Number.isFinite(remaining) && resetAt ? { remaining, resetAt } : quotaOf(headers)) ?? quota;
-      spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
-      if (process.env.BOARD_TRACE) console.error(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? '~1' : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
-      if (errors?.length) {
-        const message = errors.map(({ type, message }) => `${type ?? ''} ${message ?? ''}`).join('\n').trim();
-        if (!(tolerate?.test(message) && data)) throw Object.assign(new Error(message), { stdout: response, stderr: message });
-      }
-      return data;
-    } catch (error) {
-      const text = `${error.stderr}${error.stdout}`, { headers, body } = splitResponse(error.stdout);
-      if (tolerate?.test(text)) {
-        let partial;
-        try { partial = JSON.parse(body).data; } catch { /* no usable answer: the error below */ }
-        if (partial) return partial;
-      }
-      if (!isRateLimited(text)) throw error;
-      quota = quotaOf(headers) ?? quota;
-      // A primary refusal whose own headers show free quota is stale (the window reset meanwhile): ask again now, never wait for a reset time.
-      if (!/secondary rate limit/i.test(text) && quota?.remaining > 0 && quotaOf(headers)) {
-        assert.ok(sleeps < 3, `GitHub keeps refusing although its headers report ${quota.remaining} points left; run ${command} again later`);
-        continue;
-      }
-      // The refusal names its own reset; without headers, a minute from now.
-      const resetAt = retryAt(text, sleeps, () => quotaOf(headers)?.resetAt ?? new Date(Date.now() + 60_000).toISOString(), Date.now(), headers);
-      assert.ok(command in sleepers && sleeps < 3, `The GitHub GraphQL quota is used up until ${untilText(resetAt)}; run ${command} again after that`);
-      sleepUntilReset(resetAt);
-    }
-  }
-}
+const github = createGithub({ tool: gh, command, projectDirectory, sleep: seconds => sleep(seconds) });
+const { graphql, rest, restAll } = github;
 
 // GitHub charges a query by its nested lists, not by what they return: every list inside a list (and every node of a list of
 // up to 100) multiplies the cost. So a query asks for little, and the rest is read only where a verdict needs it.
@@ -923,31 +851,13 @@ function next() {
 let projectFields, fieldsCached = false, fieldsRefreshed = false; // refreshed: ids resolved before it may be stale
 // Field and option ids change rarely: kept in the clone's Git directory (shared by its worktrees) and read again only when a name
 // or option is missing from them or a write with them fails (writeOption). One read costs a point; every run used to pay it.
-const fieldsCache = () => {
-  assert.notEqual(process.env.BOARD_FIELD_CACHE, '0', 'field cache switched off'); // the board tests change definitions between calls
-  // Read from the files, not `git rev-parse`: a worktree's `.git` is a file naming its directory, whose `commondir` names the shared one.
-  let dir = join(projectDirectory, '.git');
-  if (statSync(dir).isFile()) dir = resolve(projectDirectory, readFileSync(dir, 'utf8').replace(/^gitdir:\s*/, '').trim());
-  if (existsSync(join(dir, 'commondir'))) dir = resolve(dir, readFileSync(join(dir, 'commondir'), 'utf8').trim());
-  return join(dir, 'board-project-fields.json');
-};
 function dropFieldsCache() {
   fieldsRefreshed = true;
   projectFields = undefined;
   fieldsCached = false;
-  if (process.env.BOARD_FIELD_CACHE !== '0') rmSync(fieldsCache(), { force: true });
+  github.dropFieldsCache();
 }
-function loadFields() {
-  try {
-    const cached = JSON.parse(readFileSync(fieldsCache(), 'utf8'));
-    if (cached.project === issueProject.id && Array.isArray(cached.fields)) return { fields: cached.fields, cached: true };
-  } catch { /* no usable cache: read the definitions */ }
-  const fields = graphql(`query($id:ID!){node(id:$id){...on ProjectV2{fields(first:100){nodes{...on ProjectV2SingleSelectField{
-    id name options{id name} issueField{...on IssueFieldSingleSelect{id options{id name}}}}}}}}}`, { id: issueProject.id })
-    .node.fields.nodes.filter(candidate => candidate.name && candidate.options);
-  try { writeFileSync(fieldsCache(), JSON.stringify({ project: issueProject.id, fields })); } catch { /* read-only Git directory: no cache */ }
-  return { fields, cached: false };
-}
+const loadFields = () => github.loadFields(issueProject.id);
 function selectField(fieldName, optionName) {
   if (!projectFields) ({ fields: projectFields, cached: fieldsCached } = loadFields());
   const known = () => {
@@ -1160,8 +1070,8 @@ function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields 
 /** The REST call that creates the issue (no GraphQL point). A lost or unreadable answer does not prove that nothing was created. */
 function post({ title, text, milestone, labels }) {
   try {
-    const created = JSON.parse(execFileSync(gh.file, ['api', `repos/${project.repository}/issues`, '-X', 'POST', '--input', '-'],
-      { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: JSON.stringify({ title, body: text, milestone: milestone.number, labels }) }));
+    const created = JSON.parse(github.run(['api', `repos/${project.repository}/issues`, '-X', 'POST', '--input', '-'],
+      { input: JSON.stringify({ title, body: text, milestone: milestone.number, labels }) }));
     assert.ok(Number.isSafeInteger(created?.number) && created.html_url && created.node_id, 'GitHub did not report the new issue');
     return created;
   } catch (error) {
@@ -1377,7 +1287,6 @@ function unresolvedThreads(prNumber = number, firstPage) {
     after = reviewThreads.pageInfo.endCursor;
   }
 }
-const rest = path => JSON.parse(execFileSync(gh.file, ['api', path], { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, stdio: 'pipe' }));
 /** `--issue-repo OWNER/NAME`: the issue, its board (id, fields, base setting) and its comments are those of that repository's `.github/workflow-project.json`. */
 function useIssueRepo() {
   if (issueRepoOption === undefined || issueRepoOption.toLowerCase() === project.repository.toLowerCase()) return;
@@ -1387,18 +1296,6 @@ function useIssueRepo() {
   [issueOwner, issueName] = issueRepoOption.split('/');
   statuses = statusNames(issueProject);
 }
-/** Every page, so an early bot summary on a long PR is never cut off. */
-function restAll(path, expected) {
-  const items = [];
-  for (let page = 1; ; page++) {
-    const batch = rest(`${path}?per_page=100&page=${page}`);
-    assert.ok(Array.isArray(batch) && batch.length <= 100, 'Unreadable REST page');
-    items.push(...batch);
-    assert.ok(expected === undefined || items.length <= expected, 'More comments than declared; retry the read');
-    if (batch.length < 100) return items;
-  }
-}
-
 /** Every comment of an open issue, complete and unique, or an exception: a partial list must never read as "no backlink". */
 function issueComments(repository, issueNumber) {
   const issue = rest(`repos/${repository}/issues/${issueNumber}`);
@@ -1881,8 +1778,8 @@ function reviews(stallMinutes = 20, now = Date.now(), prNumber = number, pr = re
     const latest = dismissStale && !threads.length && isOptional(review.author?.login)
       && reviewList.findLast(item => login(item.user) === login(review.author) && ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(item.state));
     if (latest?.state === 'CHANGES_REQUESTED') {
-      execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${pr.number}/reviews/${latest.id}/dismissals`, '-X', 'PUT', '-f',
-        `message=All review threads are resolved on head ${short}; the change request is stale.`], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+      github.run(['api', `repos/${project.repository}/pulls/${pr.number}/reviews/${latest.id}/dismissals`, '-X', 'PUT', '-f',
+        `message=All review threads are resolved on head ${short}; the change request is stale.`], { stdio: 'pipe' });
       lines.push(`dismissed stale change request by ${login(review.author)}: all threads are resolved`);
     } else lines.push(`blocker: changes requested by ${login(review.author)}`);
   }
@@ -1954,8 +1851,8 @@ function writeBody(change) {
   if (fresh === undefined) return;
   if (before === fresh) return console.log(`BODY #${number} already has this text`);
   // The text already read and compared goes over stdin: gh would take a file named "-" for stdin and write an empty body.
-  execFileSync(gh.file, ['api', `repos/${issueProject.repository}/issues/${number}`, '-X', 'PATCH', '-F', 'body=@-'],
-    { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: fresh });
+  github.run(['api', `repos/${issueProject.repository}/issues/${number}`, '-X', 'PATCH', '-F', 'body=@-'],
+    { input: fresh });
   const after = current();
   if (after !== fresh) return refuse(`the body of #${number} is not what was written: another session overwrote it meanwhile (diff: what you wrote, then the current body); read it, merge, write again`, diffText(fresh, after));
   console.log(`BODY #${number} written and read back`);
@@ -2015,8 +1912,8 @@ function postBacklink(issueNumber, url) {
   const prUrl = new URL(url);
   let backlink = findBacklink(issueComments(issueProject.repository, issueNumber), prUrl);
   if (!backlink) {
-    execFileSync(gh.file, ['api', `repos/${issueProject.repository}/issues/${issueNumber}/comments`, '-X', 'POST', '-F', 'body=@-'],
-      { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: `PR: ${url}\n` });
+    github.run(['api', `repos/${issueProject.repository}/issues/${issueNumber}/comments`, '-X', 'POST', '-F', 'body=@-'],
+      { input: `PR: ${url}\n` });
     backlink = findBacklink(issueComments(issueProject.repository, issueNumber), prUrl);
     assert.ok(backlink, `Backlink read-back differs: the comment with ${url} is not readable on #${issueNumber}; read the comments before writing again`);
   }
@@ -2381,7 +2278,7 @@ function stackSync() {
  */
 function updateBranch(head, base) {
   try {
-    execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${number}/update-branch`, '-X', 'PUT', '-f', `expected_head_sha=${head}`], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+    github.run(['api', `repos/${project.repository}/pulls/${number}/update-branch`, '-X', 'PUT', '-f', `expected_head_sha=${head}`], { stdio: 'pipe' });
   } catch (error) {
     // stdio 'pipe': without it execFileSync copies gh's raw refusal to stderr, and a caller that reads the last line sees that, not the instruction (#332).
     if (!/\b403\b|stacked PR's branch/.test(`${error.stderr}${error.stdout}`)) throw error;
@@ -2413,7 +2310,7 @@ function deleteHeadBranch(pr) {
   const dependents = dependentPrs(branch);
   if (dependents.length) return `branch kept: ${branch} is the base of open PR ${dependents.map(({ number: dependent }) => `#${dependent}`).join(', ')}`;
   try {
-    execFileSync(gh.file, ['api', `repos/${project.repository}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, '-X', 'DELETE'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+    github.run(['api', `repos/${project.repository}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, '-X', 'DELETE'], { stdio: 'pipe' });
   } catch (error) {
     // A branch that is already gone (the repository deletes merged branches itself) is no failure.
     if (!/\b(404|422)\b|Reference does not exist|Not Found/.test(`${error.stderr}${error.stdout}`)) throw error;
@@ -2529,13 +2426,13 @@ async function merge() {
   let asynchronous = false;
   const mergeAsync = () => {
     // Without the version header GitHub answers 404 for a stacked PR (#492); direct_merge is still a valid merge_action with it. The result is read from the PR below.
-    execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${number}/merge-async`, '-X', 'PUT', '-H', 'X-GitHub-Api-Version: 2026-03-10', '-f', 'merge_action=direct_merge', '-f', 'merge_method=merge', '-f', `sha=${headRefOid}`],
-      { encoding: 'utf8', env: gh.env });
+    github.run(['api', `repos/${project.repository}/pulls/${number}/merge-async`, '-X', 'PUT', '-H', 'X-GitHub-Api-Version: 2026-03-10', '-f', 'merge_action=direct_merge', '-f', 'merge_method=merge', '-f', `sha=${headRefOid}`],
+      {});
     asynchronous = true;
   };
   // A stack is merged by GitHub from its top, and a plain `gh pr merge` of the top would land it in the layer below: merge-async only.
-  const ghMerge = () => execFileSync(gh.file, ['pr', 'merge', String(number), '--repo', project.repository, '--merge', '--match-head-commit', headRefOid],
-    { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+  const ghMerge = () => github.run(['pr', 'merge', String(number), '--repo', project.repository, '--merge', '--match-head-commit', headRefOid],
+    { stdio: 'pipe' });
   if (result.merged) console.log(`note: PR #${number} is already merged`); else if (stack) mergeAsync(); else try {
     try {
       ghMerge();
@@ -2595,9 +2492,9 @@ async function merge() {
         let open;
         for (let read = 1; (open = rest(path).state !== 'closed') && read < 5; read++) sleep(numberOption('--interval', 3));
         if (open) {
-          execFileSync(gh.file, ['api', `${path}/comments`, '-X', 'POST', '-F', 'body=@-'],
-            { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: `Geschlossen von \`board.mjs merge --stack\`: PR #${layer} ist in ${stackTrunk} gemergt, GitHub hat das Issue nicht selbst geschlossen.\n` });
-          execFileSync(gh.file, ['api', path, '-X', 'PATCH', '-f', 'state=closed', '-f', 'state_reason=completed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+          github.run(['api', `${path}/comments`, '-X', 'POST', '-F', 'body=@-'],
+            { input: `Geschlossen von \`board.mjs merge --stack\`: PR #${layer} ist in ${stackTrunk} gemergt, GitHub hat das Issue nicht selbst geschlossen.\n` });
+          github.run(['api', path, '-X', 'PATCH', '-f', 'state=closed', '-f', 'state_reason=completed'], { stdio: 'pipe' });
         }
         console.log(`issue #${issueNumber} (PR #${layer}): closed`);
       } catch (error) { console.log(`note: issue #${issueNumber} (PR #${layer}) not handled (${String(error.stderr || error.message).trim()})`); }
@@ -2696,7 +2593,7 @@ function mergeState() {
 }
 
 /** What the last query cost and what is left, so a driver sees the shared quota without a command of its own. */
-const quotaLine = () => quota && `quota: ${quota.remaining} left, ${spent} reported GraphQL wrapper points, ${graphqlCalls} wrapper calls, resets ${quota.resetAt}`;
+const quotaLine = () => github.quota && `quota: ${github.quota.remaining} left, ${github.spent} reported GraphQL wrapper points, ${github.calls} wrapper calls, resets ${github.quota.resetAt}`;
 
 /**
  * Right after a push GitHub still reports the previous head, so a plain `wait` can end DONE for it. With `--head SHA`
@@ -2779,12 +2676,12 @@ function reviewsForHead(prNumber = number) {
 async function poll(look) {
   const maxMinutes = numberOption('--max-minutes', 9);
   // One deadline per run, counted from its start (`done` runs the targeted tests first; `merge` polls twice): everything must fit the one tool call.
-  if (maxMinutes > 0 && deadline === Infinity) deadline = startedAt + maxMinutes * 60_000;
+  if (maxMinutes > 0 && github.deadline === Infinity) github.deadline = startedAt + maxMinutes * 60_000;
   let shown, quiet = 0;
   // Exit 4: not finished, call the command again (a driver's tool call must end before its 10-minute limit).
   const stillWaiting = resetAt => {
     process.exitCode = 4;
-    const quotaReset = resetAt ?? (command === 'wait' && quota?.remaining < sleepers.wait ? quota.resetAt : undefined);
+    const quotaReset = resetAt ?? (command === 'wait' && github.quota?.remaining < sleepers.wait ? github.quota.resetAt : undefined);
     console.log(['WAITING', shown, `still waiting: call ${command} again${quotaReset ? ` after ${quotaReset} (GitHub quota pause)` : ''}`, quotaLine()].filter(Boolean).join('\n'));
   };
   try {
@@ -2797,10 +2694,10 @@ async function poll(look) {
         console.log(['WAITING', shown = waiting, quotaLine()].filter(Boolean).join('\n'));
         quiet = 0;
       }
-      if (Date.now() >= deadline) return stillWaiting(result.pausedUntil);
+      if (Date.now() >= github.deadline) return stillWaiting(result.pausedUntil);
       // Little quota lengthens the pause, but not while REST is read in place of GraphQL.
-      const pause = ['wait', 'merge'].includes(command) && process.argv.includes('--interval') ? numberOption('--interval', 0) : waitInterval(quiet++, result.pausedUntil ? undefined : quota?.remaining);
-      await new Promise(resolve => setTimeout(resolve, Math.min(1000 * pause, deadline - Date.now())));
+      const pause = ['wait', 'merge'].includes(command) && process.argv.includes('--interval') ? numberOption('--interval', 0) : waitInterval(quiet++, result.pausedUntil ? undefined : github.quota?.remaining);
+      await new Promise(resolve => setTimeout(resolve, Math.min(1000 * pause, github.deadline - Date.now())));
     }
   } catch (error) {
     if (!(error instanceof StillWaiting)) throw error;
@@ -2825,8 +2722,8 @@ async function quotaWait() {
   const result = await poll(() => {
     for (;;) {
       graphql('query{viewer{login}}'); // sleeps first while the last answer showed too few points, and again when a refusal comes
-      if (!(quota?.remaining < sleepers[command])) return { done: true }; // an answer without headers is an answer
-      sleepUntilReset(quota.resetAt);
+      if (!(github.quota?.remaining < sleepers[command])) return { done: true }; // an answer without headers is an answer
+      github.sleepUntilReset(github.quota.resetAt);
     }
   });
   if (result) console.log(['DONE', quotaLine()].join('\n'));
@@ -2862,7 +2759,7 @@ function sub() {
   console.log(`${project.repository}#${number} has sub-issue ${childOwner}/${childName}#${childNumber}`);
 }
 
-const restPost = (path, args, input) => execFileSync(gh.file, ['api', path, '-X', 'POST', ...args], { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input });
+const restPost = (path, args, input) => github.run(['api', path, '-X', 'POST', ...args], { input });
 const sameLogin = (a, b) => a?.toLowerCase() === b?.toLowerCase();
 // #646: `done` never pushes to these.
 const onBase = ref => ref === 'main' || ref.startsWith('release/');
@@ -2971,7 +2868,7 @@ function start() {
     continueOn(branch);
     if (!ownPr(issue, session)) {
       const path = `repos/${project.repository}/pulls/${current.number}`, body = rest(path).body ?? '';
-      execFileSync(gh.file, ['api', path, '-X', 'PATCH', '-F', 'body=@-'], { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: claimField.test(body) ? body.replace(claimField, claimLine) : `${body}\n${claimLine}\n` });
+      github.run(['api', path, '-X', 'PATCH', '-F', 'body=@-'], { input: claimField.test(body) ? body.replace(claimField, claimLine) : `${body}\n${claimLine}\n` });
       assert.equal(claimOf(rest(path))?.[2], session, 'Claim in the PR body read-back differs');
     }
   } else {
@@ -3074,7 +2971,7 @@ async function done() {
     // #646: no PR delivers nothing for review; only an exploration that says so (--no-pr) gets Human review, otherwise nothing changes.
     if (!pull && !args.includes('--no-pr')) return fail(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
     restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## ${texts.handoff}\n\n${lines(file)}\n`);
-    if (pull) execFileSync(gh.file, ['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { encoding: 'utf8', env: gh.env, stdio: 'pipe' });
+    if (pull) github.run(['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { stdio: 'pipe' });
     writeBody(before => tickAcceptance(before));
     set('Status', statuses.humanReview);
     return console.log(pull ? `CLOSED PR #${prNumber} (no change); the result is in the comment on #${number}` : `DONE #${number} (no PR); the result is in the comment on #${number}`);
@@ -3263,5 +3160,5 @@ try {
   // Waiting commands already print their quota with the verdict; all other commands need the same evidence, also on failure.
   const alreadyPrintedQuota = ['reviews', 'wait', 'quota-wait'].includes(command)
     || (process.exitCode === 4 && ['handoff', 'merge'].includes(command));
-  if (quota && (process.exitCode === 2 || !alreadyPrintedQuota)) console.error(quotaLine());
+  if (github.quota && (process.exitCode === 2 || !alreadyPrintedQuota)) console.error(quotaLine());
 }
