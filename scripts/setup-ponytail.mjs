@@ -5,13 +5,13 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot } from './checkout-root.mjs';
+import { providers } from './agents.mjs';
 import { checkDirectory, localDirectory, materialize, moveAside } from './provider-links.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = projectRoot();
 const source = join(kit, '.vendor/ponytail');
 const state = join(root, '.workflow-kit');
-const providers = ['.agents', '.claude'];
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 const gitTool = externalTool('git', root, kit, process.cwd());
 const git = (...args) => execFileSync(gitTool.file, args, { cwd: root, env: gitTool.env, encoding: 'utf8' });

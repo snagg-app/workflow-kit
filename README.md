@@ -471,6 +471,8 @@ node --test scripts/tests/<affected>.test.mjs    # add --test-name-pattern for o
 node scripts/affected-tests.mjs    # test files for the changed files (--run runs them); new scripts need a row in its table
 ```
 
+The agents the kit serves are listed once, in `scripts/agents.mjs` (skill folder, agent-definition folder, hook file and hook shape per agent); the setup scripts and `init-project` read only that table, and the hook settings of `.claude/settings.json` and `.codex/hooks.json` are generated from it with the command texts of `scripts/hook-commands.json`. A new agent is a new entry plus its regenerated files; the CI regeneration diff covers them.
+
 Locally run only the affected tests; CI runs the commands above plus the full
 `node --test scripts/tests` in one Linux job: about 20
 runs a month at up to 10 minutes on a free public runner.

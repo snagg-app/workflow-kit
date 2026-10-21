@@ -5,9 +5,9 @@ import { existsSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot } from './checkout-root.mjs';
+import { providers } from './agents.mjs';
 import { checkDirectory } from './provider-links.mjs';
 
-const providers = ['.agents', '.claude'];
 const assets = ['impeccable-darwin-arm64', 'impeccable-darwin-x64',
   'impeccable-linux-arm64', 'impeccable-linux-x64', 'impeccable-windows-x64.exe'];
 const kitRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');

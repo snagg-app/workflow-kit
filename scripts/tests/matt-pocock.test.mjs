@@ -31,7 +31,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
   git(fixture, 'add', '.gitmodules');
   git(fixture, 'update-index', '--add', '--cacheinfo', `160000,${revision},.vendor/matt-pocock-skills`);
   mkdirSync(join(fixture, 'scripts'));
-  for (const name of ['setup-skills.mjs', 'setup-matt-pocock.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'provider-links.mjs'])
+  for (const name of ['setup-skills.mjs', 'setup-matt-pocock.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs'])
     copyFileSync(join(kit, 'scripts', name), join(fixture, 'scripts', name));
   for (const name of ['setup-ponytail.mjs', 'setup-impeccable.mjs'])
     write(join(fixture, 'scripts', name), 'import {writeFileSync} from "node:fs"; writeFileSync("other-generator-ran", "");\n');
