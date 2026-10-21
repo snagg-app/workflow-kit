@@ -21,7 +21,7 @@ describe('kit hook', { concurrency: true }, () => {
 /** A project whose hooks name the kit, a shared kit checkout (a clone of `upstream` on main) and the env that points the hook at it. */
 async function shared(t, label, { link = false, kitDir = true } = {}) {
   const temp = temporary(t, label);
-  const env = { ...isolatedGit(temp), HOME: home(temp), CLAUDE_PROJECT_DIR: '', WORKFLOW_KIT_DIR: join(temp, 'kit') };
+  const env = { ...isolatedGit(temp), HOME: home(temp), CLAUDE_PROJECT_DIR: '', WORKFLOW_KIT_DIR: join(temp, 'kit'), KIT_HOOK_FRESH_SECONDS: '0' };
   const git = async (cwd, ...a) => {
     const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env });
     assert.equal(result.status, 0, result.stderr);
@@ -58,6 +58,21 @@ test('a fresh project gets the link to the shared kit and a clean git status; th
   result = await f.trial();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(await f.head(), tip, 'the next session start has the new kit commit, without a merge in the project');
+});
+
+test('a valid stamp skips the check and the pull; a changed project commit runs the full check again', async t => {
+  const f = await shared(t, 'kit-stamp ');
+  const young = { KIT_HOOK_FRESH_SECONDS: '600' };
+  assert.equal((await f.trial(young)).status, 0);
+  assert.ok(existsSync(join(f.project, '.git/kit-ok')), 'a clean check leaves the stamp in the git dir');
+
+  const before = await f.head(), tip = await f.newer();
+  assert.equal((await f.trial(young)).status, 0);
+  assert.equal(await f.head(), before, 'the stamp matches: no pull');
+
+  await f.git(f.project, 'commit', '--quiet', '--allow-empty', '-m', 'moved');
+  assert.equal((await f.trial(young)).status, 0);
+  assert.equal(await f.head(), tip, 'the project moved: full check, the kit is pulled');
 });
 
 test('the shared kit is found next to the main checkout, also from a worktree', async t => {

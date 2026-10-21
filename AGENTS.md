@@ -30,3 +30,4 @@ kit paths drop the `.vendor/workflow-kit/` prefix (`node scripts/board.mjs start
   The commands the hook module and its entries run themselves are `git merge --ff-only` (a clean project checkout
   without own commits, to the last fetched base), `git clone` of the shared kit when it is missing, and
   `git pull --ff-only` with `git submodule update --init` in that shared checkout (on `main`, clean, nothing unpublished).
+  After a clean check the module writes a stamp `kit-ok` into the git dir of the checkout; while project commit, kit commit and kit path are unchanged and the stamp is under 10 minutes old (`KIT_HOOK_FRESH_SECONDS`), it skips the check and the pull (#689).
