@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, sep } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { skipWithoutSubmodules } from './fixtures.mjs';
@@ -10,7 +10,7 @@ import { skipWithoutSubmodules } from './fixtures.mjs';
 const skip = skipWithoutSubmodules();
 const kit = fileURLToPath(new URL('../../', import.meta.url));
 const upstream = join(kit, '.vendor/matt-pocock-skills');
-const providers = ['.agents', '.claude'];
+const providers = ['.agents', '.claude']; // .claude holds links, only .agents holds the files
 const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...args], { encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
 const write = (path, content) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, content); };
 const files = path => readdirSync(path, { recursive: true }).filter(file => lstatSync(join(path, file)).isFile())
@@ -78,7 +78,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
   succeeds(run());
 
   const verify = root => {
-    for (const provider of providers) {
+    for (const provider of ['.agents']) {
       const destination = join(root, provider, 'skills');
       const manifest = JSON.parse(readFileSync(join(destination, 'MATT-POCOCK-SOURCES.json'), 'utf8'));
       assert.equal(manifest.revision, revision);
@@ -101,6 +101,8 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
     }
   };
   verify(consumer);
+  for (const skill of skillTrees.map(path => basename(path)))
+    assert.equal(realpathSync(join(consumer, '.claude/skills', skill)), realpathSync(join(consumer, '.agents/skills', skill)), `${skill} is linked, not copied`);
   for (const provider of providers) {
     assert.doesNotMatch(readFileSync(join(consumer, provider, 'skills/retro/SKILL.md'), 'utf8'), flag, `${provider} retro is invocable`);
     assert.match(readFileSync(join(consumer, provider, 'skills/ask-matt/SKILL.md'), 'utf8'), flag, `${provider} ask-matt stays user-only`);
@@ -121,7 +123,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
   assert.equal(files(backups).filter(path => path.endsWith('/LOCAL.md')).length, 1, 'Rerun creates no new backup');
 
   // Ordinary tracked files remain available in a fresh checkout without generators or submodules.
-  git(consumer, 'add', '--', '.gitattributes', ...providers);
+  git(consumer, 'add', '--', '.gitattributes', '.agents');
   const fresh = join(base, 'fresh');
   mkdirSync(fresh);
   git(consumer, 'checkout-index', '--all', `--prefix=${fresh.replaceAll('\\', '/')}/`);

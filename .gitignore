@@ -38,3 +38,5 @@ gha-creds-*.json
 # Scratch files of drivers (PR bodies, comments); never part of a commit
 /.scratch/
 /.vendor/workflow-kit
+/.claude/skills/*
+!/.claude/skills/impeccable/

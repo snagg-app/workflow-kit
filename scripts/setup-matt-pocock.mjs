@@ -5,9 +5,9 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot } from './checkout-root.mjs';
-import { providers } from './agents.mjs';
+import { providers, sourceProviders } from './agents.mjs';
 import { adaptCodeReview } from './code-review-failure-paths.mjs';
-import { checkDirectory, localDirectory, materialize, moveAside } from './provider-links.mjs';
+import { checkDirectory, localDirectory, linkSkills, materialize, moveAside } from './provider-links.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = projectRoot();
@@ -109,9 +109,10 @@ try {
     skills: Object.fromEntries(skills.map(path => [basename(path), path])),
   }, null, 2) + '\n');
   for (const path of retired) moveAside(root, path);
-  for (const provider of providers)
+  for (const provider of sourceProviders)
     for (const name of [...names, 'MATT-POCOCK-LICENSE.md', 'MATT-POCOCK-SOURCES.json'])
       materialize(root, join(root, provider, 'skills', name), join(stage, name));
+  linkSkills(root);
   console.log(`Matt Pocock ${revision.slice(0, 7)}: ${skills.length} complete skill trees published for Codex and Claude Code.`);
 } finally {
   assert.equal(dirname(stage), state);

@@ -5,8 +5,8 @@ import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool, projectRoot } from './checkout-root.mjs';
-import { providers } from './agents.mjs';
-import { checkDirectory, localDirectory, materialize, moveAside } from './provider-links.mjs';
+import { providers, sourceProviders } from './agents.mjs';
+import { checkDirectory, localDirectory, linkSkills, materialize, moveAside } from './provider-links.mjs';
 
 const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const root = projectRoot();
@@ -46,16 +46,17 @@ try {
   writeFileSync(join(next, '.agents/hooks/LICENSE.md'), license);
   writeFileSync(join(next, '.agents/skills/ponytail/LICENSE.md'), license);
   writeFileSync(join(next, '.agents/skills/ponytail/NOTICE.md'), text(join(kit, 'scripts/ponytail/NOTICE.md')));
-  const outputs = providers.flatMap(p => skills.map(s => [`${p}/skills/${s}`, `.agents/skills/${s}`]));
+  const outputs = sourceProviders.flatMap(p => skills.map(s => [`${p}/skills/${s}`, `.agents/skills/${s}`]));
   outputs.push(['.agents/hooks', '.agents/hooks']);
   // Reject redirected ancestors before replacing any output. Old skill junctions themselves migrate safely.
   for (const [dest] of outputs) localDirectory(root, dirname(join(root, dest)));
   checkDirectory(root, join(state, 'replaced'));
   for (const [dest, from] of outputs) materialize(root, join(root, dest), join(next, from));
   // Preserve skills dropped upstream, including a project's files at a kit-owned name.
-  for (const directory of providers.map(p => join(root, p, 'skills')))
+  for (const directory of providers.map(p => join(root, p, 'skills')).filter(existsSync))
     for (const entry of readdirSync(directory).filter(name => skillName.test(name)))
       if (!skills.includes(entry)) moveAside(root, join(directory, entry));
+  linkSkills(root);
   console.log(`Ponytail ${revision.slice(0, 7)}: committed Codex and Claude Code skills and hook sources refreshed.`);
 } finally {
   assert.equal(dirname(stage), state);
