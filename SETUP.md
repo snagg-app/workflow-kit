@@ -126,7 +126,7 @@ require UI configuration:
 - **Rules:** require PRs, human approval and always-reported checks, never a
   path-filtered check that can be absent. If rulesets are unavailable (HTTP 403 on
   the plan), report it; don't change the plan or the visibility.
-- **Updater:** add git-submodule and GitHub Actions updates to the existing
+- **Updater:** add GitHub Actions updates to the existing
   Renovate rules, or use the template's Dependabot file.
 
 ## 4. Agents and hooks

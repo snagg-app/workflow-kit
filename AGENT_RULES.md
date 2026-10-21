@@ -2,7 +2,7 @@
 
 Read the first two sections once per task with the project's AGENTS.md, then only the
 rows your step needs. Follow the harness's instruction hierarchy and the project's
-contracts. Links resolve inside this pinned kit.
+contracts. Links resolve inside this kit.
 
 | When | Read |
 | --- | --- |
@@ -154,38 +154,37 @@ Run [board commands](README.md#board-commands) in the project with authenticated
 
 ## Session start
 
-`board.mjs start` sets and reads back `submodule.recurse true`, `push.recurseSubmodules no` (push
-kit commits from inside `.vendor/workflow-kit`) and `push.default simple`. Report a disabling
-worktree override, stop the affected Git operations and preserve it. New submodules need
-`git submodule update --init`. Preserve local changes; never force a submodule update.
+`board.mjs start` sets and reads back `submodule.recurse true`, `push.recurseSubmodules no` and
+`push.default simple`. Report a disabling worktree override, stop the affected Git operations and
+preserve it. New submodules need `git submodule update --init`. Preserve local changes; never force
+a submodule update.
 
-While the kit has a branch checked out (not detached), run project checkout, switch and merge as
-`git -c submodule.recurse=false …`, otherwise Git resets the kit to the pin or aborts. The same
-prefix repairs a fresh agent worktree whose `git reset --hard` aborted with
-`could not reset submodule index`.
+`.vendor/workflow-kit` is a link to the one kit checkout of the machine, always on `main` and
+pulled at every session start. It has no pin: a new kit commit reaches every branch and worktree
+without a merge. Never edit, commit or switch branches in that checkout.
 
 ## Kit issues from a project worktree
 
-Do not clone the kit elsewhere: the isolation guard rejects git outside your worktree.
-Run each step as its own command from the project worktree root. The guard accepts `git -C` only
-with the literal absolute path (`<abs>` = your worktree):
+Work on the kit in a worktree of the kit repository, never in the shared checkout behind
+`.vendor/workflow-kit` (the next session start would find it dirty and stop updating). Run each
+step as its own command with literal absolute paths (`<kit>` = the shared checkout, `<work>` = a new
+folder outside it):
 
-1. `git submodule update --init .vendor/workflow-kit`
-2. `git -C <abs>/.vendor/workflow-kit fetch origin main`
-3. `git -C <abs>/.vendor/workflow-kit checkout -b claude/ISSUE-slug origin/main`
-4. Edit, commit and push inside `.vendor/workflow-kit`; open the PR against `snagg-app/workflow-kit`.
+1. `git -C <kit> fetch origin main`
+2. `git -C <kit> worktree add <work> -b claude/ISSUE-slug origin/main`
+3. `git -C <work> submodule update --init --recursive` (the kit's own submodules; tests that need
+   them skip with `<submodule> nicht initialisiert` otherwise)
+4. Edit, commit and push in `<work>`; open the PR against `snagg-app/workflow-kit`.
 
 Run every board command for the kit issue with
-`node .vendor/workflow-kit/scripts/board.mjs --cwd <abs>/.vendor/workflow-kit …`; without `--cwd`, status and fields land
-on the project board. Its nested submodules stay empty: tests that need them skip with
-`<submodule> nicht initialisiert` and run fully in CI; initialize them with
-`git -C <abs>/.vendor/workflow-kit submodule update --init --recursive` to run them locally.
+`node .vendor/workflow-kit/scripts/board.mjs --cwd <work> …`; without `--cwd`, status and fields land
+on the project board.
 
 ## Hooks
 
 The hook module `scripts/kit-hook.mjs` installs the Ponytail and Impeccable hooks, fast-forwards a
-clean stale checkout and restores a missing or lagging kit by itself; its hints name the command
-when it cannot ([Hooks](README.md#hooks)). Follow the hint: restart once after "hooks are OFF",
+clean stale checkout, clones the shared kit when it is missing, links it into the project and pulls
+it to the newest `main` by itself; its hints name the command when it cannot ([Hooks](README.md#hooks)). Follow the hint: restart once after "hooks are OFF",
 and again after an update so skills load current. Do not install hooks yourself unless a hint
 persists after the restart. Never write hook trust or personal agent settings; trust and a fresh
 session remain the human's.
