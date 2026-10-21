@@ -497,7 +497,7 @@ function api(argv, input, stdout, stderr, exit) {
       fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), ...overlay }));
     }
     const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};
-    data = { repository: { pullRequest: stackPrs[number] ?? JSON.parse(fs.readFileSync('pr.json')) } };
+    data = answerFrom(query, { repository: { pullRequest: stackPrs[number] ?? JSON.parse(fs.readFileSync('pr.json')) } });
   }
   else if (query.includes('issue(number:$number){id parent{')) data = { repository: { issue: JSON.parse(fs.readFileSync('child.json')) } };
   else if (query.includes('fields(first:100)')) data = { node: { fields: { nodes: [{
@@ -515,7 +515,7 @@ function api(argv, input, stdout, stderr, exit) {
       pr.id ??= `PR-${issue.number}-${index}`;
       if (!query.includes('reviews(last:5)')) { delete pr.comments; delete pr.reviews; }
     }
-    data = { viewer: { login: 'worker' }, search: { issueCount: nodes.length + Number(fs.existsSync('truncate')), pageInfo: { hasNextPage: false }, nodes } };
+    data = answerFrom(query, { viewer: { login: 'worker' }, search: { issueCount: nodes.length + Number(fs.existsSync('truncate')), pageInfo: { hasNextPage: false }, nodes } });
   }
   else {
     const issue = JSON.parse(fs.readFileSync('issue.json'));
@@ -524,7 +524,8 @@ function api(argv, input, stdout, stderr, exit) {
     }
     // branches.json: the names the branch filter of the issue query finds.
     const refs = fs.existsSync('branches.json') ? { nodes: JSON.parse(fs.readFileSync('branches.json')).map(name => ({ name })) } : { nodes: [] };
-    data = { repository: { issue, refs }, ...query.includes('{viewer{login}') && !fs.existsSync('fail-viewer') && { viewer: { login: 'worker' } } };
+    data = answerFrom(query, { repository: { issue, refs }, viewer: { login: 'worker' } });
+    if (fs.existsSync('fail-viewer')) delete data.viewer;
     // issue-next.json: what the issue looks like from the next read on (someone changed it in between).
     if (fs.existsSync('issue-next.json')) fs.renameSync('issue-next.json', 'issue.json');
   }
