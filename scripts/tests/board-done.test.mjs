@@ -131,6 +131,16 @@ test('done pushes a new local commit even when the overlap policy needs no base 
   assert.equal(git('rev-parse', 'HEAD'), own, 'No base merge');
 });
 
+test('done pushes a local commit that already has a tested marker but is not on the PR (#656)', t => {
+  const { run, git, checkout, file, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  moveBase(git, checkout, { 'other.txt': 'base' }, { 'fix.txt': 'fix' });
+  const own = git('rev-parse', 'HEAD');
+  writeFileSync(join(checkout, '.git', 'board-done-tested'), own);
+  const result = run('done', '1', 'result.md');
+  assert.equal(git('ls-remote', 'origin', 'refs/heads/work').split('\t')[0], own, result.stdout + result.stderr);
+});
+
 test('done overlap policy merges a shared file even when both edits can merge cleanly', t => {
   const { run, git, checkout, file, json } = delivery(t, handoffFixture);
   baseMergePolicy(file, json);
