@@ -75,7 +75,7 @@ export const issue = (status = 'Ready', nodes = [], totalCount = nodes.length) =
   id: 'I1', number: 1, title: 'Fixture', state: 'OPEN', assignees: { nodes: [] },
   projectItems: { nodes: [{ id: 'PI1', project: { id: 'P1' }, status: { name: status } }] },
   closedByPullRequestsReferences: { totalCount: 0, nodes: [] },
-  blockedBy: { totalCount, nodes },
+  blockedBy: { totalCount, nodes }, subIssues: { totalCount: 0, nodes: [] },
 });
 // prs: the PRs GitHub lists as closing the predecessor (closedByPullRequestsReferences).
 export const predecessor = (state, stateReason, prs = [], changes) => ({ number: 9, state, stateReason, repository: { nameWithOwner: 'test/other' },
