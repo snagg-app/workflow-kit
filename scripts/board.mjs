@@ -529,7 +529,9 @@ function workReasons(issue, session, takeover) {
   for (const branch of workBranches(issue).filter(branch => !heads.has(branch))) {
     const { ahead, idle } = branchWork(issue, branch), agent = branch.split('/')[0];
     if (!ahead) continue;
-    if (idle !== undefined && isStale(issue, idle)) notes.push(`orphaned branch ${branch} (agent ${agent}): no open PR, no commit for ${ago(idle)}; continue on it or branch anew`);
+    // --takeover (#655): a pushed branch without a PR is what a predecessor hands over; start continues on it.
+    if (takeover && mayTake) notes.push(`branch ${branch} (agent ${agent}) has no open PR: --takeover; start continues on it`);
+    else if (idle !== undefined && isStale(issue, idle)) notes.push(`orphaned branch ${branch} (agent ${agent}): no open PR, no commit for ${ago(idle)}; continue on it or branch anew`);
     else blocked.push(`branch ${branch} (agent ${agent}${idle === undefined ? '' : `, last commit ${ago(idle)} ago`}) belongs to this issue; ${own}`);
   }
   return { blocked, notes };
@@ -2947,19 +2949,21 @@ function start() {
     : baseOf(issue).branch || (defaultBranch ??= rest(`repos/${project.repository}`).default_branch);
   const claimLine = `Agent: ${agent}, Session: ${session}`;
   const current = openPr(issue);
-  let branch = git('branch', '--show-current');
+  let branch = git('branch', '--show-current'), handedBranch;
+  const continueOn = name => {
+    if (git('branch', '--show-current') === name) return;
+    const local = localBranchExists(name);
+    // --takeover (#550): the predecessor's worktree may still hold the branch; it belongs to nobody after the takeover.
+    git('switch', ...takeover ? ['--ignore-other-worktrees'] : [], ...local ? [name] : ['--track', `origin/${name}`]);
+    // The predecessor may have pushed from another clone: catch up when that is a fast-forward, else leave the branch as it is.
+    if (takeover && local) try { git('merge', '--ff-only', `origin/${name}`); } catch { /* diverged: the driver decides */ }
+  };
   if (current) {
     // An issue that already has a PR (a takeover, a resume) continues on its branch; a PR of another session gets this session's claim line.
     assert.ok(current.headRefName, 'The claimed PR branch is unreadable');
     git('fetch', 'origin');
     branch = current.headRefName;
-    if (git('branch', '--show-current') !== branch) {
-      const local = localBranchExists(branch);
-      // --takeover (#550): the predecessor's worktree may still hold the branch; it belongs to nobody after the takeover.
-      git('switch', ...takeover ? ['--ignore-other-worktrees'] : [], ...local ? [branch] : ['--track', `origin/${branch}`]);
-      // The predecessor may have pushed from another clone: catch up when that is a fast-forward, else leave the branch as it is.
-      if (takeover && local) try { git('merge', '--ff-only', `origin/${branch}`); } catch { /* diverged: the driver decides */ }
-    }
+    continueOn(branch);
     if (!ownPr(issue, session)) {
       const path = `repos/${project.repository}/pulls/${current.number}`, body = rest(path).body ?? '';
       execFileSync(gh.file, ['api', path, '-X', 'PATCH', '-F', 'body=@-'], { encoding: 'utf8', env: gh.env, maxBuffer: 16 << 20, input: claimField.test(body) ? body.replace(claimField, claimLine) : `${body}\n${claimLine}\n` });
@@ -2967,8 +2971,11 @@ function start() {
     }
   } else {
     git('fetch', 'origin');
+    // #655: --takeover continues on the pushed branch of the predecessor, which has no PR yet.
+    handedBranch = takeover ? workBranches(fresh).find(name => branchWork(fresh, name).ahead) : undefined;
+    if (handedBranch) continueOn(branch = handedBranch);
     // #657: the work branch starts on origin/<base> whatever the checkout stands on; an own branch of this issue (a resume) stays.
-    if (onBase(branch) || !new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
+    else if (onBase(branch) || !new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
       branch = freeBranchName(fresh, agent, session);
       git('switch', '-c', branch, '--no-track', `origin/${base}`);
     }
@@ -2985,6 +2992,7 @@ function start() {
   // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
   if (project.setup) try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
   console.log(current ? `START #${number} session ${session} branch ${branch} base ${base} PR #${current.number}`
+    : handedBranch ? `START #${number} session ${session} branch ${branch} base ${base} (took over the pushed branch of the predecessor; done opens the Draft PR)`
     : `START #${number} session ${session} branch ${branch} base ${base} (branch made from origin/${base}, never push to ${base}; done opens the Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
 }
 
