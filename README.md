@@ -175,7 +175,7 @@ and then work in that directory, their relative paths (changed files given to `a
   Project field (an optional `"values": {"main": "main"}` names a fixed branch for such field values instead of the pattern) and a `note:`
   when the value is no branch name, `origin/<base>` is unknown locally or git cannot answer, or `HEAD` does not descend from
   `origin/<base>` (that last one only for an issue with no branch yet and no stack); no fetch, never a verdict. Then `start`:
-  sets `submodule.recurse true` and `push.recurseSubmodules no` in the clone (only with a `.gitmodules`), assigns the authenticated user,
+  sets `submodule.recurse true` and `push.recurseSubmodules no` in the clone (only with a `.gitmodules`) and `push.default simple`, assigns the authenticated user,
   sets In progress and posts the claim comment (`Agent: claude|codex, Session: ID` and `Basis: BRANCH`, the base: the base PR's branch of a stack,
   else the Project base field, else the default branch). It creates no branch and no PR: the first `done` pushes your branch
   (`<agent>/<number>-<title>`, or the checkout's own branch of that shape) and opens the Draft PR (`Closes #N` and the claim line) with its native link.

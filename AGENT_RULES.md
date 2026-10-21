@@ -6,10 +6,11 @@ details only for the current step.
 
 ## Session start
 
-`board.mjs start` sets two clone-local Git settings and reads them back: `submodule.recurse true`
-(the kit follows its pin on checkout, switch and merge; shared by the clone's worktrees) and
+`board.mjs start` sets three clone-local Git settings and reads them back: `submodule.recurse true`
+(the kit follows its pin on checkout, switch and merge; shared by the clone's worktrees),
 `push.recurseSubmodules no` (a project push never pushes kit commits; push the kit from inside
-`.vendor/workflow-kit`). Report a disabling worktree override and stop the affected Git operations;
+`.vendor/workflow-kit`) and `push.default simple` (a push goes to the branch's own name, never to
+its upstream base branch, #3822). Report a disabling worktree override and stop the affected Git operations;
 preserve it. New submodules still need `git submodule update --init`. Preserve local changes;
 never force a submodule update.
 

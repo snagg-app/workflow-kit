@@ -2897,6 +2897,13 @@ function openFirstPr(issue) {
   return pr;
 }
 
+// A clone-local Git setting, read back: an override in another scope fails loudly instead of being ignored.
+function setCloneSetting(key, want) {
+  const read = () => { try { return git('config', '--get', key); } catch { return ''; } };
+  if (read() !== want) git('config', '--local', key, want);
+  assert.equal(read(), want, `${key} must be ${want} but is overridden outside this clone's config; fix that override`);
+}
+
 /**
  * `start ISSUE`: the claim (#643). The check of the issue decides first (BLOCKED, UNKNOWN: nothing is written), then assignment, In progress and a claim comment
  * ("Agent: …, Session: …" and the base: the Project's base field, the base PR of a stack, else the default branch); every write is read back. No branch and no Draft PR yet:
@@ -2909,13 +2916,11 @@ function start() {
   const session = sessionOption();
   assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
   // One checkout-wide setting each, so a kit commit never rides along with a project push and a branch switch follows the kit pin.
-  if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) {
-    const read = () => { try { return git('config', '--get', key); } catch { return ''; } };
-    if (read() !== want) git('config', '--local', key, want);
-    assert.equal(read(), want, `${key} must be ${want} but is overridden outside this clone's config; fix that override`);
-  }
+  if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);
   const issue = readIssue();
   assert.ok(!isSpec(issue), specRefusal(number, 'start is refused; agents leave specs untouched'));
+  // `upstream` would send a push to the base branch of a worktree made from origin/<base> (#3822); `simple` pushes to the branch's own name.
+  setCloneSetting('push.default', 'simple');
   const takeover = process.argv.includes('--takeover');
   if (takeover && !openPr(issue)) adoptedPr = refsPr();
   // --takeover without an open PR, a claim or a foreign assignee has nothing to take over (#564): refuse before anything is written.
