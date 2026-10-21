@@ -1,32 +1,40 @@
 {
   "description": "Impeccable design detector: immediate-tier checks after Edit/Write on UI files, full-rule deep pass on Stop.",
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
-            "timeout": 120,
-            "statusMessage": "Impeccable UI check (verified user installation)"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
-            "timeout": 120,
-            "statusMessage": "Impeccable UI check (verified user installation)"
-          }
-        ]
-      }
-    ],
     "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"${CLAUDE_PROJECT_DIR:-.}\"; for f in \"$s/.vendor/workflow-kit/scripts/ensure-hooks.mjs\" \"$s/scripts/ensure-hooks.mjs\"; do [ -f \"$f\" ] && { node \"$f\" >/dev/null 2>&1; break; }; done; exit 0",
+            "timeout": 5,
+            "shell": "bash"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"${CLAUDE_PROJECT_DIR:-.}\"; for f in \"$s/.vendor/workflow-kit/scripts/ensure-hooks.mjs\" \"$s/scripts/ensure-hooks.mjs\"; do [ -f \"$f\" ] && { node \"$f\" >/dev/null 2>&1; break; }; done; exit 0",
+            "timeout": 5,
+            "shell": "bash"
+          }
+        ]
+      },
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"${CLAUDE_PROJECT_DIR:-.}\"; for f in \"$s/.vendor/workflow-kit/scripts/ensure-hooks.mjs\" \"$s/scripts/ensure-hooks.mjs\"; do [ -f \"$f\" ] && { node \"$f\" >/dev/null 2>&1; break; }; done; exit 0",
+            "timeout": 5,
+            "shell": "bash"
+          }
+        ]
+      },
       {
         "hooks": [
           {
@@ -87,6 +95,31 @@
             "command": "launcher=\"$HOME/.ponytail/workflow-kit/5.2.0-1/launch.sh\"; if [ -f \"$launcher\" ]; then /bin/sh \"$launcher\" activate claude continue; else printf '%s\\n' 'Ponytail hooks are OFF. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs (maintainer pre-authorized, writes no trust).'; fi",
             "timeout": 5,
             "shell": "bash"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "timeout": 120,
+            "statusMessage": "Impeccable UI check (verified user installation)"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "engine=\"$HOME/.impeccable/workflow-kit/engine-0.1.15/impeccable\"; case \"${OSTYPE:-}\" in msys*|cygwin*) engine=\"$engine.exe\";; esac; if [ -x \"$engine\" ]; then \"$engine\" hook; fi",
+            "timeout": 120,
+            "statusMessage": "Impeccable UI check (verified user installation)"
           }
         ]
       }

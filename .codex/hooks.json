@@ -2,6 +2,39 @@
   "hooks": {
     "SessionStart": [
       {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"${CLAUDE_PROJECT_DIR:-.}\"; for f in \"$s/.vendor/workflow-kit/scripts/ensure-hooks.mjs\" \"$s/scripts/ensure-hooks.mjs\"; do [ -f \"$f\" ] && { node \"$f\" >/dev/null 2>&1; break; }; done; exit 0",
+            "commandWindows": "$input | Out-Null; foreach ($f in '.vendor/workflow-kit/scripts/ensure-hooks.mjs','scripts/ensure-hooks.mjs') { if (Test-Path $f) { try { node $f 2>$null | Out-Null } catch {}; break } }; exit 0",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"${CLAUDE_PROJECT_DIR:-.}\"; for f in \"$s/.vendor/workflow-kit/scripts/ensure-hooks.mjs\" \"$s/scripts/ensure-hooks.mjs\"; do [ -f \"$f\" ] && { node \"$f\" >/dev/null 2>&1; break; }; done; exit 0",
+            "commandWindows": "$input | Out-Null; foreach ($f in '.vendor/workflow-kit/scripts/ensure-hooks.mjs','scripts/ensure-hooks.mjs') { if (Test-Path $f) { try { node $f 2>$null | Out-Null } catch {}; break } }; exit 0",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"${CLAUDE_PROJECT_DIR:-.}\"; for f in \"$s/.vendor/workflow-kit/scripts/ensure-hooks.mjs\" \"$s/scripts/ensure-hooks.mjs\"; do [ -f \"$f\" ] && { node \"$f\" >/dev/null 2>&1; break; }; done; exit 0",
+            "commandWindows": "$input | Out-Null; foreach ($f in '.vendor/workflow-kit/scripts/ensure-hooks.mjs','scripts/ensure-hooks.mjs') { if (Test-Path $f) { try { node $f 2>$null | Out-Null } catch {}; break } }; exit 0",
+            "timeout": 5
+          }
+        ]
+      },
+      {
         "hooks": [
           {
             "type": "command",

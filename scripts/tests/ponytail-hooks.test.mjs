@@ -182,7 +182,7 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const bash = windows ? ['../bin', '../../bin'].map(up => path.resolve(path.dirname(git), up, 'bash.exe')).find(existsSync) : '/bin/sh';
   const start = JSON.parse(readFileSync(path.join(root, '.claude/settings.json'), 'utf8')).hooks.SessionStart
     .flatMap(group => group.hooks).filter(handler => /ponytail|ensure-hooks/.test(handler.command));
-  const [ensure] = start.filter(handler => handler.command.includes('ensure-hooks')), [, activate] = start;
+  const ensure = start.find(handler => handler.command.includes('ensure-hooks')), activate = start.find(handler => /activate claude;/.test(handler.command));
   const call = handler => exec(bash, ['-c', handler.command], { cwd: checkout, env: { ...env, CLAUDE_PROJECT_DIR: checkout }, input: '{}', timeout: hookTimeout });
   const launcher = path.join(home, '.ponytail/workflow-kit', version, 'launch.sh');
   assert.match((await call(activate)).stdout, /Ponytail hooks are OFF/);
