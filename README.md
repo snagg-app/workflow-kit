@@ -15,14 +15,20 @@ notices and reviewed adaptations in generated skills.
 Needs Git, Node 26 and, for the board commands, an authenticated `gh`. All projects on a
 machine share one kit checkout that always follows `main`; each project reaches it through
 the link `.vendor/workflow-kit`. Kit commands act on the Git checkout they run in. Once per
-machine, clone the kit next to your projects (`WORKFLOW_KIT_DIR` overrides the place), then
-set up each project:
+machine, clone the kit next to your projects (`WORKFLOW_KIT_DIR` overrides the place). One
+command then sets up or repairs each project, new or existing, and again after every kit update:
 
 ```sh
 git clone --recurse-submodules https://github.com/snagg-app/workflow-kit.git <projects>/workflow-kit  # once per machine
-node <projects>/workflow-kit/scripts/init-project.mjs --cwd <project> --existing  # link, kit hooks, .gitignore and .ignore
-node <project>/.vendor/workflow-kit/scripts/setup-skills.mjs                       # skills for Codex and Claude Code
+node <projects>/workflow-kit/scripts/kit.mjs --cwd <project> setup
 ```
+
+`kit setup` runs the steps below in order, as often as you like; a second run changes nothing. It keeps the
+project's own hooks, skills, settings and files. A step that needs the network or your home folder (Ponytail and
+Impeccable hooks, the GitHub board without a signed-in `gh`) reports `open` instead of failing the run. It ends with the
+steps only a person can do: trusting the hooks and the GitHub switches. The steps are the scripts `init-project`
+(a project without `AGENTS.md` also gets the starter files), `setup-skills`, `install-git-hooks`,
+`install-ponytail-hooks`, `install-impeccable-hooks` and `setup-github`, plus a `.github/workflow-project.json` stub when missing.
 
 `init-project` links `.vendor/workflow-kit` to the shared checkout (a junction on Windows,
 else a symlink), adds it to `.gitignore`, and removes a leftover kit submodule of earlier
@@ -44,8 +50,8 @@ provider directory stays visible with `!/.claude/skills/my-skill/` in `.ignore`.
 the generators (`git diff --exit-code`) fails on an uncommitted `.ignore`.
 
 There is no kit update step in a project: the next session start pulls the shared checkout, so
-every branch and worktree has the newest kit without a merge. After a kit update, run the
-generators above again and commit what they change; a run that changes nothing proves nothing
+every branch and worktree has the newest kit without a merge. After a kit update, run
+`kit setup` again and commit what it changes; a run that changes nothing proves nothing
 about the new kit.
 
 The kit supports only Codex and Claude Code. Projects from earlier kit versions keep
@@ -92,11 +98,7 @@ detached process (one run per machine, lock in `~/.ponytail/workflow-kit/.instal
 `.install.log` next to it). A missing version, a changed version after a kit update or a removed
 pinned Node is repaired at the next session start and active from the one after. Needs `node` on PATH;
 without it the one-line entry prints a clear message and ends with success. By hand, from the project:
-
-```sh
-node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs    # Ponytail mode at session start
-node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs  # Impeccable UI checks
-```
+`node .vendor/workflow-kit/scripts/kit.mjs setup` (it runs both installers).
 
 Agents do not run them ([agent rules](AGENT_RULES.md#hooks)); trust stays personal. Review and trust
 project hooks in each agent, then start a new session:

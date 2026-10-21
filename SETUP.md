@@ -42,9 +42,10 @@ ownership and native/external prerequisites; missing tooling is not STARTABLE
 and does not waive blockers or unreadable dependencies.
 Limit edits to establishing the kit and board below, then complete the normal start.
 
-Add the kit only if absent. Run the
-[install commands](README.md#install-or-update-in-a-project); new projects use
-`init-project.mjs` without `--existing`. Preserve project rules, templates and CI.
+Add the kit only if absent. Run `kit setup` from the
+[install section](README.md#install-or-update-in-a-project); it also covers the board
+and hooks below as far as `gh` allows, and ends with the steps left for a person.
+Preserve project rules, templates and CI.
 
 Link `.vendor/workflow-kit/AGENT_RULES.md` from root AGENTS.md: about 20–40 lines
 of project facts and routes to build/tests, architecture, final proof and exceptions.
@@ -56,7 +57,8 @@ review, Human review, Done, plus a usable Priority scale. Migrate In review by
 renaming it to Automated review in place and adding Human review before Done;
 preserve option IDs, cards and existing Priority, including organization fields.
 
-Run `node .vendor/workflow-kit/scripts/setup-github.mjs OWNER/REPO [PROJECT_NUMBER]`.
+`kit setup` runs `setup-github.mjs OWNER/REPO` for the `origin` remote; for another board call
+`node .vendor/workflow-kit/scripts/setup-github.mjs OWNER/REPO PROJECT_NUMBER` yourself.
 It copies or reuses the Project and records it in `.github/workflow-project.json`,
 keeping `"start"`. It also checks the six statuses and Priority, links the
 repository, and adds the missing default labels: ci, documentation, testing,
@@ -131,8 +133,8 @@ require UI configuration:
 
 ## 4. Agents and hooks
 
-Use [Hooks](README.md#hooks) for the chosen agents; personal trust remains required.
-Projects with `.githooks/` call [install-git-hooks.mjs](README.md#git-hooks) from their setup; a rerun is what updates a clone's hooks.
+`kit setup` installs the hooks for both agents; personal trust remains required ([Hooks](README.md#hooks)).
+It also runs [install-git-hooks.mjs](README.md#git-hooks) for projects with `.githooks/`; a rerun is what updates a clone's hooks.
 Report each integration as enabled, untrusted or unavailable.
 
 ## 5. Deliver
