@@ -2,7 +2,7 @@
 // Nutzen: Kit-Handler werden ersetzt; fremde Hooks, Einstellungen und Projektdateien gehen nie verloren.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -15,12 +15,13 @@ const foreign = { command: 'sonar hook codex-prompt-submit' };
 // A project hook that looks like a kit call but carries no id: it is the project's.
 const lookalike = { command: 'node kit-hook.mjs project' };
 
-/** A consumer with the real installer at .vendor/workflow-kit and an empty template set. */
+/** A consumer and a shared kit next to it, with the real installer and an empty template set. */
 function fixture(t) {
   const base = mkdtempSync(join(tmpdir(), 'kit migration '));
   t.after(() => rmSync(base, { recursive: true, force: true }));
-  const root = join(base, 'consumer'), kit = join(root, '.vendor/workflow-kit');
+  const root = join(base, 'consumer'), kit = join(base, 'kit');
   mkdirSync(join(root, '.git'), { recursive: true });
+  mkdirSync(root, { recursive: true });
   mkdirSync(join(kit, 'templates'), { recursive: true });
   mkdirSync(join(kit, 'scripts'));
   for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
@@ -139,7 +140,51 @@ test('writes stay inside the owning checkout', t => {
   f.template('.codex/hooks.json', { hooks: { SessionStart: [{ hooks: [kitHook('new')] }] } });
   assert.notEqual(f.run('--existing').status, 0);
   assert.equal(existsSync(join(outside, 'hooks.json')), false);
-  const other = join(f.base, 'other');
-  mkdirSync(join(other, '.git'), { recursive: true });
-  assert.notEqual(spawnSync(process.execPath, [join(f.kit, 'scripts/init-project.mjs')], { cwd: other }).status, 0, 'Only the owning checkout');
+});
+
+test('.vendor/workflow-kit becomes a link to the shared kit; reruns change nothing, another target is replaced', t => {
+  const f = fixture(t), link = join(f.root, '.vendor/workflow-kit'), other = join(f.base, 'other');
+  succeeds(f.run('--existing'));
+  assert.ok(lstatSync(link).isSymbolicLink());
+  assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
+  assert.ok(readFileSync(join(f.root, '.gitignore'), 'utf8').split('\n').includes('/.vendor/workflow-kit'));
+  succeeds(f.run('--existing'));
+  assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
+  rmSync(link); mkdirSync(other); symlinkSync(other, link, 'junction');
+  succeeds(f.run('--existing'));
+  assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
+  assert.ok(existsSync(other));
+  // A kit inside the project it configures would link the project to itself.
+  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs']) {
+    mkdirSync(join(f.root, 'inner/scripts'), { recursive: true });
+    copyFileSync(new URL(`../${script}`, import.meta.url), join(f.root, 'inner/scripts', script));
+  }
+  assert.notEqual(spawnSync(process.execPath, [join(f.root, 'inner/scripts/init-project.mjs'), '--cwd', f.root, '--existing']).status, 0);
+});
+
+test('a submodule from the pin era is replaced: gitlink, .gitmodules entry and clone go, but never unpublished work', t => {
+  const f = fixture(t), link = join(f.root, '.vendor/workflow-kit');
+  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(f.base, 'gitconfig'), GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'protocol.file.allow', GIT_CONFIG_VALUE_0: 'always' };
+  writeFileSync(env.GIT_CONFIG_GLOBAL, '');
+  const git = (cwd, ...args) => {
+    const result = spawnSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd, env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  const old = join(f.base, 'old-kit');
+  mkdirSync(old); git(old, 'init', '--quiet'); writeFileSync(join(old, 'AGENT_RULES.md'), 'x'); git(old, 'add', '.'); git(old, 'commit', '--quiet', '-m', 'kit');
+  rmSync(join(f.root, '.git'), { recursive: true }); git(f.root, 'init', '--quiet');
+  git(f.root, 'submodule', '--quiet', 'add', old.replaceAll('\\', '/'), '.vendor/workflow-kit');
+  git(f.root, 'commit', '--quiet', '-m', 'consumer');
+  git(link, 'commit', '--quiet', '--allow-empty', '-m', 'mine');
+  const refused = f.run('--existing');
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /unpublished commits/);
+  assert.ok(existsSync(join(link, 'AGENT_RULES.md')), 'nothing was removed');
+  git(link, 'reset', '--quiet', '--hard', 'origin/HEAD');
+  succeeds(f.run('--existing'));
+  assert.ok(lstatSync(link).isSymbolicLink());
+  assert.equal(git(f.root, 'ls-files', '-s', '--', '.vendor'), '', 'no gitlink');
+  assert.ok(!existsSync(join(f.root, '.gitmodules')), 'no .gitmodules entry');
+  assert.ok(!existsSync(join(f.root, '.git/modules/.vendor/workflow-kit')), 'the old clone is gone');
 });
