@@ -69,8 +69,8 @@ engine installed by `install-impeccable-hooks.mjs` in
 `~/.impeccable/workflow-kit/engine-<version>/`, verified against `SHA256SUMS` even when
 reused. Without it, SessionStart prints an install hint; edit/Stop hooks stay
 silent without claiming analysis. Engine 0.1.15 analyzes only session-touched files at Stop.
-After an update, explicitly install the reviewed engine and trust the updated hook
-commands. Older engine directories remain untouched; the fixed hooks use only
+After an update, the SessionStart bootstrap installs the newly pinned engine on its
+own (background download, active from the next start); trust the updated hook commands. Older engine directories remain untouched; the fixed hooks use only
 the newly pinned version.
 
 The skill's own CLI launcher (`scripts/impeccable`) downloads its engine on first

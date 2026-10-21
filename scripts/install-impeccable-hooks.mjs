@@ -4,7 +4,7 @@ import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, r
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-// Explicit setup from a reviewed checkout. Automatic hooks never run this file.
+// Setup from the checkout's pinned kit: run by ensure-hooks.mjs at session start, or by hand. The edit and Stop hooks never run this file.
 const scripts = new URL("./impeccable/", import.meta.url);
 const version = readFileSync(new URL("VERSION", scripts), "utf8").trim();
 assert.match(version, /^\d+\.\d+\.\d+$/);

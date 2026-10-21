@@ -167,6 +167,31 @@ test('adapted hooks preserve explicit host and checkout state and drain stdout o
   }
 });
 
+test('SessionStart installs a missing snapshot on its own and the next call finds it', async t => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-ensure-'));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
+  for (const from of ['.agents/hooks', '.agents/skills/ponytail', 'scripts/impeccable'])
+    cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
+  for (const file of ['ensure-hooks', 'install-ponytail-hooks', 'install-impeccable-hooks', 'checkout-root'])
+    copyFileSync(path.join(root, `scripts/${file}.mjs`), path.join(checkout, `scripts/${file}.mjs`));
+  mkdirSync(path.join(checkout, '.git'));
+  // The Impeccable download must fail at once here; only Ponytail is under test.
+  const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9',
+    PATH: [path.dirname(process.execPath), process.env.PATH].join(path.delimiter), PONYTAIL_DEFAULT_MODE: 'full' };
+  const bash = windows ? ['../bin', '../../bin'].map(up => path.resolve(path.dirname(git), up, 'bash.exe')).find(existsSync) : '/bin/sh';
+  const start = JSON.parse(readFileSync(path.join(root, '.claude/settings.json'), 'utf8')).hooks.SessionStart
+    .flatMap(group => group.hooks).filter(handler => /ponytail|ensure-hooks/.test(handler.command));
+  const [ensure] = start.filter(handler => handler.command.includes('ensure-hooks')), [, activate] = start;
+  const call = handler => exec(bash, ['-c', handler.command], { cwd: checkout, env: { ...env, CLAUDE_PROJECT_DIR: checkout }, input: '{}', timeout: hookTimeout });
+  const launcher = path.join(home, '.ponytail/workflow-kit', version, 'launch.sh');
+  assert.match((await call(activate)).stdout, /Ponytail hooks are OFF/);
+  assert.equal((await call(ensure)).status, 0);
+  for (let wait = 0; (!existsSync(launcher) || existsSync(path.join(home, '.ponytail/workflow-kit/.install.lock'))) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.ok(existsSync(launcher), 'the hook started the installation, which then released its lock');
+  assert.doesNotMatch((await call(activate)).stdout, /OFF/);
+});
+
 test('a removed pinned Node makes SessionStart say the hooks are off, other events stay silent', t => {
   const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-stale-'));
   t.after(() => rmSync(temp, { recursive: true, force: true }));

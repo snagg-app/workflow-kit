@@ -90,16 +90,19 @@ file, means committed outputs were stale.
 
 ## Hooks
 
-Committed hooks call explicitly installed personal snapshots. Install once per
-machine and snapshot version; all checkouts reuse them:
+Committed hooks call personal snapshots. They install and update themselves: a SessionStart
+handler runs `scripts/ensure-hooks.mjs`, which returns at once and starts both installers in a
+detached process (one run per machine, lock in `~/.ponytail/workflow-kit/.install.lock`, log in
+`.install.log` next to it). A missing version, a changed version after a kit update or a removed
+pinned Node is repaired at the next session start and active from the one after. Needs `node` on PATH;
+by hand, from the project:
 
 ```sh
 node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs    # Ponytail mode at session start
 node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs  # Impeccable UI checks
 ```
 
-Agents run these installers themselves when the install hint appears, without
-asking ([agent rules](AGENT_RULES.md#hooks)); trust stays personal. Review and trust
+Agents do not run them ([agent rules](AGENT_RULES.md#hooks)); trust stays personal. Review and trust
 project hooks in each agent, then start a new session:
 `/hooks` in Codex CLI or Claude Code, the hooks view in the Codex app settings.
 Missing snapshots produce a SessionStart install hint. Session and subagent starts also run

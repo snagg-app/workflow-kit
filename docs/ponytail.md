@@ -18,10 +18,12 @@ Follow [hook installation and trust](../README.md#hooks).
 `~/.ponytail/workflow-kit/<version>/`, refusing destinations inside any Git checkout.
 Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 
-- Hooks never search PATH and never run checkout files.
+- The launchers never search PATH and never run checkout files. Only the SessionStart bootstrap
+  `scripts/ensure-hooks.mjs` runs from the checkout with the PATH Node, to install what is missing
+  (Milan, 21.10.2026, [#666](https://github.com/snagg-app/workflow-kit/issues/666)).
 - `NODE_OPTIONS` and `NODE_PATH` are cleared.
 - A Node inside a checkout is refused.
-- If that Node is removed later, SessionStart reports the hooks as off; rerun the installer.
+- If that Node is removed later, SessionStart reports the hooks as off and reinstalls them for the next start.
 - The installers list older installations they no longer need; they never delete them.
 
 Snapshots are immutable per version; changed same-version snapshots are refused.
