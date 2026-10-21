@@ -10,7 +10,7 @@ import { skipWithoutSubmodules } from './fixtures.mjs';
 
 const skip = skipWithoutSubmodules();
 const kit = fileURLToPath(new URL('../../', import.meta.url));
-const version = readFileSync(join(kit, 'scripts/impeccable/VERSION'), 'utf8').trim();
+const { impeccable: version } = JSON.parse(readFileSync(join(kit, 'scripts/versions.json'), 'utf8'));
 const pins = readFileSync(join(kit, 'scripts/impeccable/SHA256SUMS'), 'utf8').trim().split(/\r?\n/)
   .map(line => { const [hash, name] = line.split(/\s+/); return { hash, name }; });
 const base = `https://github.com/pbakaus/impeccable/releases/download/engine-v${version}/`;
@@ -25,8 +25,7 @@ const checksum = async url => {
   assert.ok(file, 'Only the fixed official checksum URLs are requested');
   return `${file.hash}  ${file.name}\n`;
 };
-const metadata = ['scripts/impeccable/VERSION', 'scripts/impeccable/SHA256SUMS', 'docs/impeccable.md',
-  'templates/.codex/hooks.json', 'templates/.claude/settings.json'];
+const metadata = ['scripts/versions.json', 'scripts/impeccable/SHA256SUMS', 'docs/impeccable.md'];
 const providers = ['.agents', '.claude'];
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'impeccable update '));
@@ -45,7 +44,7 @@ function fixture(t) {
     const path = join(root, file);
     let text = readFileSync(path, 'utf8').replaceAll(`engine-${version}`, 'engine-0.1.5')
       .replace(`Engine ${version}`, 'Engine 0.1.5').replace(/pinned to `skill-v[\d.]+`/, 'pinned to `skill-v4.3.1`');
-    if (file.endsWith('/VERSION')) text = '0.1.5\n';
+    if (file.endsWith('/versions.json')) text = JSON.stringify({ ...JSON.parse(text), impeccable: '0.1.5' }, null, 2) + '\n';
     if (file.endsWith('/SHA256SUMS')) text = 'not-a-reviewed-checksum\n';
     writeFileSync(path, text);
   }

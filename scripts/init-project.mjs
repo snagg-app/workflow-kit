@@ -18,11 +18,12 @@ if (root !== kit) assert.equal(relative(root, kit).split(sep).join('/'), '.vendo
 const existing = process.argv.includes('--existing');
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 const present = p => lstatSync(p, { throwIfNoEntry: false });
-// Kit handlers call the personal snapshots under ~/.ponytail/workflow-kit or ~/.impeccable/workflow-kit; older ones only printed the installer hint;
-// the kit init handler is recognized by its gitlink check followed by the submodule init,
+// Kit handlers call kit-hook.mjs; older ones called the personal snapshots under ~/.ponytail/workflow-kit or ~/.impeccable/workflow-kit,
+// only printed the installer hint or ran ensure-hooks.mjs;
+// the old kit init handler is recognized by its gitlink check followed by the submodule init,
 // the stale-branch handler by its ancestor test of HEAD against the fetched base,
 // the node_modules handler by its message.
-const ours = handler => /node_modules is missing in this worktree|\.(?:ponytail|impeccable)(?:[\\/]+|',\s*')workflow-kit(?:[\\/]|')|install-(?:ponytail|impeccable)-hooks\.mjs|ensure-hooks\.mjs|merge-base --is-ancestor HEAD|ls-files -s -- \.vendor\/workflow-kit[\s\S]*submodule update --init --checkout \.vendor\/workflow-kit/
+const ours = handler => /node_modules is missing in this worktree|\.(?:ponytail|impeccable)(?:[\\/]+|',\s*')workflow-kit(?:[\\/]|')|install-(?:ponytail|impeccable)-hooks\.mjs|(?:ensure|kit)-hooks?\.mjs|merge-base --is-ancestor HEAD|ls-files -s -- \.vendor\/workflow-kit[\s\S]*submodule update --init --checkout \.vendor\/workflow-kit/
   .test(JSON.stringify(handler));
 const isHooks = name => /^(?:\.(?:codex|cursor)\/hooks\.json|\.claude\/settings\.json|\.github\/hooks\/[\w.-]+\.json)$/.test(name);
 

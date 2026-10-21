@@ -90,12 +90,14 @@ file, means committed outputs were stale.
 
 ## Hooks
 
-Committed hooks call personal snapshots. They install and update themselves: a SessionStart
-handler runs `scripts/ensure-hooks.mjs`, which returns at once and starts both installers in a
+Every hook of Claude and Codex is a one-line call of `scripts/kit-hook.mjs <Event> --agent <claude|codex>`
+(hook JSON on stdin, answer on stdout). The module holds all hook logic and reads the Ponytail, Impeccable and
+minimum Node version from `scripts/versions.json`, the only place they are written (the CI Node stays in `.node-version`). The hooks call personal snapshots.
+They install and update themselves: at SessionStart the module returns at once and starts both installers in a
 detached process (one run per machine, lock in `~/.ponytail/workflow-kit/.install.lock`, log in
 `.install.log` next to it). A missing version, a changed version after a kit update or a removed
 pinned Node is repaired at the next session start and active from the one after. Needs `node` on PATH;
-by hand, from the project:
+without it the one-line entry prints a clear message and ends with success. By hand, from the project:
 
 ```sh
 node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs    # Ponytail mode at session start
@@ -108,12 +110,12 @@ project hooks in each agent, then start a new session:
 Missing snapshots produce a SessionStart install hint. Session and subagent starts also run
 `git submodule update --init .vendor/workflow-kit` when the kit checkout is missing (fresh
 worktree) or not at the commit the gitlink pins (a base merge moves the pin, not the checkout); a kit at its pin stays untouched,
-a kit with local changes, unpublished commits or a checked-out branch is not moved (the fast-forward then runs with `submodule.recurse=false`), and both that case and a failure print a hint. Before that, the same handler
+a kit with local changes, unpublished commits or a checked-out branch is not moved (the fast-forward then runs with `submodule.recurse=false`), and both that case and a failure print a hint. The one-line entry itself only does this for a kit that is not there at all (the module lives in the kit). Before that, the module
 fast-forwards (`git merge --ff-only`) a checkout that is behind its upstream or `origin/HEAD`, has no commits of its own and a clean working tree (a worktree or driver started
 from a stale branch), so the kit follows the new pin in the same step. It compares with the last fetched state, so it needs no network, never fetches and never delays the session.
-A second handler only reports such a checkout when local changes stopped the fast-forward. A third SessionStart handler prints one line when the worktree has a `package.json` with dependencies but no `node_modules` (Node would then resolve modules from a parent checkout); it names the `"setup"` command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`) or, without that field, the project's `AGENTS.md`, and never installs. A SubagentStart in
+It also reports such a checkout when local changes stopped the fast-forward. At SessionStart it prints one line when the worktree has a `package.json` with dependencies but no `node_modules` (Node would then resolve modules from a parent checkout); it names the `"setup"` command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`) or, without that field, the project's `AGENTS.md`, and never installs. A SubagentStart in
 a worktree whose kit you deliberately moved ahead of the gitlink resets it, so stage the new pin (`git add .vendor/workflow-kit`) before starting subagents. Claude Code reads hooks once per session: SessionStart stores a fingerprint of `.claude/settings.json` per `session_id` in `~/.claude/hooks-fingerprint/`, and SubagentStart adds the line "Hooks seit Session-Start geändert: Session neu starten" when the last fetched base (upstream or `origin/HEAD`, no network) has other settings. The warning works only in sessions that start after this handler is merged. Files and manual runs don't prove agent loading or
-trust; new definitions need personal review and trust. See
+trust; new definitions need personal review and trust. The Edit, Stop and prompt hooks of Ponytail and Impeccable also start through the module, with the `node` on PATH. See
 [Ponytail](docs/ponytail.md) and [Impeccable](docs/impeccable.md) for hook behavior.
 
 ### Git hooks
@@ -488,7 +490,7 @@ Renovate's authenticated event, not the branch name. Whatever the branch changed
 `scripts/` never runs: main's scripts replace it, and only the branch's adaptation patch is
 kept as input. Whoever wrote its commits, the branch may not change any workflow, script,
 `.node-version` or `renovate.json` against main, apart from the three files the updaters
-generate (the Ponytail adaptation patch and the Impeccable `VERSION` and `SHA256SUMS`). The job
+generate (the Ponytail adaptation patch and `scripts/versions.json` and the Impeccable `SHA256SUMS`). The job
 fails instead of running, because the approved CI run executes the branch's workflow definition
 (read-only token, no secrets). The job approves only the `pull_request` run of the commit it
 pushed (the list is asked for that commit), waits up to two minutes for it and fails when none

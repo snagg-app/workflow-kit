@@ -67,7 +67,7 @@ assert.ok(!/^(?:[a-z]|S) /m.test(git("-C", source, "ls-files", "-v")), "Impeccab
 // submodule.<name>.update=none skips the checkout above; only the kit's pin may be packaged.
 assert.equal(git("-C", source, "rev-parse", "HEAD").trim(), git("-C", kit, "rev-parse", ":.vendor/impeccable").trim(),
   "Impeccable source is not at the kit pin");
-const version = text(join(security, "VERSION")).trim();
+const version = JSON.parse(text(join(kit, "scripts/versions.json"))).impeccable;
 const stage = mkdtempSync(join(state, "setup-"));
 const next = join(stage, "next");
 // ponytail: reviewed updates run serially; add a lock if updates become concurrent.
