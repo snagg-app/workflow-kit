@@ -22,7 +22,7 @@ const present = path => lstatSync(path, { throwIfNoEntry: false });
 assert.ok(!present(directory) || !outside(realpathSync(directory)), 'Project directory leaves checkout');
 assert.ok(!present(marker) || present(marker).isFile(), 'Project marker must be a regular file');
 const saved = existsSync(marker) ? JSON.parse(readFileSync(marker, 'utf8')) : null;
-if (saved) assert.equal(saved.repository, repo, 'Recorded project belongs to another repository');
+if (saved?.repository) assert.equal(saved.repository, repo, 'Recorded project belongs to another repository');
 const meta = JSON.parse(gh('repo', 'view', repo, '--json', 'viewerPermission,url'));
 assert.ok(['ADMIN', 'MAINTAIN', 'WRITE'].includes(meta.viewerPermission), 'Repository write permission required');
 const number = requestedNumber ?? saved?.number;
