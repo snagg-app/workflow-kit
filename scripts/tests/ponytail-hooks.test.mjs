@@ -166,3 +166,27 @@ test('adapted hooks preserve explicit host and checkout state and drain stdout o
     }
   }
 });
+
+test('a removed pinned Node makes SessionStart say the hooks are off, other events stay silent', t => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-stale-'));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
+  for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
+    cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
+  assert.equal(spawnSync(git, ['init', '--quiet', checkout]).status, 0);
+  const node = path.join(temp, 'tools', windows ? 'node.exe' : 'node');
+  mkdirSync(path.dirname(node));
+  copyFileSync(process.execPath, node);
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  const installer = fileURLToPath(new URL('../install-ponytail-hooks.mjs', import.meta.url));
+  const installed = spawnSync(node, [installer], { cwd: checkout, env, encoding: 'utf8' });
+  assert.equal(installed.status, 0, installed.stderr);
+  rmSync(node);
+  const launcher = path.join(home, '.ponytail/workflow-kit', version, windows ? 'launch.cmd' : 'launch.sh');
+  const launch = event => spawnSync(windows ? 'cmd.exe' : '/bin/sh', windows ? ['/c', launcher, event, 'claude'] : [launcher, event, 'claude'], { env, encoding: 'utf8' });
+  const start = launch('activate');
+  assert.equal(start.status, 0, start.stderr);
+  assert.match(JSON.parse(start.stdout).systemMessage, /install-ponytail-hooks\.mjs/);
+  const quiet = launch('subagent');
+  assert.deepEqual([quiet.status, quiet.stdout.trim()], [0, '']);
+});
