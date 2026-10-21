@@ -3098,7 +3098,10 @@ async function done() {
         try { git('merge', '--abort'); } catch { /* no merge was started */ }
         return fail(`merging ${base} conflicts${files.length ? ` in ${files.join(', ')}` : `: ${failure(error)}`}; merge it yourself, push, then run done again`);
       }
-      try { git('push', '-u', 'origin', `HEAD:refs/heads/${branch}`); } catch (error) { return fail(`cannot push HEAD after merging ${base}: ${failure(error)}`); }
+    }
+    // #659: new local commits (a correction after an earlier done) are pushed even when no base merge was needed.
+    if (mergeNeeded || localHead() !== pull.head.sha) {
+      try { git('push', '-u', 'origin', `HEAD:refs/heads/${branch}`); } catch (error) { return fail(`cannot push HEAD${mergeNeeded ? ` after merging ${base}` : ''}: ${failure(error)}`); }
     }
   }
   const sha = localHead();
