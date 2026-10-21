@@ -102,7 +102,7 @@ async function main() {
     const unpushed = /^0+$/.test(w.head ?? '0') && !w.branch ? null : Number((await gitIn(['rev-list', '--count', ref, '--not', '--remotes'])).out);
     w.unpushed = closedHeads.has(w.head) ? 0 : (Number.isFinite(unpushed) ? unpushed : null);
     if (w.missing) w.dirty = false; // nothing on disk to lose
-    else { const status = await gitIn(['status', '--porcelain'], w.path); w.dirty = !status.ok || status.out.trim() !== ''; }
+    else { const status = await gitIn(['--no-optional-locks', 'status', '--porcelain'], w.path); w.dirty = !status.ok || status.out.trim() !== ''; }
     const here = norm(w.path);
     w.busy = !w.missing && commandLines.some(line => line.includes(here));
     const pid = w.locked?.match(/pid (\d+)/)?.[1];
