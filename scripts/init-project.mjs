@@ -23,7 +23,7 @@ const present = p => lstatSync(p, { throwIfNoEntry: false });
 // the kit init handler is recognized by its gitlink check followed by the submodule init,
 // the stale-branch handler by its ancestor test of HEAD against the fetched base,
 // the node_modules handler by its message.
-const ours = handler => /node_modules is missing in this worktree|\.(?:ponytail|impeccable)(?:[\\/]+|',\s*')(?:vaultdex|workflow-kit)(?:[\\/]|')|install-(?:ponytail|impeccable)-hooks\.mjs|merge-base --is-ancestor HEAD|ls-files -s -- \.vendor\/workflow-kit[\s\S]*submodule update --init --checkout \.vendor\/workflow-kit/
+const ours = handler => /node_modules is missing in this worktree|\.(?:ponytail|impeccable)(?:[\\/]+|',\s*')(?:vaultdex|workflow-kit)(?:[\\/]|')|install-(?:ponytail|impeccable)-hooks\.mjs|ensure-hooks\.mjs|merge-base --is-ancestor HEAD|ls-files -s -- \.vendor\/workflow-kit[\s\S]*submodule update --init --checkout \.vendor\/workflow-kit/
   .test(JSON.stringify(handler));
 const isHooks = name => /^(?:\.(?:codex|cursor)\/hooks\.json|\.claude\/settings\.json|\.github\/hooks\/[\w.-]+\.json)$/.test(name);
 
