@@ -29,6 +29,7 @@ export const TABLE = [
   [/^scripts\/record-gh-shapes\.mjs$/, ['gh-shapes.test.mjs']],
   [/^scripts\/quota-sample\.mjs$/, ['quota-sample.test.mjs']],
   [/^scripts\/affected-tests\.mjs$/, ['affected-tests.test.mjs']],
+  [/^scripts\/worktree-gc\.mjs$/, ['worktree-gc.test.mjs']],
   [/^scripts\/checkout-root\.mjs$/, [ALL]],
   [/^scripts\/provider-links\.mjs$/, [NOT_BOARD]],
   [/^scripts\/tests\/fixtures\.mjs$/, ['git-hooks', 'kit-init-hook', 'ponytail-batch', 'ponytail-hooks', 'renovate-regenerate', 'setup'].map(n => `${n}.test.mjs`)],
