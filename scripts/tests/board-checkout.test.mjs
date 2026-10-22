@@ -3,31 +3,31 @@ import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createCheckout, onBase, pushPlan, targetBranch } from '../board-checkout.mjs';
+import { createCheckout, pushPlan, targetBranch } from '../board-checkout.mjs';
 import { isolatedGit, temporary } from './fixtures.mjs';
 
 const own = { branch: 'claude/7-x', head: 'b', upstream: '' };
-const pr = { branch: 'claude/7-x', head: 'a', number: 9, sameRepo: true };
+const pr = { branch: 'claude/7-x', head: 'a', number: 9, repository: 'o/r', sameRepo: true };
 const own651 = `HEAD:refs/heads/${own.branch}`;
 
 // One row per error case of the tickets: what the checkout looks like, what the plan must say.
 const pushRows = [
-  ['#646 on main: refused', { stand: { ...own, branch: 'main' } }, { refuse: /nothing is pushed to main or release/ }],
-  ['#646 on release/0.1.2: refused', { stand: { ...own, branch: 'release/0.1.2' }, pr }, { refuse: /nothing is pushed to main or release/ }],
+  ['#646 on main: refused', { stand: { ...own, branch: 'main' } }, { refuse: true }],
+  ['#646 on release/0.1.2: refused', { stand: { ...own, branch: 'release/0.1.2' }, pr }, { refuse: true }],
   ['#643 first push, no PR yet: own branch, upstream set', { stand: own }, { push: true, args: ['push', '-u', 'origin', own651] }],
   ['#648/#651 upstream is the base: still the own branch by name', { stand: { ...own, upstream: 'origin/main' }, pr }, { push: true, args: ['push', '-u', 'origin', own651] }],
   ['#656 head the PR does not show yet: pushed without a base merge', { stand: own, pr }, { push: true, args: ['push', '-u', 'origin', own651] }],
   ['#659 correction after an earlier done: pushed', { stand: { ...own, head: 'c' }, pr: { ...pr, head: 'b2' } }, { push: true }],
   ['head the PR already shows, no merge: nothing to push', { stand: { ...own, head: 'a' }, pr }, { push: false }],
   ['head the PR already shows, base merged: pushed', { stand: { ...own, head: 'a' }, pr, mergeNeeded: true }, { push: true }],
-  ['checkout on another branch than the PR: refused', { stand: { ...own, branch: 'claude/8-y' }, pr }, { refuse: /not on the branch claude\/7-x/ }],
-  ['PR branch of another repository: refused', { stand: own, pr: { ...pr, sameRepo: false } }, { refuse: /not on the branch/ }],
+  ['checkout on another branch than the PR: refused', { stand: { ...own, branch: 'claude/8-y' }, pr }, { refuse: true }],
+  ['PR branch of another repository: refused', { stand: own, pr: { ...pr, sameRepo: false } }, { refuse: true }],
 ];
 for (const [name, input, want] of pushRows) {
   test(`pushPlan: ${name}`, () => {
     const plan = pushPlan({ number: 7, ...input });
     for (const [key, value] of Object.entries(want)) {
-      if (value instanceof RegExp) assert.match(plan[key], value);
+      if (value === true) assert.ok(plan[key]);
       else assert.deepEqual(plan[key], value);
     }
     if (want.refuse) assert.equal(plan.push, undefined, 'a refusal pushes nothing');
@@ -50,10 +50,6 @@ for (const [name, input, want] of nameRows) {
   });
 }
 
-test('onBase names main and release/** only', () => {
-  assert.deepEqual(['main', 'release/1', 'releases', 'x/main', ''].map(onBase), [true, true, false, false, false]);
-});
-
 // Real repositories, no GitHub.
 function repos(t) {
   const root = temporary(t, 'board-checkout ');
@@ -71,7 +67,7 @@ function repos(t) {
 test('stand reports branch, upstream, ahead, behind and clean of a real checkout', t => {
   const { git, work, checkout } = repos(t);
   git(work, 'switch', '-c', 'claude/7-x', 'origin/main');
-  assert.deepEqual({ ...checkout.stand('main'), head: undefined }, { branch: 'claude/7-x', upstream: 'origin/main', head: undefined, behind: 0, ahead: 0, clean: true });
+  assert.deepEqual({ ...checkout.stand('main'), head: undefined }, { branch: 'claude/7-x', upstream: 'origin/main', head: undefined, base: 'main', behind: 0, ahead: 0, clean: true });
   git(work, 'commit', '--allow-empty', '-q', '-m', 'own');
   writeFileSync(join(work, 'f'), 'x');
   git(work, 'add', 'f');

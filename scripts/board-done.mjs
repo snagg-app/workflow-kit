@@ -114,7 +114,7 @@ export function createDone(env) {
     if (!isTested() || localHead() !== pull.head.sha) {
       const base = `origin/${pull.base.ref}`, failure = error => String(error.stderr || error.message).trim();
       // Only the PR's own branch of this repository is merged into and pushed.
-      const pr = { branch: pull.head.ref, head: pull.head.sha, number: prNumber, sameRepo: pull.head.repo?.full_name?.toLowerCase() === project.repository.toLowerCase() };
+      const pr = { branch: pull.head.ref, head: pull.head.sha, number: prNumber, repository: project.repository, sameRepo: pull.head.repo?.full_name?.toLowerCase() === project.repository.toLowerCase() };
       const wrongBranch = pushPlan({ stand: checkout.stand(), number, pr }).refuse;
       if (wrongBranch) return fail(wrongBranch);
       try { git('fetch', 'origin'); } catch (error) { return fail(`cannot fetch the base ${base}: ${failure(error)}`); }

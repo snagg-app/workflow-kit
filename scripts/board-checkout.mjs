@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { externalTool } from './checkout-root.mjs';
 
 /** #646: nothing the board pushes may reach these (private repos have no branch protection). */
-export const onBase = ref => ref === 'main' || ref.startsWith('release/');
+const onBase = ref => ref === 'main' || ref.startsWith('release/');
 
 /** `<agent>/<number>-<title>`: the title without accents, lower case, dashes, at most 40 characters. */
 export function branchStem(agent, number, title) {
@@ -25,16 +25,17 @@ export function targetBranch({ number, title, agent, session, branch, taken }) {
 }
 
 /**
- * Where a push may go (#646, #651, #656, #659). `stand` is the checkout's state, `pr` the PR it feeds (`branch`, `head`, `sameRepo`) when there is one, `mergeNeeded` a base merge
+ * Where a push may go (#646, #651, #656, #659). `stand` is the checkout's state, `pr` the PR it feeds (`branch`, `head`, `number`, `repository`, `sameRepo`) when there is one, `mergeNeeded` a base merge
  * that was just made. The answer is a refusal with its reason, or `push` (false when the PR already shows this head) with the git arguments: always the own branch by name,
  * whatever the upstream is, so an upstream on the base (`git switch -c x origin/release/…`) is harmless. Pure.
  */
 export function pushPlan({ stand, number, pr, mergeNeeded = false }) {
   const { branch, head } = stand;
   if (onBase(branch)) return { refuse: `the checkout is on ${branch}; nothing is pushed to main or release/**. Fix: git switch -c <agent>/${number}-<slug> --no-track (keeps your commits), then run done again` };
-  if (!pr) return { push: true, args: ['push', '-u', 'origin', `HEAD:refs/heads/${branch}`] };
-  if (branch !== pr.branch || !pr.sameRepo) return { refuse: `the checkout is on ${branch || 'no branch'}, not on the branch ${pr.branch} of this repository that PR #${pr.number} shows: check it out first` };
-  return { push: mergeNeeded || head !== pr.head, args: ['push', '-u', 'origin', `HEAD:refs/heads/${branch}`] };
+  const args = ['push', '-u', 'origin', `HEAD:refs/heads/${branch}`];
+  if (!pr) return { push: true, args };
+  if (branch !== pr.branch || !pr.sameRepo) return { refuse: `the checkout is on ${branch || 'HEAD'}, not on the branch ${pr.branch} of ${pr.repository} that PR #${pr.number} shows: check it out first` };
+  return { push: mergeNeeded || head !== pr.head, args };
 }
 
 /** env: { projectDirectory, sleep } */
@@ -77,8 +78,8 @@ export function createCheckout({ projectDirectory, sleep }) {
     // An unknown base ref throws: "ahead" must never read as 0 or undefined by accident.
     const counts = base ? git('rev-list', '--left-right', '--count', `origin/${base}...HEAD`).split(/\s+/).map(Number) : [];
     return {
-      branch: git('branch', '--show-current'), upstream: quiet('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'), head: localHead(),
-      behind: counts[0], ahead: counts[1], clean: git('status', '--porcelain', '--untracked-files=no', '--ignore-submodules') === '',
+      branch: git('branch', '--show-current'), upstream: quiet('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'), head: git('rev-parse', 'HEAD'),
+      base, behind: counts[0], ahead: counts[1], clean: git('status', '--porcelain', '--untracked-files=no', '--ignore-submodules') === '',
     };
   }
 

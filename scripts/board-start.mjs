@@ -138,8 +138,10 @@ export function createStart(env) {
     assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');
     // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
     // #705: the setup can run for minutes; a start that is cut off or read in the background shows that the claim is complete.
-    if (project.setup) console.log(`CLAIMED #${number} session ${session} branch ${branch}; the project setup runs now (START follows when it is done)`);
-    if (project.setup) try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
+    if (project.setup) {
+      console.log(`CLAIMED #${number} session ${session} branch ${branch}; the project setup runs now (START follows when it is done)`);
+      try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
+    }
     console.log(current ? `START #${number} session ${session} branch ${branch} base ${base} PR #${current.number}`
       : handedBranch ? `START #${number} session ${session} branch ${branch} base ${base} (took over the pushed branch of the predecessor; done opens the Draft PR)`
       : `START #${number} session ${session} branch ${branch} base ${base} (branch made from origin/${base}, never push to ${base}; done opens the Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
