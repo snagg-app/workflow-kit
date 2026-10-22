@@ -3,10 +3,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { context, guarded, install, outsideCheckouts, publish, withLock } from '../provider.mjs';
 import impeccable from '../provider-impeccable.mjs';
 import { temporary } from './fixtures.mjs';
@@ -152,4 +153,12 @@ test('Impeccable smoke: the engine is downloaded, checked against its reviewed p
     await install(impeccable, c);
     assert.equal(statSync(engine).mode & 0o111, 0o111);
   }
+});
+
+test('provider.mjs runs when started through a link to the kit, as .vendor/workflow-kit is one', t => {
+  const link = join(temporary(t, 'provider link '), 'kit-scripts');
+  symlinkSync(fileURLToPath(new URL('..', import.meta.url)), link, process.platform === 'win32' ? 'junction' : 'dir');
+  const run = spawnSync(process.execPath, [join(link, 'provider.mjs')], { encoding: 'utf8' });
+  assert.equal(run.status, 2, 'the usage error proves the entry point ran, not a silent exit 0');
+  assert.match(run.stderr, /Usage: node/);
 });

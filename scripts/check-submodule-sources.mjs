@@ -3,7 +3,7 @@
 // repository's files turned into generated hooks.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 /** The `submodule.<name>.url <url>` lines of a .gitmodules file, sorted; no submodule at all is an empty list. */
@@ -22,7 +22,7 @@ export function checkSubmoduleSources(branchFile, mainFile) {
   assert.deepEqual(submoduleSources(branchFile), submoduleSources(mainFile), '.gitmodules names other submodule sources than main; not fetching them.');
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+if (process.argv[1] && realpathSync.native(fileURLToPath(import.meta.url)) === realpathSync.native(process.argv[1])) {
   try { checkSubmoduleSources('.gitmodules', process.argv[2]); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }
