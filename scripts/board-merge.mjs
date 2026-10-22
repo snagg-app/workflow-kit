@@ -1,12 +1,10 @@
 // `merge PR [--stack]`: the merge gate, the head-bound merge, the branch update and what follows a merge (branch delete, push commands).
 // A factory over `env`, so tests and other commands can import it.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { externalTool } from './checkout-root.mjs';
 import { SonarOtherPr } from './board-reviews.mjs';
 import { shared } from './board-args.mjs';
 
@@ -20,10 +18,10 @@ export const specs = [
       '--interval': { value: 'SECONDS', kind: 'seconds60', help: 'A fixed pause between looks, 0 to 60.' }, '--max-minutes': shared.maxMinutes } },
 ];
 
-/** env: project, owner, name, github, projectDirectory, number, stack, stackState, numberOption, sleep, readyQuery, dependentPrs, mergeGate, stackReasons, runShell, reviewsForHead, poll, readPr, baseMovement, filesText */
+/** env: project, owner, name, github, projectDirectory, number, stack, stackState, numberOption, sleep, readyQuery, dependentPrs, mergeGate, stackReasons, runShell, gitAt, reviewsForHead, poll, readPr, baseMovement, filesText */
 export function createMerge(env) {
   const { project, owner, name, github, projectDirectory, number, stack, stackState, numberOption, sleep, readyQuery, dependentPrs,
-    mergeGate, stackReasons, runShell, reviewsForHead, poll, readPr, baseMovement, filesText } = env;
+    mergeGate, stackReasons, runShell, gitAt, reviewsForHead, poll, readPr, baseMovement, filesText } = env;
   const { graphql, rest } = github;
 
   /**
@@ -84,10 +82,7 @@ export function createMerge(env) {
   function runPush(branch, merged) {
     if (!merged || (branch !== 'main' && !branch.startsWith('release/'))) return;
     let work;
-    const run = (cwd, ...args) => {
-      const tool = externalTool('git', process.cwd(), cwd);
-      return execFileSync(tool.file, ['-C', cwd, ...args], { encoding: 'utf8', env: tool.env, stdio: 'pipe' }).trim();
-    };
+    const run = gitAt;
     try {
       const file = rest(`repos/${project.repository}/contents/.github/workflow-project.json?ref=${merged}`);
       const commands = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')).push ?? [];

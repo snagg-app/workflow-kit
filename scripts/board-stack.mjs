@@ -1,11 +1,9 @@
 // Stacked PRs: the base of a stack, its layers and `stack-sync`.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { externalTool } from './checkout-root.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -221,8 +219,7 @@ export function createStack(env) {
     if (stacks.length !== 1) return fail(`PR #${number} is ${stacks.length ? 'in several native stacks' : 'not in a native stack'}: stack-sync syncs one stack`);
     const open = stackMembers(stacks[0]).filter(member => member.state === 'open');
     if (open.at(-1)?.number !== number) return fail(`PR #${number} is not the top open layer of its stack${open.length ? ` (that is PR #${open.at(-1).number})` : ''}`);
-    const git = externalTool('git', process.cwd(), projectDirectory);
-    const run = (cwd, ...args) => execFileSync(git.file, ['-C', cwd, ...args], { encoding: 'utf8', env: git.env, stdio: 'pipe' }).trim();
+    const run = env.gitAt;
     run(projectDirectory, 'fetch', 'origin');
     const tree = mkdtempSync(join(tmpdir(), 'stack-sync-'));
     run(projectDirectory, 'worktree', 'add', '--detach', tree, `origin/${open[0].head.ref}`);
