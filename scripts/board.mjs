@@ -135,7 +135,7 @@ try {
   Object.assign(registry, createReviews({ project, owner, name, github, number, graceMinutes: options.graceOption, prQuery: common.prQuery, readStacks: later.readStacks,
     stackOrderText: common.stackOrderText, conflictLine: later.conflictLine }));
   Object.assign(registry, createMerge({ project, owner, name, github, projectDirectory, number, stack: options.stack, stackState: registry.stackState, numberOption: options.numberOption,
-    sleep, readyQuery: common.readyQuery, dependentPrs: later.dependentPrs, runShell, mergeGate: later.mergeGate, stackReasons: later.stackReasons, reviewsForHead: later.reviewsForHead,
+    sleep, readyQuery: common.readyQuery, dependentPrs: later.dependentPrs, runShell, gitAt, mergeGate: later.mergeGate, stackReasons: later.stackReasons, reviewsForHead: later.reviewsForHead,
     poll: later.poll, readPr: later.readPr, baseMovement: later.baseMovement, filesText: later.filesText }));
   // check, reviews, handoff, ready and link are the steps `start` and `done` take (`hidden` in their description): callable for those two and for the tests, but not listed.
   await registry[spec.run]();
