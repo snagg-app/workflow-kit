@@ -480,13 +480,13 @@ test('merge runs the push commands of the project file as of the merge commit, o
   git(dirname(checkout), 'init', '-q', '--bare', origin);
   git(checkout, 'init', '-q', '-b', 'main');
   git(checkout, 'remote', 'add', 'origin', origin);
-  writeFileSync(join(checkout, '.github/workflow-project.json'), JSON.stringify({ repository: 'test/example', id: 'P1', push: ['echo "$BRANCH" >> "$PUSHED"', 'exit 3', 'echo never >> "$PUSHED"'] }));
+  writeFileSync(join(checkout, '.github/workflow-project.json'), JSON.stringify({ repository: 'test/example', id: 'P1', push: ['echo "$BRANCH" >> "$PUSHED"', 'test -f .vendor/workflow-kit/AGENT_RULES.md && echo kit >> "$PUSHED"', 'exit 3', 'echo never >> "$PUSHED"'] }));
   git(checkout, 'add', '.github');
   git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'merged');
   git(checkout, 'push', '-q', 'origin', 'main');
   writeFileSync(join(checkout, 'merge-oid'), git(checkout, 'rev-parse', 'HEAD'));
   const merged = run('merge', '7');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
-  assert.equal(readFileSync(env.PUSHED, 'utf8').trim(), 'main', 'the first command ran with the branch, the one after the failure did not');
+  assert.equal(readFileSync(env.PUSHED, 'utf8').trim().replaceAll('\r', ''), 'main\nkit', 'the commands ran with the branch and found the kit in a project without submodule, the one after the failure did not');
   assert.match(merged.stdout, /^note: the push commands of main failed/m);
 });
