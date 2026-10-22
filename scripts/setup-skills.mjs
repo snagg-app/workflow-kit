@@ -30,7 +30,8 @@ for (const skill of ['find-skills', 'spec-review']) {
 linkSkills(root); // agents that read the shared skills through links
 // The project's "skills" choice: kit skills outside it go again. Skills of the project itself are never touched.
 const profilePath = join(root, '.github/workflow-project.json');
-const active = activeSkills(existsSync(profilePath) ? JSON.parse(readFileSync(profilePath, 'utf8')) : {});
+const project = existsSync(profilePath) ? JSON.parse(readFileSync(profilePath, 'utf8')) : {};
+const active = activeSkills(project);
 if (active) {
   const manifest = join(root, sharedSkills, 'MATT-POCOCK-SOURCES.json');
   const kitSkills = [...Object.keys(JSON.parse(readFileSync(manifest, 'utf8')).skills), 'impeccable', 'find-skills', 'spec-review',
@@ -44,6 +45,7 @@ if (active) {
       if (entry?.isSymbolicLink()) unlinkSync(path);
       else if (entry) rmSync(path, { recursive: true });
     }
-  console.log(`Skills: ${active.length} chosen by the project, the other kit skills removed.`);
+  console.log(`Skills: ${active.length} ${project.skills === undefined ? 'core skills (no "skills" in the profile)' : 'chosen by the project'}, the other kit skills removed.`);
+  if (project.skills === undefined) console.log('Missing a kit skill? Add "skills": ["core", "tdd"] to .github/workflow-project.json, or "all" to keep every kit skill (docs/skill-core.md).');
 }
 console.log('Skills generated for commit. Hook installation and personal trust are separate explicit steps.');
