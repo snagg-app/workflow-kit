@@ -6,7 +6,7 @@ kit paths drop the `.vendor/workflow-kit/` prefix (`node scripts/board.mjs start
 - Skills use pinned submodules, reviewed `scripts/` patches and the canonical
   `.agents/skills/find-skills` snapshot. Update its source notice with its upstream
   pin. Kit-owned skills (`spec-review`) are edited in `.agents/skills/` only;
-  never edit generated provider copies.
+  `.claude/skills` holds only links to them (and the Impeccable copy), so edit nothing there.
 - After scripts, templates or patches change, run [Developing the kit](README.md#developing-the-kit)
   and [Commit generated files](README.md#commit-generated-files), including executable modes.
 - Tests cover behavior that protects users (no checkout code in hooks, no lost

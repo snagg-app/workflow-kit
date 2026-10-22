@@ -30,6 +30,15 @@ steps only a person can do: trusting the hooks and the GitHub switches. The step
 (a project without `AGENTS.md` also gets the starter files), `setup-skills`, `install-git-hooks`,
 `install-ponytail-hooks`, `install-impeccable-hooks` and `setup-github`, plus a `.github/workflow-project.json` stub when missing.
 
+Skills exist once: the files live in `.agents/skills` (Codex reads them there) and are committed. Claude Code reads
+`.claude/skills`, which holds one link per shared skill (a junction on Windows, which needs no privilege, else a symlink).
+The links are not committed (`init-project` adds `/.claude/skills/*` and `!/.claude/skills/impeccable/` to `.gitignore`):
+Git stores no junction, and a Windows checkout without symlink rights turns a committed link into a text file. So every
+fresh clone and worktree needs `kit setup` (its `setup-skills` step links; it only links when the files are there) before Claude Code starts; a
+SessionStart hook is too late, the session has already read the folder. Impeccable differs per agent and stays a real copy in
+each. Skill folders may hold other agents' metadata (`agents/openai.yaml`); it stays in `.agents`, Claude Code sees it
+through the link and ignores it.
+
 `init-project` links `.vendor/workflow-kit` to the shared checkout (a junction on Windows,
 else a symlink), adds it to `.gitignore`, and removes a leftover kit submodule of earlier
 versions (gitlink, `.gitmodules` entry and clone; it stops if that clone holds local
@@ -43,7 +52,7 @@ reach an existing project: copy it by hand. For the spec form that is
 plus the label `spec` (`gh label create spec`), which the form sets.
 
 `init-project` (also with `--existing`) adds the missing lines of `templates/.ignore` to
-the project's `.ignore`, so ripgrep-based search skips the generated provider skill copies
+the project's `.ignore`, so ripgrep-based search skips the Claude Code skill links
 (only `.agents/skills` stays searchable) and `.vendor/`; to search an excluded copy, name its
 path (`rg pattern .claude/skills`), then `.ignore` doesn't apply. A project-owned skill in a
 provider directory stays visible with `!/.claude/skills/my-skill/` in `.ignore`. Git doesn't read the file; commit it with the other `init-project` outputs: a clean-diff check after
@@ -65,11 +74,11 @@ of your own), or leave them unused.
 
 The kit owns every hook handler with the id `workflow-kit` (keep personal hooks elsewhere), and upstream skills, agents and
 commands by name. Generated discovery files are ordinary committed files in
-`.agents` and `.claude`, plus `.codex/agents`. Equal files stay untouched; changed
+`.agents`, `.claude/skills/impeccable` and `.claude/agents`, plus `.codex/agents`; the other Claude Code skills are local links to `.agents/skills`. Equal files stay untouched; changed
 content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
-A fresh clone/worktree discovers these files without generation, links or dependency
-installation. Generate only during kit installation/update. An update PR reruns both generators above and commits their intended outputs. Changed
+A fresh clone/worktree discovers the committed files without generation or dependency
+installation; Claude Code additionally needs the skill links from `setup-skills`. Generate only during kit installation/update. An update PR reruns both generators above and commits their intended outputs. Changed
 hook snapshots also need the [installers](#hooks).
 
 ### Commit generated files

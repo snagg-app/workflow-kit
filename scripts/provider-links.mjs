@@ -1,7 +1,8 @@
 // Provider discovery files are ordinary, committable files. Replaced local content stays recoverable.
 import assert from 'node:assert/strict';
-import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, symlinkSync, unlinkSync } from 'node:fs';
+import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { agents, ownSkills, sharedSkills } from './agents.mjs';
 
 const present = path => lstatSync(path, { throwIfNoEntry: false });
 const stamp = new Date().toISOString().replaceAll(':', '-');
@@ -76,4 +77,28 @@ export function materialize(root, path, source) {
   if (same(path, source)) return;
   moveAside(root, path);
   cpSync(source, path, { recursive: true });
+}
+
+const realpath = path => { try { return realpathSync.native(path); } catch { return ''; } };
+
+/**
+ * Link every shared skill into the folders of the agents that read it through links (not committed: a junction on Windows,
+ * which needs no privilege, else a symlink). Own skills stay real copies. A copy equal to the shared one goes; a changed one is moved aside.
+ */
+export function linkSkills(root) {
+  const shared = join(root, sharedSkills);
+  checkDirectory(root, shared);
+  for (const { skills } of Object.values(agents).filter(agent => agent.linksShared)) {
+    localDirectory(root, join(root, skills));
+    for (const name of readdirSync(shared).filter(name => !ownSkills.includes(name))) {
+      const source = join(shared, name), path = join(root, skills, name);
+      if (lstatSync(source).isFile()) {
+        if (same(path, source)) rmSync(path);
+      } else if (realpath(path) !== realpath(source)) {
+        if (same(path, source)) rmSync(path, { recursive: true });
+        else moveAside(root, path);
+        symlinkSync(source, path, 'junction');
+      }
+    }
+  }
 }

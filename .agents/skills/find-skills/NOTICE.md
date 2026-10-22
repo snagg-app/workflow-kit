@@ -8,5 +8,5 @@ revision `18f96ea131dab3b0fcc9b27cf7c6f6cbb6174680`. MIT license, copyright
 The canonical snapshot lives at `.agents/skills/find-skills` in the workflow-kit
 repository. To update it there, review that upstream directory and license at an
 explicit commit, replace the complete snapshot, update this notice, then run
-`node scripts/setup-skills.mjs` and commit all provider copies. No CLI installation
+`node scripts/setup-skills.mjs` and commit the changed `.agents/skills` files. No CLI installation
 or upstream script runs during generation.
