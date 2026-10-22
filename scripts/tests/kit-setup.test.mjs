@@ -23,8 +23,8 @@ function setup(t) {
   execFileSync('git', ['init', '--quiet', project]);
   // No network: the Impeccable engine download fails fast and counts as an open step.
   const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9' };
-  const run = () => spawnSync(process.execPath, [join(kit, 'scripts/kit.mjs'), '--cwd', project, 'setup'], { encoding: 'utf8', env });
-  return { project, home, run };
+  const run = (extra = {}) => spawnSync(process.execPath, [join(kit, 'scripts/kit.mjs'), '--cwd', project, 'setup'], { encoding: 'utf8', env: { ...env, ...extra } });
+  return { project, home, run, env };
 }
 
 test('kit setup sets up an empty project and a second run changes nothing', { skip: skipWithoutSubmodules() }, t => {
@@ -40,6 +40,21 @@ test('kit setup sets up an empty project and a second run changes nothing', { sk
   const second = run();
   assert.equal(second.status, 0, second.stdout + second.stderr);
   assert.deepEqual([snapshot(project), snapshot(home)], before);
+});
+
+test('kit setup leaves a project that is already bound to its board alone, without any network call (#730)', { skip: skipWithoutSubmodules() }, t => {
+  const { project, home, run, env } = setup(t);
+  mkdirSync(join(project, '.github'));
+  execFileSync('git', ['-C', project, 'remote', 'add', 'origin', 'https://github.com/acme/app.git']);
+  writeFileSync(join(project, '.github/workflow-project.json'), JSON.stringify({ language: 'en', repository: 'acme/App', owner: 'acme', number: 4, id: 'PVT_x', url: 'https://github.com/orgs/acme/projects/4' }));
+  // A gh that fails loudly: any call means the board step ran.
+  const bin = join(home, 'bin');
+  mkdirSync(bin);
+  writeFileSync(join(bin, 'gh'), '#!/bin/sh\necho "gh called" >&2\nexit 1\n');
+  writeFileSync(join(bin, 'gh.cmd'), '@echo gh called 1>&2\r\n@exit /b 1\r\n');
+  if (process.platform !== 'win32') execFileSync('chmod', ['+x', join(bin, 'gh')]);
+  const result = run({ PATH: bin + (process.platform === 'win32' ? ';' : ':') + env.PATH });
+  assert.match(result.stdout, /ok {4}GitHub board and labels: already bound/, result.stdout + result.stderr);
 });
 
 test('kit setup keeps the own hooks, settings and AGENTS.md of an existing project', { skip: skipWithoutSubmodules() }, t => {

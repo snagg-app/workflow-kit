@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, normalize, resolve } from 'node:path';
+import { dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
 import { externalTool, projectRoot } from './checkout-root.mjs';
 
 // Explicit setup, per clone: copies the project's .githooks (plus the kit's post-checkout kit sync) into the clone's
@@ -145,7 +145,18 @@ for (const file of worktreeFiles) {
 if (ready) {
   const hook = join(hooksDir, 'post-checkout');
   if (check) {
-    console.log(`hooks: would copy .githooks into ${hooksValue}`);
+    // Shared by every worktree of the clone: a copy that already matches has nothing open (#730).
+    const files = base => !existsSync(base) ? {} : Object.fromEntries(readdirSync(base, { recursive: true, withFileTypes: true })
+      .filter(entry => entry.isFile() && !lstatSync(join(entry.parentPath, entry.name)).isSymbolicLink())
+      .map(entry => { const path = join(entry.parentPath, entry.name); return [path.slice(base.length), readFileSync(path, 'utf8').replaceAll('\r\n', '\n')]; }));
+    // Install makes every copied hook executable; Git skips one without the bit.
+    const executable = process.platform === 'win32' || !existsSync(hooksDir)
+      || readdirSync(hooksDir, { withFileTypes: true }).every(entry => !entry.isFile() || (statSync(join(hooksDir, entry.name)).mode & 0o111) === 0o111);
+    const wanted = files(join(root, '.githooks')), installed = files(hooksDir);
+    wanted[`${sep}post-checkout`] ??= readFileSync(new URL('./git-hooks/post-checkout', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
+    if (executable && JSON.stringify(Object.entries(wanted).sort()) === JSON.stringify(Object.entries(installed).sort()))
+      console.log(`hooks: ${hooksValue} is current`);
+    else console.log(`hooks: would copy .githooks into ${hooksValue}`);
   } else {
     rmSync(hooksDir, { recursive: true, force: true });
     mkdirSync(hooksDir, { recursive: true });
