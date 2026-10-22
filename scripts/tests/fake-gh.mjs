@@ -35,6 +35,8 @@ function api(argv, input, stdout, stderr, exit) {
       exit(0);
     }
     if (parts[3] === 'pulls' && parts.length === 4 && argv.includes('POST')) {
+      // pr-exists: the branch has an open PR already, GitHub refuses a second one.
+      if (fs.existsSync('pr-exists')) { stdout('{"message":"Validation Failed","errors":[{"message":"A pull request already exists"}]}'); stderr('gh: Validation Failed (HTTP 422)\n'); exit(1); }
       fs.writeFileSync('created-pr', argv.slice(3).join('\n') + '\n' + input);
       stdout('{"number":7}');
       exit(0);
@@ -143,7 +145,9 @@ function api(argv, input, stdout, stderr, exit) {
     }
     if (parts[3] === 'pulls' && parts.length === 4) {
       // The open PRs on a base branch (dependents.json: PRs with base.ref, the default is none).
-      const base = new URLSearchParams(path.split('?')[1]).get('base');
+      const query = new URLSearchParams(path.split('?')[1]), base = query.get('base');
+      // With head=owner:branch: the open PRs of that branch (head-prs.json, REST shape; the default is none).
+      if (query.get('head')) { stdout(fs.existsSync('head-prs.json') ? fs.readFileSync('head-prs.json') : '[]'); exit(0); }
       // Without base: all open PRs (open-prs.json, REST shape; the default is none).
       if (!base) { stdout(fs.existsSync('open-prs.json') ? fs.readFileSync('open-prs.json') : '[]'); exit(0); }
       stdout(JSON.stringify((fs.existsSync('dependents.json') ? JSON.parse(fs.readFileSync('dependents.json')) : []).filter(pr => pr.base.ref === base)));

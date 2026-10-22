@@ -41,9 +41,11 @@ export function createStart(env) {
     const plan = pushPlan({ stand: { ...here, branch }, number });
     assert.ok(!plan.refuse, plan.refuse);
     git(...plan.args);
-    const pr = JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n`)).number;
+    // #725: a branch with an open PR the issue does not list yet (on a release base the closing keyword links nothing, so a run that stopped before the link left exactly that) gets no second PR (GitHub answers 422).
+    const open = rest(`repos/${project.repository}/pulls?head=${project.repository.split('/')[0]}:${branch}&state=open`)[0]?.number;
+    const pr = open ?? JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n`)).number;
     linkIssue(number, pr, false, issue).forEach(progress);
-    progress(`done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
+    progress(open ? `done: branch ${branch} already has PR #${pr}; linked it` : `done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
     return pr;
   }
 
