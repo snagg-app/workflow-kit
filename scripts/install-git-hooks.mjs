@@ -149,9 +149,12 @@ if (ready) {
     const files = base => !existsSync(base) ? {} : Object.fromEntries(readdirSync(base, { recursive: true, withFileTypes: true })
       .filter(entry => entry.isFile() && !lstatSync(join(entry.parentPath, entry.name)).isSymbolicLink())
       .map(entry => { const path = join(entry.parentPath, entry.name); return [path.slice(base.length), readFileSync(path, 'utf8').replaceAll('\r\n', '\n')]; }));
+    // Install makes every copied hook executable; Git skips one without the bit.
+    const executable = process.platform === 'win32' || !existsSync(hooksDir)
+      || readdirSync(hooksDir, { withFileTypes: true }).every(entry => !entry.isFile() || (statSync(join(hooksDir, entry.name)).mode & 0o111) === 0o111);
     const wanted = files(join(root, '.githooks')), installed = files(hooksDir);
     wanted[`${sep}post-checkout`] ??= readFileSync(new URL('./git-hooks/post-checkout', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
-    if (JSON.stringify(Object.entries(wanted).sort()) === JSON.stringify(Object.entries(installed).sort()))
+    if (executable && JSON.stringify(Object.entries(wanted).sort()) === JSON.stringify(Object.entries(installed).sort()))
       console.log(`hooks: ${hooksValue} is current`);
     else console.log(`hooks: would copy .githooks into ${hooksValue}`);
   } else {

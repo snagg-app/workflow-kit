@@ -49,6 +49,11 @@ test('--check reports a copy only when the installed hooks differ from .githooks
   assert.match(await f.run('--check'), /would copy/, 'nothing installed yet');
   await f.run();
   assert.doesNotMatch(await f.run('--check'), /would copy/, 'a current copy has nothing open');
+  if (process.platform !== 'win32') {
+    chmodSync(join(f.hooks, 'pre-push'), 0o644);
+    assert.match(await f.run('--check'), /would copy/, 'a hook without the execute bit is open');
+    chmodSync(join(f.hooks, 'pre-push'), 0o755);
+  }
   writeFileSync(join(f.repo, '.githooks/pre-push'), '#!/bin/sh\necho changed\n');
   assert.match(await f.run('--check'), /would copy/, 'a changed hook is open again');
 });
