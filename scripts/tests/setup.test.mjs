@@ -40,7 +40,8 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   execFileSync('git', ['-C', fixture, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'Generated discovery']);
   const clone = temporary(t, 'workflow-kit clone ');
   execFileSync('git', ['clone', '--quiet', '--no-local', fixture, clone]);
-  const executableEntries = execFileSync('git', ['-C', clone, 'ls-files', '--stage', '--', ...executablePaths], { encoding: 'utf8' }).trim().split('\n');
+  const executableEntries = execFileSync('git', ['-C', clone, 'ls-files', '--stage', '--', ...executablePaths], { encoding: 'utf8' }).trim().split('\n')
+    .filter(entry => !/\t\.claude\/skills\/(?!impeccable)/.test(entry)); // Git for Windows follows the links; Linux does not
   assert.equal(executableEntries.length, 3);
   assert.ok(executableEntries.every(entry => entry.startsWith('100755 ')), 'Git clone preserves every Unix executable mode even with core.filemode=false');
   const skills = readdirSync(join(fixture, '.agents/skills')).filter(name => lstatSync(join(fixture, '.agents/skills', name)).isDirectory());
