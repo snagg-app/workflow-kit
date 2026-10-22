@@ -13,6 +13,7 @@ import { createGithub } from './github.mjs';
 import { configError, createOptions, helpOf, listOf, parseArgs, usageOf } from './board-args.mjs';
 import { commandSpecs } from './board-commands.mjs';
 import { createProcess } from './board-process.mjs';
+import { createCheckout } from './board-checkout.mjs';
 import { createCommon } from './board-common.mjs';
 import { createClaims } from './board-claims.mjs';
 import { createCheck } from './board-check.mjs';
@@ -85,7 +86,9 @@ const issueRepoOption = args.value('--issue-repo');
 // `new` has no issue yet and assigns the number it creates.
 const number = Number(String(args.words[0]).replace(/^#/, ''));
 const gh = externalTool('gh', process.cwd(), projectDirectory);
-const { git, localHead, sleep, runShell } = createProcess({ projectDirectory });
+const { sleep, runShell } = createProcess();
+const checkout = createCheckout({ projectDirectory, sleep });
+const { git, gitAt, localHead } = checkout;
 
 // The first argument after the PR; `ready PR --local` (the step `done` takes) reads the head from the checkout, so a shell never has to splice `$(git rev-parse HEAD)` into the call.
 // The PR must still show exactly that head before it is marked ready, so a commit that was not pushed is refused like a mistyped id.
@@ -121,7 +124,7 @@ try {
   const registry = {};
   const later = new Proxy(registry, { get: (target, key) => (...parts) => target[key](...parts) });
   const shared = { project, owner, name, number, command, github, graphql, rest, restAll, gh, projectDirectory, issueProject, issueOwner, issueName, statuses, texts,
-    startedAt, state, git, localHead, sleep, runShell, args, ...options, later };
+    startedAt, state, git, gitAt, checkout, localHead, sleep, runShell, args, ...options, later };
   const common = createCommon(shared);
   const env = { ...shared, ...common };
   quotaLine = common.quotaLine;

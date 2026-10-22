@@ -1,8 +1,6 @@
 // `check ISSUE`: the start verdict of an issue and the reasons behind it.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { externalTool } from './checkout-root.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -169,9 +167,8 @@ export function createCheck(env) {
     if (!setting) return [];
     if (!value) return [`note: the Project field ${setting.field} is empty; no base branch to name`];
     const remote = `origin/${branch}`;
-    const git = externalTool('git', process.cwd(), projectDirectory);
     // Git's exit code: 0 yes, 1 the expected "no", anything else is git failing (no checkout, no git) and says nothing about the base.
-    const exit = (...args) => { try { execFileSync(git.file, ['-C', projectDirectory, ...args], { env: git.env, stdio: 'ignore' }); return 0; } catch (error) { return error.status ?? -1; } };
+    const exit = (...args) => { try { env.git(...args); return 0; } catch (error) { return error.status ?? -1; } };
     const lines = [`base: ${branch} (${setting.field})`];
     let code = exit('check-ref-format', `refs/heads/${branch}`); // --branch would die with 128 instead of 1
     if (code === 1) return [...lines, `note: ${branch} is not a valid branch name; fix the value of ${setting.field}`];

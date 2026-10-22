@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { shared } from './board-args.mjs';
+import { pushPlan, targetBranch } from './board-checkout.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -15,24 +16,11 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStart(env) {
-  const { args, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses } = env;
+  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses } = env;
   const { baseOf, branchWork, check, foreignAssignees, isOwn, linkIssue, mayStart, openPr, ownPr, refsPr, set, startReasons, workBranches } = env.later;
 
-  // #646: `done` never pushes to these.
-  const onBase = ref => ref === 'main' || ref.startsWith('release/');
-  const localBranchExists = name => {
-    try { git('rev-parse', '--verify', '--quiet', `refs/heads/${name}`); return true; } catch { return false; }
-  };
-
-  /** `<agent>/<number>-<title>`, with the session (and a counter) appended while a branch of that name exists locally, on the remote or on the issue. */
-  function freeBranchName(issue, agent, session) {
-    const stem = `${agent.toLowerCase()}/${number}-${issue.title.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/, '')}`;
-    let branch = stem;
-    for (let suffix = 1; workBranches(issue).includes(branch) || localBranchExists(branch) || git('ls-remote', '--heads', 'origin', `refs/heads/${branch}`); suffix++) {
-      branch = `${stem}-${session}${suffix === 1 ? '' : `-${suffix}`}`;
-    }
-    return branch;
-  }
+  /** A branch name is taken when the issue, this clone or the remote already has it. */
+  const takenFor = issue => name => workBranches(issue).includes(name) || checkout.branchExists(name);
 
   /**
    * The first push (#643): the claim comment has no branch and no PR yet. Own commits on top of the claimed base get the branch `<agent>/<number>-<title>` (the checkout's own
@@ -45,13 +33,13 @@ export function createStart(env) {
     if (!claim || issue.closedByPullRequestsReferences?.nodes.some(pr => pr?.state === 'MERGED')) return;
     git('fetch', 'origin');
     const base = /^Basis:[ \t]*(\S+)[ \t]*$/m.exec(claim.input)?.[1] ?? (baseOf(issue).branch || defaultBranchName());
-    if (git('rev-list', '--count', `origin/${base}..HEAD`) === '0') return;
-    let branch = git('branch', '--show-current');
-    if (onBase(branch) || !new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
-      branch = freeBranchName(issue, claim[1], claim[2]);
-      git('switch', '-c', branch, '--no-track');
-    }
-    git('push', '--set-upstream', 'origin', branch);
+    const here = checkout.stand(base);
+    if (here.ahead === 0) return;
+    const { branch, create } = targetBranch({ number, title: issue.title, agent: claim[1], session: claim[2], branch: here.branch, taken: takenFor(issue) });
+    if (create) git('switch', '-c', branch, '--no-track');
+    const plan = pushPlan({ stand: { ...here, branch }, number });
+    assert.ok(!plan.refuse, plan.refuse);
+    git(...plan.args);
     const pr = JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n`)).number;
     linkIssue(number, pr, false, issue);
     console.log(`done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
@@ -110,7 +98,7 @@ export function createStart(env) {
     let branch = git('branch', '--show-current'), handedBranch;
     const continueOn = name => {
       if (git('branch', '--show-current') === name) return;
-      const local = localBranchExists(name);
+      const local = checkout.hasLocalBranch(name);
       // --takeover (#550): the predecessor's worktree may still hold the branch; it belongs to nobody after the takeover.
       git('switch', ...takeover ? ['--ignore-other-worktrees'] : [], ...local ? [name] : ['--track', `origin/${name}`]);
       // The predecessor may have pushed from another clone: catch up when that is a fast-forward, else leave the branch as it is.
@@ -133,9 +121,10 @@ export function createStart(env) {
       handedBranch = takeover ? workBranches(fresh).find(name => branchWork(fresh, name).ahead) : undefined;
       if (handedBranch) continueOn(branch = handedBranch);
       // #657: the work branch starts on origin/<base> whatever the checkout stands on; an own branch of this issue (a resume) stays.
-      else if (onBase(branch) || !new RegExp(`^[\\w.-]+/${number}-`).test(branch)) {
-        branch = freeBranchName(fresh, agent, session);
-        git('switch', '-c', branch, '--no-track', `origin/${base}`);
+      else {
+        const target = targetBranch({ number, title: fresh.title, agent, session, branch, taken: takenFor(fresh) });
+        branch = target.branch;
+        if (target.create) git('switch', '-c', branch, '--no-track', `origin/${base}`);
       }
       if (!isOwn(fresh, session)) {
         restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `Beansprucht.\n${claimLine}\nBasis: ${base}\n`);
@@ -148,11 +137,13 @@ export function createStart(env) {
     assert.equal(projectItem(final)?.status?.name, statuses.inProgress, `${statuses.inProgress} status read-back differs`);
     assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');
     // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
+    // #705: the setup can run for minutes; a start that is cut off or read in the background shows that the claim is complete.
+    if (project.setup) console.log(`CLAIMED #${number} session ${session} branch ${branch}; the project setup runs now (START follows when it is done)`);
     if (project.setup) try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
     console.log(current ? `START #${number} session ${session} branch ${branch} base ${base} PR #${current.number}`
       : handedBranch ? `START #${number} session ${session} branch ${branch} base ${base} (took over the pushed branch of the predecessor; done opens the Draft PR)`
       : `START #${number} session ${session} branch ${branch} base ${base} (branch made from origin/${base}, never push to ${base}; done opens the Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
   }
 
-  return { onBase, openFirstPr, start };
+  return { openFirstPr, start };
 }

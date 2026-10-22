@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { shared } from './board-args.mjs';
+import { pushPlan } from './board-checkout.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -18,8 +19,8 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createDone(env) {
-  const { args, git, github, graphql, isSpec, issueName, issueOwner, issueProject, lines, localHead, number, project, projectDirectory, projectStatus, quotaLine, readIssue, rest, restAll, restPost, specRefusal, state, statuses, texts } = env;
-  const { baseSettings, currentIssuePr, findHandoffComment, handoff, isPartialPr, onBase, openFirstPr, outcome, poll, postBacklink, ready, resolveOption, reviewsForHead, set, tickAcceptance, useBaseSettings, writeBody } = env.later;
+  const { args, checkout, git, github, graphql, isSpec, issueName, issueOwner, issueProject, lines, localHead, number, project, projectDirectory, projectStatus, quotaLine, readIssue, rest, restAll, restPost, specRefusal, state, statuses, texts } = env;
+  const { baseSettings, currentIssuePr, findHandoffComment, handoff, isPartialPr, openFirstPr, outcome, poll, postBacklink, ready, resolveOption, reviewsForHead, set, tickAcceptance, useBaseSettings, writeBody } = env.later;
 
   /**
    * `done ISSUE [PR] [HANDOFF_FILE]`: everything from the last push to Human review. First the target branch's doneBaseMerge policy decides whether the fetched PR base is merged and pushed (a conflict fails, the merge aborted). The targeted tests of the changed files (in the
@@ -40,9 +41,9 @@ export function createDone(env) {
     let prNumber = given ?? found.number;
     if (prNumber === undefined && !found.unknown && !args.flag('--refs')) prNumber = openFirstPr(issue);
     // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch; the later push names that branch, so an upstream on the base is harmless (#651).
-    const checkedOut = prNumber === undefined ? '' : git('branch', '--show-current');
-    if (onBase(checkedOut)) {
-      console.log(`FAILED\nblocker: the checkout is on ${checkedOut}; nothing is pushed to main or release/**. Fix: git switch -c <agent>/${number}-<slug> --no-track (keeps your commits), then run done again`);
+    const early = prNumber === undefined ? {} : pushPlan({ stand: checkout.stand(), number });
+    if (early.refuse) {
+      console.log(`FAILED\nblocker: ${early.refuse}`);
       process.exitCode = 1;
       return;
     }
@@ -113,8 +114,9 @@ export function createDone(env) {
     if (!isTested() || localHead() !== pull.head.sha) {
       const base = `origin/${pull.base.ref}`, failure = error => String(error.stderr || error.message).trim();
       // Only the PR's own branch of this repository is merged into and pushed.
-      const branch = git('rev-parse', '--abbrev-ref', 'HEAD');
-      if (branch !== pull.head.ref || pull.head.repo?.full_name?.toLowerCase() !== project.repository.toLowerCase()) return fail(`the checkout is on ${branch}, not on the branch ${pull.head.ref} of ${project.repository} that PR #${prNumber} shows: check it out first`);
+      const pr = { branch: pull.head.ref, head: pull.head.sha, number: prNumber, sameRepo: pull.head.repo?.full_name?.toLowerCase() === project.repository.toLowerCase() };
+      const wrongBranch = pushPlan({ stand: checkout.stand(), number, pr }).refuse;
+      if (wrongBranch) return fail(wrongBranch);
       try { git('fetch', 'origin'); } catch (error) { return fail(`cannot fetch the base ${base}: ${failure(error)}`); }
       let mergeNeeded = true, mergeTarget = base;
       if (gate.doneBaseMerge === 'overlap') try {
@@ -139,8 +141,9 @@ export function createDone(env) {
         }
       }
       // #659: new local commits (a correction after an earlier done) are pushed even when no base merge was needed.
-      if (mergeNeeded || localHead() !== pull.head.sha) {
-        try { git('push', '-u', 'origin', `HEAD:refs/heads/${branch}`); } catch (error) { return fail(`cannot push HEAD${mergeNeeded ? ` after merging ${base}` : ''}: ${failure(error)}`); }
+      const plan = pushPlan({ stand: checkout.stand(), number, pr, mergeNeeded });
+      if (plan.push) {
+        try { git(...plan.args); } catch (error) { return fail(`cannot push HEAD${mergeNeeded ? ` after merging ${base}` : ''}: ${failure(error)}`); }
       }
     }
     const sha = localHead();
