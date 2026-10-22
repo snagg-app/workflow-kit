@@ -38,14 +38,18 @@ if (active) {
     ...readdirSync(join(root, sharedSkills)).filter(name => /^ponytail(?:-[a-z0-9]+)*$/.test(name))];
   const unknown = active.filter(name => !kitSkills.includes(name));
   assert.deepEqual(unknown, [], `skills in .github/workflow-project.json names no kit skill: ${unknown.join(', ')}`);
+  const removed = new Set();
   for (const name of kitSkills.filter(name => !active.includes(name)))
     for (const provider of providers) {
       const path = join(root, provider, 'skills', name), entry = lstatSync(path, { throwIfNoEntry: false });
       // Generated copies come back with every run; moving them aside would refill .workflow-kit/replaced each time.
       if (entry?.isSymbolicLink()) unlinkSync(path);
       else if (entry) rmSync(path, { recursive: true });
+      if (entry) removed.add(name);
     }
   console.log(`Skills: ${active.length} ${project.skills === undefined ? 'core skills (no "skills" in the profile)' : 'chosen by the project'}, the other kit skills removed.`);
-  if (project.skills === undefined) console.log('Missing a kit skill? Add "skills": ["core", "tdd"] to .github/workflow-project.json, or "all" to keep every kit skill (docs/skill-core.md).');
+  // A project that committed these skills sees them vanish from git; say which, and how to keep them.
+  if (removed.size) console.log(`Removed kit skills (not in "skills"): ${[...removed].sort().join(', ')}. To keep one, list it in "skills" in .github/workflow-project.json, or use "all" (docs/skill-core.md).`);
+  else if (project.skills === undefined) console.log('Missing a kit skill? Add "skills": ["core", "tdd"] to .github/workflow-project.json, or "all" to keep every kit skill (docs/skill-core.md).');
 }
 console.log('Skills generated for commit. Hook installation and personal trust are separate explicit steps.');

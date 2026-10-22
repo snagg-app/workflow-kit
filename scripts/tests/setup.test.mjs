@@ -121,6 +121,8 @@ test('the project file chooses the kit skills; the project\'s own skills stay', 
     assert.ok(!has(provider, 'grilling') && !has(provider, 'find-skills') && !has(provider, 'impeccable'), provider);
   }
   assert.ok(has('.claude', 'mine'), 'a skill of the project is not touched');
+  assert.match(result.stdout, /Removed kit skills[^\n]*\bgrilling\b[^\n]*\bimpeccable\b/, 'the removed skills are named');
+  assert.doesNotMatch(result.stdout, /Removed kit skills[^\n]*\b(tdd|mine)\b/);
   writeFileSync(profile, JSON.stringify({ skills: ['core', 'tdd'] }));
   assert.equal(setup().status, 0);
   assert.ok(has('.agents', 'tdd') && has('.agents', 'grilling') && !has('.agents', 'impeccable'));
