@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,7 +32,7 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   }
   assert.deepEqual(readdirSync(elsewhere), ['.git'], '--cwd acts on the named checkout, not the working directory');
   // Only discovery files enter the commit; no ignored staging bundles or upstream submodules.
-  execFileSync('git', ['-C', fixture, 'add', '.gitattributes', '.agents', '.claude', '.codex']);
+  execFileSync('git', ['-C', fixture, 'add', '.gitattributes', '.agents', '.claude/skills/impeccable', '.claude/agents', '.codex']); // the other Claude skills are local links, not committed
   const executablePaths = ['**/skills/impeccable/scripts/impeccable', '**/skills/git-guardrails-claude-code/scripts/block-dangerous-git.sh']
     .map(path => `:(glob)${path}`);
   // The documented commit step preserves modes even on Windows/core.filemode=false.
@@ -41,12 +41,14 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   const clone = temporary(t, 'workflow-kit clone ');
   execFileSync('git', ['clone', '--quiet', '--no-local', fixture, clone]);
   const executableEntries = execFileSync('git', ['-C', clone, 'ls-files', '--stage', '--', ...executablePaths], { encoding: 'utf8' }).trim().split('\n');
-  assert.equal(executableEntries.length, 4);
+  assert.equal(executableEntries.length, 3);
   assert.ok(executableEntries.every(entry => entry.startsWith('100755 ')), 'Git clone preserves every Unix executable mode even with core.filemode=false');
   const skills = readdirSync(join(fixture, '.agents/skills')).filter(name => lstatSync(join(fixture, '.agents/skills', name)).isDirectory());
   assert.ok(skills.includes('ponytail') && skills.includes('impeccable') && skills.includes('tdd') && skills.includes('find-skills'));
+  for (const skill of skills.filter(name => name !== 'impeccable'))
+    assert.equal(realpathSync(join(fixture, '.claude/skills', skill)), realpathSync(join(fixture, '.agents/skills', skill)), `${skill} is linked for Claude Code`);
   for (const provider of ['.agents', '.claude'])
-    for (const skill of skills) {
+    for (const skill of skills.filter(name => provider === '.agents' || name === 'impeccable')) {
       const path = join(provider, 'skills', skill);
       assert.ok(lstatSync(join(clone, path)).isDirectory(), path);
       assert.deepEqual(readFileSync(join(clone, path, 'SKILL.md')), readFileSync(join(fixture, path, 'SKILL.md')), path);
