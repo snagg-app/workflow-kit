@@ -205,7 +205,7 @@ export async function install(p, c) {
   });
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
   enterCwd();
   const [name, action, ...extra] = process.argv.slice(2);
   const run = { setup, install };
