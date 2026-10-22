@@ -170,7 +170,8 @@ export function createHandoff(env) {
     for (const specNumber of closedSpecs(result.pr.body)) reasons.push(specRefusal(specNumber, `the text of PR #${prNumber} closes it; write "Refs #${specNumber}" instead`));
     const undetermined = state => !state || state === 'UNKNOWN';
     let state = result.pr.mergeStateStatus;
-    for (let read = 1; undetermined(state) && read < mergeReads; read++) {
+    // merge looks longer than handoff (#721): about a minute at the default 3 s pause.
+    for (let read = 1; undetermined(state) && read < (action === 'merge' ? 20 : mergeReads); read++) {
       sleep(numberOption('--interval', 3));
       const fresh = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
       pullRequest(number:$number){headRefOid mergeStateStatus}}}`, { owner, name, number: prNumber }).repository.pullRequest;
