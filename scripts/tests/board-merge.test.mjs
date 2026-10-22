@@ -45,6 +45,12 @@ test('merge merges the checked head by its full id only when no review is runnin
   assert.equal(run('merge', '7').status, 1);
   assert.equal(existsSync(merges), false, 'gh pr merge is never called for an upper layer');
   rmSync(join(checkout, 'stacks.json'));
+  // GitHub computes the merge state late (#721): merge reads again, longer than handoff, and merges once it is CLEAN.
+  write(withHead(oid, { mergeStateStatus: 'UNKNOWN' }));
+  writeFileSync(join(checkout, 'pr-reads.json'), JSON.stringify([...Array(8).fill({ mergeStateStatus: 'UNKNOWN' }), { mergeStateStatus: 'CLEAN' }]));
+  assert.equal(run('merge', '7', '--interval', '0').status, 0, 'UNKNOWN turns CLEAN after several reads');
+  rmSync(join(checkout, 'pr-reads.json'));
+  rmSync(merges);
   // The refusal names the reviewer that is still running.
   write(withHead(oid), [codexRunning]);
   assert.match(run('merge', '7', '--max-minutes', '0.01').stdout, /waiting: chatgpt-codex-connector running since/);

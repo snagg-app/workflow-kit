@@ -15,6 +15,16 @@ const temporary = (t, name) => {
   return path;
 };
 
+test('setup-skills --help and -h only print the usage and change no file', t => {
+  const cwd = temporary(t, 'setup-skills-help-');
+  for (const flag of ['--help', '-h']) {
+    const result = spawnSync(process.execPath, [join(kit, 'scripts/setup-skills.mjs'), flag], { cwd, encoding: 'utf8' });
+    assert.equal(result.status, 0);
+    assert.match(result.stdout, /^Usage: /);
+    assert.deepEqual(readdirSync(cwd), []);
+  }
+});
+
 test('generated skills and hook sources survive a plain clone without setup', { skip: skipWithoutSubmodules() }, t => {
   const fixture = temporary(t, 'workflow-kit setup ');
   execFileSync('git', ['init', '--quiet', fixture]);
