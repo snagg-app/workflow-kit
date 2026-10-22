@@ -1,5 +1,8 @@
 // What a project's .github/workflow-project.json says about its board statuses the language of the texts board.mjs writes and the kit skills it keeps.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const defaultStatuses = { backlog: 'Backlog', ready: 'Ready', inProgress: 'In progress', automatedReview: 'Automated review', humanReview: 'Human review', done: 'Done' };
 
@@ -49,4 +52,33 @@ export function activeSkills(project) {
   assert.ok(Array.isArray(project.skills) && project.skills.every(name => typeof name === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)),
     'skills in .github/workflow-project.json must be "all" or a list of kit skill names, for example ["core", "tdd"]; omit it to keep the core skills');
   return project.skills.flatMap(name => name === 'core' ? coreSkills : [name]);
+}
+
+const uiDependencies = ['react', 'react-dom', 'react-native', 'expo', 'vue', 'svelte', 'solid-js', 'preact', 'lit', '@angular/core', 'next', 'astro'];
+const uiFile = /\.(?:tsx|jsx|vue|svelte|astro)$/;
+
+/**
+ * Whether the project has UI files: a component file (tracked or new, not ignored) or a UI dependency in any package.json.
+ * shortcut: names the common frameworks only; when it guesses wrong, set "impeccable" to true or false in the profile.
+ */
+export function hasUi(root) {
+  const listed = spawnSync('git', ['-C', root, 'ls-files', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8', maxBuffer: 1 << 28, windowsHide: true });
+  const files = listed.status === 0 ? listed.stdout.split('\n').filter(Boolean) : [];
+  if (files.some(file => uiFile.test(file))) return true;
+  return files.filter(file => /(?:^|\/)package\.json$/.test(file)).some(file => {
+    try {
+      const manifest = JSON.parse(readFileSync(join(root, file), 'utf8'));
+      return [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies].some(list => list && uiDependencies.some(name => Object.hasOwn(list, name)));
+    } catch { return false; }
+  });
+}
+
+/** The optional kit functions of a project: "impeccable" (true, false or "auto", the default: on with UI files) and "ponytail" (true by default, or false). */
+export function projectFeatures(root) {
+  let project = {};
+  try { project = JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8')); } catch { /* no profile: the defaults */ }
+  const { impeccable = 'auto', ponytail = true } = project;
+  assert.ok([true, false, 'auto'].includes(impeccable), 'impeccable in .github/workflow-project.json must be true, false or "auto"; omit it for "auto" (on when the project has UI files)');
+  assert.ok(typeof ponytail === 'boolean', 'ponytail in .github/workflow-project.json must be true or false; omit it for true');
+  return { impeccable: impeccable === 'auto' ? hasUi(root) : impeccable, ponytail };
 }

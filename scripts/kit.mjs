@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
-import { activeSkills } from './project-profile.mjs';
+import { activeSkills, projectFeatures } from './project-profile.mjs';
 
 enterCwd();
 if (process.argv[2] !== 'setup' || process.argv.length > 3) {
@@ -36,8 +36,9 @@ step('profile .github/workflow-project.json', true, () => {
 });
 step('skills for Codex and Claude Code', true, () => run('setup-skills.mjs'));
 step('git hooks (.githooks)', true, () => run('install-git-hooks.mjs'));
-step('Ponytail hooks', false, () => run('provider.mjs', 'ponytail', 'install'));
-step('Impeccable hooks', false, () => run('provider.mjs', 'impeccable', 'install'));
+// A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
+for (const [name, title] of [['ponytail', 'Ponytail hooks'], ['impeccable', 'Impeccable hooks']])
+  step(title, false, () => projectFeatures(root)[name] ? run('provider.mjs', name, 'install') : { status: 0, note: 'off for this project ("' + name + '" in .github/workflow-project.json)' });
 step('GitHub board and labels', false, () => {
   const git = externalTool('git', root), gh = externalTool('gh', root);
   const remote = spawnSync(git.file, ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8', env: git.env }).stdout.trim();
@@ -51,7 +52,7 @@ let failed = false;
 for (const { title, required, work } of tasks) {
   let result;
   try { result = work(); } catch (error) { result = { status: 1, stderr: error.message }; }
-  if (result.status === 0) { console.log(`ok    ${title}`); continue; }
+  if (result.status === 0) { console.log(`ok    ${title}${result.note ? ': ' + result.note : ''}`); continue; }
   const reason = lastLine(output(result));
   if (required) { console.log(`FAIL  ${title}: ${reason}`); failed = true; break; }
   console.log(`open  ${title}: ${reason}`);

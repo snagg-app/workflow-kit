@@ -6,6 +6,7 @@ import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, re
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { projectFeatures } from './project-profile.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const scripts = path.dirname(self);
@@ -25,15 +26,15 @@ function locked(lock, stale, work) {
   try { work(); } finally { rmSync(lock, { recursive: true, force: true }); }
 }
 
-/** One installer run per machine. */
-function install() {
+/** One installer run per machine, for the functions the project uses. */
+function install(names) {
   const home = path.join(homedir(), '.ponytail', 'workflow-kit');
   mkdirSync(home, { recursive: true });
   locked(path.join(home, '.install.lock'), 15 * 60_000, () => {
     const log = openSync(path.join(home, '.install.log'), 'w');
     try {
       // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
-      for (const name of ['ponytail', 'impeccable'])
+      for (const name of names)
         spawnSync(process.execPath, [path.join(scripts, 'provider.mjs'), name, 'install'], { stdio: ['ignore', log, log], timeout: 300_000 });
     } finally {
       closeSync(log);
@@ -41,7 +42,7 @@ function install() {
   });
 }
 
-if (event === '--install') { install(); process.exit(0); }
+if (event === '--install') { if (rest.length) install(rest); process.exit(0); }
 if (!['SessionStart', 'SubagentStart', 'UserPromptSubmit', 'PostToolUse', 'Stop'].includes(event) || !['claude', 'codex'].includes(agent)) {
   console.error('Usage: kit-hook.mjs <SessionStart|SubagentStart|UserPromptSubmit|PostToolUse|Stop> --agent <claude|codex>');
   process.exit(2);
@@ -240,13 +241,15 @@ else {
   const project = process.env.CLAUDE_PROJECT_DIR || '.';
   const fresh = !['resume', 'compact', 'fork'].includes(input.source);
   if (agent === 'claude') fingerprint(project, input);
+  let on = { impeccable: true, ponytail: true }; // a broken profile must not stop the session
+  try { on = projectFeatures(project); } catch (error) { if (event === 'SessionStart') say(error.message); }
   // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
   for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) checkKitStamped(dir, event === 'SessionStart' && input.source !== 'compact');
   if (event === 'SessionStart') {
     checkNodeModules(project);
-    if (fresh) spawn(process.execPath, [self, '--install'], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+    if (fresh) spawn(process.execPath, [self, '--install', ...Object.keys(on).filter(name => on[name])], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   }
-  const ponytail = launcher(event === 'SessionStart' ? 'activate' : 'subagent', ...(event === 'SessionStart' && !fresh ? ['continue'] : []));
+  const ponytail = on.ponytail && launcher(event === 'SessionStart' ? 'activate' : 'subagent', ...(event === 'SessionStart' && !fresh ? ['continue'] : []));
   if (ponytail) {
     const child = spawnSync(ponytail.file, ponytail.args, { ...ponytail.options, input: raw, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true });
     process.exitCode = child.status ?? 0;
@@ -256,10 +259,10 @@ else {
       if (parsed.systemMessage) user.push(parsed.systemMessage);
       if (parsed.hookSpecificOutput?.additionalContext) context.push(parsed.hookSpecificOutput.additionalContext);
     } catch { if (text) context.push(text); }
-  } else if (event === 'SessionStart') {
+  } else if (event === 'SessionStart' && on.ponytail) {
     say('Ponytail hooks are OFF. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs ponytail install (maintainer pre-authorized, writes no trust).');
   }
-  if (event === 'SessionStart' && fresh && !existsSync(engine))
+  if (event === 'SessionStart' && fresh && on.impeccable && !existsSync(engine))
     say('Impeccable hooks are OFF, UI checks do not run. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs impeccable install (maintainer pre-authorized, writes no trust).');
   emit();
 }

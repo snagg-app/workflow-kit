@@ -34,21 +34,22 @@ export const providers = Object.values(agents).map(agent => dirname(agent.skills
 export const sourceProviders = Object.values(agents).filter(agent => !agent.linksShared).map(agent => dirname(agent.skills));
 export const hookFiles = Object.values(agents).map(agent => agent.hooks.file);
 
-// kind: `start` also checks for Node and clones a missing shared kit; `simple` only hands over.
+// kind: `start` also checks for Node and clones a missing shared kit; `simple` only hands over. feature: the event exists only for a project with that function.
 const events = [
-  { event: 'PostToolUse', kind: 'simple', timeout: 120, matcher: true, statusMessage: true },
-  { event: 'Stop', kind: 'simple', timeout: 120, statusMessage: true },
+  { event: 'PostToolUse', kind: 'simple', timeout: 120, matcher: true, statusMessage: true, feature: 'impeccable' },
+  { event: 'Stop', kind: 'simple', timeout: 120, statusMessage: true, feature: 'impeccable' },
   { event: 'SessionStart', kind: 'start', timeout: 120 },
   { event: 'SubagentStart', kind: 'start', timeout: 120 },
-  { event: 'UserPromptSubmit', kind: 'simple', timeout: 5 },
+  { event: 'UserPromptSubmit', kind: 'simple', timeout: 5, feature: 'ponytail' },
 ];
 
-/** The hook settings the kit contributes to one agent's settings file. */
-export function hookSettings(name) {
+/** The hook settings the kit contributes to one agent's settings file; `on` names the functions the project uses (projectFeatures). */
+export function hookSettings(name, on = { impeccable: true, ponytail: true }) {
   const commands = JSON.parse(readFileSync(new URL('./hook-commands.json', import.meta.url), 'utf8'));
   const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name);
   const hooks = {};
-  for (const { event, kind, timeout, matcher, statusMessage } of events) {
+  for (const { event, kind, timeout, matcher, statusMessage, feature } of events) {
+    if (feature && !on[feature]) continue;
     const handler = { id: 'workflow-kit', type: 'command', command: fill(commands[kind], event) };
     if (shape.windows) handler.commandWindows = fill(commands[`${kind}Windows`], event);
     handler.timeout = timeout;
@@ -56,5 +57,5 @@ export function hookSettings(name) {
     if (statusMessage) handler.statusMessage = 'Impeccable UI check (verified user installation)';
     hooks[event] = [{ ...(matcher && { matcher: shape.matcher }), hooks: [handler] }];
   }
-  return { ...(shape.description && { description: shape.description }), hooks };
+  return { ...(shape.description && on.impeccable && { description: shape.description }), hooks };
 }

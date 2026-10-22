@@ -32,6 +32,7 @@ test('kit setup sets up an empty project and a second run changes nothing', { sk
   const first = run();
   assert.equal(first.status, 0, first.stdout + first.stderr);
   assert.match(first.stdout, /Only you can do:/);
+  assert.match(first.stdout, /ok {4}Impeccable hooks: off for this project/, 'an empty project has no UI files: no Impeccable download');
   for (const file of ['AGENTS.md', '.github/workflow-project.json', '.claude/settings.json', '.codex/hooks.json', '.agents/skills/ponytail/SKILL.md', '.claude/skills/find-skills/SKILL.md'])
     assert.ok(existsSync(join(project, file)), file);
   assert.ok(lstatSync(join(project, '.vendor/workflow-kit')).isSymbolicLink() || lstatSync(join(project, '.vendor/workflow-kit')).isDirectory());

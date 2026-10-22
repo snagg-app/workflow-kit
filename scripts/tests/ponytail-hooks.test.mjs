@@ -159,10 +159,12 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail', 'scripts/impeccable'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
-  for (const file of ['kit-hook', 'provider', 'provider-ponytail', 'provider-impeccable', 'provider-links', 'agents', 'checkout-root'])
+  for (const file of ['kit-hook', 'provider', 'provider-ponytail', 'provider-impeccable', 'provider-links', 'agents', 'checkout-root', 'project-profile'])
     copyFileSync(path.join(root, `scripts/${file}.mjs`), path.join(checkout, `scripts/${file}.mjs`));
   copyFileSync(path.join(root, 'scripts/versions.json'), path.join(checkout, 'scripts/versions.json'));
   mkdirSync(path.join(checkout, '.git'));
+  mkdirSync(path.join(checkout, '.github'));
+  writeFileSync(path.join(checkout, '.github/workflow-project.json'), '{"impeccable":true}');
   // The Impeccable download must fail at once here; only Ponytail is under test.
   const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9', PONYTAIL_DEFAULT_MODE: 'full', CLAUDE_PROJECT_DIR: checkout };
   // Hook JSON in, hook JSON out: the same entry Claude and Codex call.
@@ -199,4 +201,22 @@ test('a removed pinned Node makes SessionStart say the hooks are off, other even
   assert.match(JSON.parse(start.stdout).systemMessage, /provider\.mjs ponytail install/);
   const quiet = launch('subagent');
   assert.deepEqual([quiet.status, quiet.stdout.trim()], [0, '']);
+});
+
+test('a project without UI files neither warns about nor downloads Impeccable', async t => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-backend-'));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const project = path.join(temp, 'project'), home = path.join(temp, 'home');
+  assert.equal(spawnSync(git, ['init', '--quiet', project]).status, 0);
+  for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
+    cpSync(path.join(root, from), path.join(project, from), { recursive: true, dereference: true });
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: project, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9' };
+  const first = (await exec(process.execPath, [kitHook, 'SessionStart', '--agent', 'claude'], { cwd: project, env, input: JSON.stringify({ source: 'startup', cwd: project }), timeout: hookTimeout })).stdout;
+  assert.match(first, /Ponytail hooks are OFF/);
+  assert.doesNotMatch(first, /Impeccable/);
+  // The background installer ends when its lock is gone; it installs Ponytail and, for this project, nothing else.
+  const installed = path.join(home, '.ponytail/workflow-kit', version), lock = path.join(home, '.ponytail/workflow-kit/.install.lock');
+  for (let wait = 0; (!existsSync(installed) || existsSync(lock)) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  assert.ok(existsSync(installed), 'Ponytail installed');
+  assert.equal(existsSync(path.join(home, '.impeccable')), false, 'no engine download');
 });

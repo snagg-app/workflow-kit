@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { agents, hookFiles, hookSettings, ownSkills, providers as skillProviders } from './agents.mjs';
 import { checkDirectory } from './provider-links.mjs';
+import { projectFeatures } from './project-profile.mjs';
 
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 enterCwd(); // `--cwd PROJECT_DIR` as the first argument
@@ -55,6 +56,7 @@ function mergeHooks(name, template) {
   for (const [event, groups] of Object.entries(template?.hooks ?? {})) hooks[event] = [...(hooks[event] ?? []), ...groups];
   // Template keys are schema metadata (version, description) and advance with the kit; other settings stay.
   const merged = { ...template, ...current, ...template, hooks };
+  if (template && !template.description) delete merged.description; // the Impeccable description goes with its hooks
   // A file that held only kit handlers and schema metadata goes when its template is retired.
   if (!template && !Object.keys(hooks).length && Object.keys(merged).every(key => ['hooks', 'version', 'description'].includes(key))) {
     if (existsSync(target)) unlinkSync(target);
@@ -95,8 +97,9 @@ for (const name of templates) {
   // Templates start new projects; afterwards they belong to the project and are never overwritten.
   if (!existing && !existsSync(safe(name))) write(name, text(join(kit, 'templates', name)));
 }
-// The kit's handlers come from the agent table; without an entry, a file only loses them.
-const hookTemplates = new Map(Object.entries(agents).map(([name, agent]) => [agent.hooks.file, hookSettings(name)]));
+// The kit's handlers come from the agent table and the project's functions (profile); without an entry, a file only loses them.
+const features = projectFeatures(root);
+const hookTemplates = new Map(Object.entries(agents).map(([name, agent]) => [agent.hooks.file, hookSettings(name, features)]));
 const githubHooks = existsSync(join(root, '.github/hooks')) ? readdirSync(join(root, '.github/hooks')).map(file => `.github/hooks/${file}`) : [];
 for (const name of new Set([...hookTemplates.keys(), '.cursor/hooks.json', ...githubHooks]))
   if (isHooks(name) && (hookTemplates.has(name) || existsSync(safe(name)))) mergeHooks(name, hookTemplates.get(name));
