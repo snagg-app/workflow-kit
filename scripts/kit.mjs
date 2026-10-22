@@ -2,10 +2,12 @@
 // Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts.
 // Nutzen: Die Einzelskripte (init-project, setup-skills, install-*-hooks, install-git-hooks, setup-github) laufen als interne Schritte; hier steht keine eigene Logik dafür.
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
+import { pluginSkills } from './plugin-skills.mjs';
+import { activeSkills } from './project-profile.mjs';
 
 enterCwd();
 if (process.argv[2] !== 'setup' || process.argv.length > 3) {
@@ -57,6 +59,14 @@ for (const { title, required, work } of tasks) {
 }
 if (failed) process.exit(1);
 
+// Hint only: skills the user also has as plugin load twice. The project copy goes by listing the wanted skills in "skills".
+const installed = existsSync(join(root, '.agents/skills')) ? readdirSync(join(root, '.agents/skills')) : [];
+const twice = [...pluginSkills()].filter(([name]) => installed.includes(name));
+if (twice.length) {
+  const wanted = (activeSkills(JSON.parse(readFileSync(profile, 'utf8'))) ?? installed).filter(name => !twice.some(([plugin]) => plugin === name));
+  console.log(`\nAlso installed as your plugin: ${twice.map(([name, key]) => `${name} (${key})`).join(', ')}.`);
+  console.log(`To leave the project copy out, set in .github/workflow-project.json: ${JSON.stringify({ skills: wanted })}`);
+}
 humans.push('Review and trust the project hooks in your agent (/hooks in Claude Code or Codex), then start a new session.');
 humans.push('In GitHub: enable the chosen reviewers, set Project auto-add for the repository, require checks and approval for PRs.');
 console.log(`\nOnly you can do:\n${humans.map((line, index) => `${index + 1}. ${line}`).join('\n')}`);
