@@ -17,6 +17,20 @@ export function statusNames(project) {
   return names;
 }
 
+/** null when the board's status names (in board order) are the project's six; otherwise what differs and the "statuses" entry that maps it. */
+export function statusMismatch(actual, project) {
+  const wanted = Object.entries(statusNames(project));
+  if (actual.length === wanted.length && wanted.every(([, name], i) => name === actual[i])) return null;
+  const quoted = names => names.map(name => `"${name}"`).join(', ') || 'none';
+  const missing = wanted.filter(([, name]) => !actual.includes(name)), extra = actual.filter(name => !wanted.some(([, expected]) => expected === name));
+  // Same position, different name: the likely rename. A name that is merely out of order is not a rename.
+  const renames = Object.fromEntries(wanted.flatMap(([key, name], i) => (!actual.includes(name) && extra.includes(actual[i]) ? [[key, actual[i]]] : [])));
+  return `Existing board must have exactly the six workflow states in order: ${quoted(wanted.map(([, name]) => name))}. `
+    + (missing.length || extra.length ? `Missing on the board: ${quoted(missing.map(([, name]) => name))}. Not expected: ${quoted(extra)}. ` : `The order differs: the board has ${quoted(actual)}. `)
+    + (Object.keys(renames).length ? `Map the names in .github/workflow-project.json with "statuses", for example ${JSON.stringify({ statuses: renames })}. ` : 'Rename the board options or map them in .github/workflow-project.json with "statuses". ')
+    + 'Migrate explicitly, preserving option IDs and cards.';
+}
+
 const texts = {
   en: {
     handoff: 'Handoff',
