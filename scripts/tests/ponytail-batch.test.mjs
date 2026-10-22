@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { describe, test } from 'node:test';
 import { isolatedGit, run as exec, temporary } from './fixtures.mjs';
@@ -52,7 +52,8 @@ test('setup writes byte-correct ordinary files for every provider and reruns wit
     const output = path === 'LICENSE' ? '.agents/hooks/LICENSE.md' : `.agents/${path}`;
     assert.equal(readFileSync(join(f.root, output), 'utf8'), original.replaceAll('\r\n', '\n').replace('\nbase\n', '\npatched\n'), path);
   }
-  for (const provider of providers) assert.ok(lstatSync(join(f.root, provider, 'skills/ponytail')).isDirectory(), provider);
+  assert.ok(lstatSync(join(f.root, '.agents/skills/ponytail')).isDirectory());
+  assert.ok(lstatSync(join(f.root, '.claude/skills/ponytail')).isSymbolicLink(), 'Claude Code reads the shared copy through a link');
   assert.deepEqual(readdirSync(f.root).sort(), ['.agents', '.claude', '.git', '.workflow-kit'], 'Only Codex and Claude Code outputs');
   const claude = join(f.root, '.claude/skills/ponytail/SKILL.md');
   const before = readFileSync(claude);
@@ -79,6 +80,7 @@ test('a dirty source is refused; generated Claude skills are regenerated, stale 
 test('copies, files and old provider junctions become ordinary files; originals move aside once', async t => {
   const f = await fixture(t); succeeds(await f.run());
   const copy = join(f.root, '.claude/skills/ponytail'), file = join(f.root, '.agents/hooks'), link = join(f.root, '.agents/skills/ponytail');
+  rmSync(copy, { recursive: true }); // the link from the first run; an older kit left a copy here
   write(join(copy, 'SKILL.md'), 'Copied from another worktree\n');
   rmSync(file, { recursive: true }); write(file, 'User file\n');
   const legacy = join(f.root, '.workflow-kit/old-ponytail');
@@ -91,7 +93,7 @@ test('copies, files and old provider junctions become ordinary files; originals 
   symlinkSync(process.platform === 'win32' ? oldTarget : `${relative(dirname(link), alias)}/../skills/ponytail`, link,
     process.platform === 'win32' ? 'junction' : 'dir');
   succeeds(await f.run());
-  for (const path of [copy, file, link]) assert.ok(lstatSync(path).isDirectory(), path);
+  for (const path of [copy, file, link]) assert.ok(statSync(path).isDirectory(), path);
   assert.equal(readFileSync(join(f.source, 'skills/ponytail/SKILL.md'), 'utf8').replaceAll('\r\n', '\n'),
     '# ponytail\nbase\nGrüße 🎴\n', 'Old link target was not changed');
   const [moved] = readdirSync(join(f.root, '.workflow-kit/replaced'));
