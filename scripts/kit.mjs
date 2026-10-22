@@ -44,6 +44,9 @@ step('GitHub board and labels', false, () => {
   const remote = spawnSync(git.file, ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8', env: git.env }).stdout.trim();
   const repo = /github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(remote)?.[1];
   if (!repo) return { status: 1, stderr: 'no GitHub remote "origin"' };
+  // A project already bound to its board stays as it is: no network, no GraphQL quota (#730). A new or changed binding runs setup-github.mjs by hand.
+  const bound = JSON.parse(readFileSync(profile, 'utf8'));
+  if (bound.repository?.toLowerCase() === repo.toLowerCase() && bound.number && bound.id) return { status: 0, note: `already bound to project #${bound.number}; run setup-github.mjs ${repo} to redo it` };
   if (spawnSync(gh.file, ['auth', 'status'], { env: gh.env }).status !== 0) return { status: 1, stderr: 'gh is not signed in' };
   return run('setup-github.mjs', repo);
 });

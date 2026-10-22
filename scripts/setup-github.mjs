@@ -22,7 +22,8 @@ const present = path => lstatSync(path, { throwIfNoEntry: false });
 assert.ok(!present(directory) || !outside(realpathSync(directory)), 'Project directory leaves checkout');
 assert.ok(!present(marker) || present(marker).isFile(), 'Project marker must be a regular file');
 const saved = existsSync(marker) ? JSON.parse(readFileSync(marker, 'utf8')) : null;
-if (saved?.repository) assert.equal(saved.repository, repo, 'Recorded project belongs to another repository');
+// GitHub names are case-insensitive: a remote written snagg-app/snagg is the recorded snagg-app/Snagg.
+if (saved?.repository) assert.equal(saved.repository.toLowerCase(), repo.toLowerCase(), 'Recorded project belongs to another repository');
 const meta = JSON.parse(gh('repo', 'view', repo, '--json', 'viewerPermission,url'));
 assert.ok(['ADMIN', 'MAINTAIN', 'WRITE'].includes(meta.viewerPermission), 'Repository write permission required');
 const number = requestedNumber ?? saved?.number;
@@ -33,7 +34,7 @@ const project = number
 const saveProject = () => {
   mkdirSync(dirname(marker), { recursive: true });
   // Keep project-owned settings such as "start"; only the board binding is rewritten.
-  writeFileSync(marker, JSON.stringify({ ...saved, repository: repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
+  writeFileSync(marker, JSON.stringify({ ...saved, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
 };
 // Retain newly copied boards on failure so retry cannot create duplicates.
 if (!number) saveProject();
