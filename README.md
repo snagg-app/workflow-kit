@@ -28,7 +28,7 @@ project's own hooks, skills, settings and files. A step that needs the network o
 Impeccable hooks, the GitHub board without a signed-in `gh`) reports `open` instead of failing the run. It ends with the
 steps only a person can do: trusting the hooks and the GitHub switches. The steps are the scripts `init-project`
 (a project without `AGENTS.md` also gets the starter files), `setup-skills`, `install-git-hooks`,
-`provider ponytail install`, `provider impeccable install` and `setup-github`, plus a `.github/workflow-project.json` stub when missing.
+`provider ponytail install`, `provider impeccable install` (both only for the functions the project uses, see `"impeccable"` and `"ponytail"` in [SETUP](SETUP.md)) and `setup-github`, plus a `.github/workflow-project.json` stub when missing.
 
 Skills exist once: the files live in `.agents/skills` (Codex reads them there) and are committed. Claude Code reads
 `.claude/skills`, which holds one link per shared skill (a junction on Windows, which needs no privilege, else a symlink).

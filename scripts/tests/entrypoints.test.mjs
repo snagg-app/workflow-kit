@@ -25,7 +25,7 @@ function fixture(t) {
   mkdirSync(root, { recursive: true });
   mkdirSync(join(kit, 'templates'), { recursive: true });
   mkdirSync(join(kit, 'scripts'));
-  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
+  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   copyFileSync(new URL('../../templates/.ignore', import.meta.url), join(kit, 'templates/.ignore'));
   const run = (...args) => spawnSync(process.execPath, [join(kit, 'scripts/init-project.mjs'), ...args], { cwd: root, encoding: 'utf8' });
   const template = (name, value) => (typeof value === 'string' ? write : json)(join(kit, 'templates', name), value);
@@ -36,6 +36,7 @@ const succeeds = result => assert.equal(result.status, 0, result.stderr);
 test('kit handlers are replaced; foreign handlers, groups and settings stay; reruns change nothing', t => {
   const f = fixture(t), path = join(f.root, '.claude/settings.json');
   json(path, { permissions: { allow: ['x'] }, hooks: { SessionStart: [{ matcher: 'startup', hooks: [foreign, kitHook('old'), lookalike] }] } });
+  json(join(f.root, '.github/workflow-project.json'), { impeccable: true });
   succeeds(f.run('--existing'));
   const generated = hookSettings('claude');
   assert.deepEqual(read(path), { ...generated, permissions: { allow: ['x'] }, hooks: { ...generated.hooks, SessionStart: [
@@ -43,6 +44,27 @@ test('kit handlers are replaced; foreign handlers, groups and settings stay; rer
   const once = readFileSync(path);
   succeeds(f.run('--existing'));
   assert.deepEqual(readFileSync(path), once);
+});
+
+test('a project without UI files gets no Impeccable entry, and an old one goes; UI or the switch bring it back', t => {
+  const f = fixture(t), path = join(f.root, '.claude/settings.json'), profile = join(f.root, '.github/workflow-project.json');
+  const events = () => Object.keys(read(path).hooks).sort();
+  const full = ['PostToolUse', 'SessionStart', 'Stop', 'SubagentStart', 'UserPromptSubmit'];
+  json(path, hookSettings('claude'));
+  succeeds(f.run('--existing'));
+  assert.deepEqual(events(), ['SessionStart', 'SubagentStart', 'UserPromptSubmit'], 'automatic and no UI: only Ponytail and the kit check stay');
+  assert.equal(read(path).description, undefined);
+  json(profile, { impeccable: false, ponytail: false });
+  succeeds(f.run('--existing'));
+  assert.deepEqual(events(), ['SessionStart', 'SubagentStart']);
+  json(profile, { impeccable: true });
+  succeeds(f.run('--existing'));
+  assert.deepEqual(events(), full);
+  json(profile, { impeccable: 'auto' });
+  write(join(f.root, 'web/package.json'), '{"dependencies":{"react":"1"}}');
+  spawnSync('git', ['init', '-q'], { cwd: f.root });
+  succeeds(f.run('--existing'));
+  assert.deepEqual(events(), full, 'a UI dependency in any package.json turns it on');
 });
 
 // The kit is product-neutral. Left out: the license holder, the kit's own board binding, its consumer list; the notify workflow may name only its secret.
@@ -158,7 +180,7 @@ test('.vendor/workflow-kit becomes a link to the shared kit; reruns change nothi
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
   assert.ok(existsSync(other));
   // A kit inside the project it configures would link the project to itself.
-  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json']) {
+  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) {
     mkdirSync(join(f.root, 'inner/scripts'), { recursive: true });
     copyFileSync(new URL(`../${script}`, import.meta.url), join(f.root, 'inner/scripts', script));
   }
