@@ -45,8 +45,8 @@ test('kit setup sets up an empty project and a second run changes nothing', { sk
 test('kit setup leaves a project that is already bound to its board alone, without any network call (#730)', { skip: skipWithoutSubmodules() }, t => {
   const { project, home, run, env } = setup(t);
   mkdirSync(join(project, '.github'));
-  execFileSync('git', ['-C', project, 'remote', 'add', 'origin', 'https://github.com/snagg-app/snagg.git']);
-  writeFileSync(join(project, '.github/workflow-project.json'), JSON.stringify({ language: 'en', repository: 'snagg-app/Snagg', owner: 'snagg-app', number: 4, id: 'PVT_x', url: 'https://github.com/orgs/snagg-app/projects/4' }));
+  execFileSync('git', ['-C', project, 'remote', 'add', 'origin', 'https://github.com/acme/app.git']);
+  writeFileSync(join(project, '.github/workflow-project.json'), JSON.stringify({ language: 'en', repository: 'acme/App', owner: 'acme', number: 4, id: 'PVT_x', url: 'https://github.com/orgs/acme/projects/4' }));
   // A gh that fails loudly: any call means the board step ran.
   const bin = join(home, 'bin');
   mkdirSync(bin);

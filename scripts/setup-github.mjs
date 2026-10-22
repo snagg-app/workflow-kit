@@ -22,7 +22,7 @@ const present = path => lstatSync(path, { throwIfNoEntry: false });
 assert.ok(!present(directory) || !outside(realpathSync(directory)), 'Project directory leaves checkout');
 assert.ok(!present(marker) || present(marker).isFile(), 'Project marker must be a regular file');
 const saved = existsSync(marker) ? JSON.parse(readFileSync(marker, 'utf8')) : null;
-// GitHub names are case-insensitive: a remote written snagg-app/snagg is the recorded snagg-app/Snagg.
+// GitHub names are case-insensitive: a remote written acme/app is the recorded acme/App.
 if (saved?.repository) assert.equal(saved.repository.toLowerCase(), repo.toLowerCase(), 'Recorded project belongs to another repository');
 const meta = JSON.parse(gh('repo', 'view', repo, '--json', 'viewerPermission,url'));
 assert.ok(['ADMIN', 'MAINTAIN', 'WRITE'].includes(meta.viewerPermission), 'Repository write permission required');
