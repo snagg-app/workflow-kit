@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 
 import { shared } from './board-args.mjs';
+import { capped, result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -12,7 +13,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createNext(env) {
-  const { ago, baseField, commentClaims, graphql, issueFeedback, loadDeliveries, predecessorFields, project, projectItem, projectStatus, restAll, sessionOption, statuses } = env;
+  const { args, ago, baseField, commentClaims, graphql, issueFeedback, loadDeliveries, predecessorFields, project, projectItem, projectStatus, restAll, sessionOption, statuses } = env;
   const { conflicting, dropFieldsCache, feedback, heldOnlyByOpenPredecessors, idleMs, isStale, loadPrFeedback, openPr, ownWork, predecessorReasons, selectField, stackBase, startReasons, waitReasons } = env.later;
 
   function next() {
@@ -75,16 +76,23 @@ export function createNext(env) {
     const abandoned = nodes.filter(issue => [statuses.inProgress, statuses.automatedReview, statuses.humanReview].includes(status(issue)) && !mine.includes(issue) && (openPr(issue) || commentClaims(issue).length) && isStale(issue));
     const work = (issue, note) => `#${issue.number} [${status(issue)}] ${issue.title} (PR #${openPr(issue)?.number ?? '-'}${note ? `, ${note}` : ''})`;
     const replies = nodes.map(issue => ({ issue, ...feedback(issue, login, session) })).filter(row => row.reason);
-    if (replies.length) console.log(`Rückmeldungen (answer in the ticket with a comment that starts with your "Agent: …, Session: …" line, or hand off again with done; start ISSUE is BLOCKED while one of your session's is open):\n${replies.map(row => `#${row.issue.number} [${status(row.issue)}] ${row.issue.title}: ${row.reason} ${row.url}`).join('\n')}\n`);
-    if (mine.length) console.log(`Finish your own work first (start ISSUE is BLOCKED for a new start meanwhile):\n${mine.map(issue => work(issue)).join('\n')}\n`);
-    if (abandoned.length) console.log(`Stale or conflicting work, a new session may take it over (start ISSUE --session ID):\n${abandoned.map(issue => work(issue,
-      conflicting(issue) ? 'merge conflicts' : `no activity for ${ago(idleMs(issue))}`)).join('\n')}\n`);
-    for (const issue of startable) console.log(line(issue));
-    console.log(startable.length ? 'Run board.mjs start ISSUE to take one.' : 'No Ready issue whose blockers are all completed.');
-    if (stackable.length) console.log('\nReady and stackable on an open PR (start ISSUE says STACKABLE; see docs/CONTRIBUTING.md#stacked-pull-requests):');
-    for (const issue of stackable) console.log(`${line(issue)}\n  - base PR #${issue.base.number} (${issue.base.state === 'MERGED' ? `merged into ${issue.base.baseRefName}` : `branch ${issue.base.headRefName}`})`);
-    if (held.length) console.log('\nReady but not startable:');
-    for (const issue of held) console.log([line(issue), ...issue.reasons.map(reason => `  - ${reason}`)].join('\n'));
+    // Long lists stop after 10 entries ("and N more"); --verbose lists all. The own work is never cut.
+    const cut = list => capped(list, { verbose: args.flag('--verbose') });
+    const notes = [];
+    if (replies.length) notes.push(`Rückmeldungen (answer in the ticket with a comment that starts with your "Agent: …, Session: …" line, or hand off again with done; start ISSUE is BLOCKED while one of your session's is open):\n${cut(replies.map(row => `#${row.issue.number} [${status(row.issue)}] ${row.issue.title}: ${row.reason} ${row.url}`)).join('\n')}\n`);
+    if (mine.length) notes.push(`Finish your own work first (start ISSUE is BLOCKED for a new start meanwhile):\n${mine.map(issue => work(issue)).join('\n')}\n`);
+    if (abandoned.length) notes.push(`Stale or conflicting work, a new session may take it over (start ISSUE --session ID):\n${cut(abandoned.map(issue => work(issue,
+      conflicting(issue) ? 'merge conflicts' : `no activity for ${ago(idleMs(issue))}`))).join('\n')}\n`);
+    notes.push(...cut(startable.map(line)));
+    notes.push(startable.length ? 'Run board.mjs start ISSUE to take one.' : 'No Ready issue whose blockers are all completed.');
+    if (stackable.length) notes.push('\nReady and stackable on an open PR (start ISSUE says STACKABLE; see docs/CONTRIBUTING.md#stacked-pull-requests):');
+    notes.push(...cut(stackable.map(issue => `${line(issue)}\n  - base PR #${issue.base.number} (${issue.base.state === 'MERGED' ? `merged into ${issue.base.baseRefName}` : `branch ${issue.base.headRefName}`})`)));
+    if (held.length) notes.push('\nReady but not startable:');
+    notes.push(...cut(held.map(issue => [line(issue), ...issue.reasons.map(reason => `  - ${reason}`)].join('\n'))));
+    const numbers = list => list.map(issue => issue.number);
+    return result('ok', startable.length ? 'STARTABLE' : 'NONE', { headline: null, notes,
+      data: { feedback: numbers(replies.map(row => row.issue)), mine: numbers(mine), abandoned: numbers(abandoned), startable: numbers(startable), stackable: numbers(stackable),
+        held: held.map(issue => ({ number: issue.number, reasons: issue.reasons })) } });
   }
 
   return { next };

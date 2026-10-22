@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import { shared } from './board-args.mjs';
 import { pushPlan, targetBranch } from './board-checkout.mjs';
+import { result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -16,7 +17,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStart(env) {
-  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses } = env;
+  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, progress, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses, step } = env;
   const { baseOf, branchWork, check, foreignAssignees, isOwn, linkIssue, mayStart, openPr, ownPr, refsPr, set, startReasons, workBranches } = env.later;
 
   /** A branch name is taken when the issue, this clone or the remote already has it. */
@@ -41,8 +42,8 @@ export function createStart(env) {
     assert.ok(!plan.refuse, plan.refuse);
     git(...plan.args);
     const pr = JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n`)).number;
-    linkIssue(number, pr, false, issue);
-    console.log(`done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
+    linkIssue(number, pr, false, issue).forEach(progress);
+    progress(`done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
     return pr;
   }
 
@@ -77,7 +78,9 @@ export function createStart(env) {
       const merged = issue.closedByPullRequestsReferences?.nodes.find(pr => pr?.state === 'MERGED');
       assert.fail(`--takeover: no open PR closes #${number}${merged ? ` (PR ${refOf(merged.repository, merged.number)} is already merged)` : ''}`);
     }
-    if (!mayStart(check(issue, { session, takeover }))) return;
+    const judged = check(issue, { session, takeover });
+    if (!mayStart(judged)) return judged;
+    step(judged);
     const stacked = state.stackedOn, login = issue.viewer.login;
     // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
     const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
@@ -139,12 +142,13 @@ export function createStart(env) {
     // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
     // #705: the setup can run for minutes; a start that is cut off or read in the background shows that the claim is complete.
     if (project.setup) {
-      console.log(`CLAIMED #${number} session ${session} branch ${branch}; the project setup runs now (START follows when it is done)`);
+      progress(`CLAIMED #${number} session ${session} branch ${branch}; the project setup runs now (START follows when it is done)`);
       try { runShell(git('--exec-path'), projectDirectory, project.setup, { BRANCH: branch }); } catch (error) { assert.fail(`setup failed (${String(error.message).split('\n')[0]}); assignment, status and claim stay: fix it and run start again`); }
     }
-    console.log(current ? `START #${number} session ${session} branch ${branch} base ${base} PR #${current.number}`
-      : handedBranch ? `START #${number} session ${session} branch ${branch} base ${base} (took over the pushed branch of the predecessor; done opens the Draft PR)`
-      : `START #${number} session ${session} branch ${branch} base ${base} (branch made from origin/${base}, never push to ${base}; done opens the Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})`);
+    return result('ok', 'START', { data: { issue: number, session, branch, base, pr: current?.number },
+      headline: current ? `START #${number} session ${session} branch ${branch} base ${base} PR #${current.number}`
+        : handedBranch ? `START #${number} session ${session} branch ${branch} base ${base} (took over the pushed branch of the predecessor; done opens the Draft PR)`
+          : `START #${number} session ${session} branch ${branch} base ${base} (branch made from origin/${base}, never push to ${base}; done opens the Draft PR with the first push${stacked && stacked.state !== 'MERGED' ? `; stack: link that PR above PR #${stacked.number}, docs/CONTRIBUTING.md#stacked-pull-requests` : ''})` });
   }
 
   return { openFirstPr, start };

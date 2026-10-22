@@ -1,6 +1,7 @@
 // `sweep`: closes issues whose PR is delivered.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
+import { result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -10,7 +11,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createSweep(env) {
-  const { graphql, isSpec, project, projectItem, restAll, statuses, texts } = env;
+  const { graphql, isSpec, progress, project, projectItem, restAll, statuses, texts } = env;
   const { resolveOption, writeOption } = env.later;
 
   /**
@@ -20,6 +21,7 @@ export function createSweep(env) {
    */
   function sweep() {
     let plan, resets = 0, read = 0;
+    const closed = [], reset = [];
     for (let after; ;) {
       const { search } = graphql(`query($q:String!,$after:String){search(query:$q,type:ISSUE_ADVANCED,first:100,after:$after){
       issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{id number
@@ -40,7 +42,7 @@ export function createSweep(env) {
         const reopened = delivered && restAll(`repos/${project.repository}/issues/${issue.number}/events`)
           .findLast(event => event.event === 'reopened' && Date.parse(event.created_at) > Date.parse(delivered.mergedAt));
         if (reopened) {
-          console.log(`#${issue.number} stays open: reopened ${reopened.created_at} after PR #${delivered.number} was merged`);
+          progress(`#${issue.number} stays open: reopened ${reopened.created_at} after PR #${delivered.number} was merged`);
           resets++;
           continue;
         }
@@ -48,7 +50,8 @@ export function createSweep(env) {
           graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id,
             body: texts.delivered(delivered.number, delivered.baseRefName) });
           graphql('mutation($issue:ID!){closeIssue(input:{issueId:$issue,stateReason:COMPLETED}){clientMutationId}}', { issue: issue.id });
-          console.log(`#${issue.number} closed: delivered with PR #${delivered.number} in ${delivered.baseRefName}`);
+          closed.push(issue.number);
+          progress(`#${issue.number} closed: delivered with PR #${delivered.number} in ${delivered.baseRefName}`);
           resets++;
           continue;
         }
@@ -61,7 +64,8 @@ export function createSweep(env) {
         graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id,
           body: texts.conflict(pr.url, statuses) });
         writeOption(issue, plan);
-        console.log(`#${issue.number} reset to ${statuses.automatedReview}: PR #${pr.number} has merge conflicts`);
+        reset.push(issue.number);
+        progress(`#${issue.number} reset to ${statuses.automatedReview}: PR #${pr.number} has merge conflicts`);
         resets++;
       }
       read += search.nodes.length;
@@ -72,7 +76,8 @@ export function createSweep(env) {
       assert.ok(search.pageInfo.endCursor && search.pageInfo.endCursor !== after, 'Search pagination did not advance');
       after = search.pageInfo.endCursor;
     }
-    if (!resets) console.log('clean');
+    const data = { closed, reset };
+    return resets ? result('ok', 'SWEPT', { headline: null, data }) : result('ok', 'CLEAN', { headline: 'clean', data });
   }
 
   return { sweep };

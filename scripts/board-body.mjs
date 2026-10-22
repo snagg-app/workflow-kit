@@ -2,6 +2,7 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 import { shared } from './board-args.mjs';
+import { result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the commands; `run` names the function this module returns. */
 export const specs = [
@@ -40,8 +41,9 @@ export function createBody(env) {
     } catch { return false; } // An unrelated malformed URL is not a backlink.
   }));
 
-  /** Explicit scope works with Refs on release branches; native closing links remain a separate proof. */
+  /** Explicit scope works with Refs on release branches; native closing links remain a separate proof. Returns the lines that report what it found or made. */
   function verifyBacklinks(issue) {
+    const lines = [];
     const [prRef, ...extraIssues] = state.delivered ?? env.later.fieldWords().slice(2);
     assert.ok(prRef !== undefined, 'Automated review needs the PR number: field ISSUE Status "Automated review" PR [OTHER_ISSUE...]');
     const positive = ref =>/^\d+$/.test(ref ?? '') && Number.isSafeInteger(Number(ref)) && Number(ref) > 0;
@@ -65,13 +67,14 @@ export function createBody(env) {
       // An issue of this repository gets what `link` does (native connection and comment, read back); only a failure refuses.
       // A partial PR of this issue gets the comment only: a native link would make it a second closing PR.
       if (!backlink && repository === issueProject.repository) {
-        if (issueNumber === number && isPartialPr(issue, prNumber)) postBacklink(issueNumber, pr.url);
-        else linkIssue(issueNumber, prNumber);
+        if (issueNumber === number && isPartialPr(issue, prNumber)) lines.push(postBacklink(issueNumber, pr.url));
+        else lines.push(...linkIssue(issueNumber, prNumber));
         backlink = findBacklink(issueComments(repository, issueNumber), url);
       }
       assert.ok(backlink, `Missing backlink to ${pr.url} on #${issueNumber}; post the full URL as a comment and retry`);
-      console.log(`backlink ${issueRef}: ${backlink.html_url}`);
+      lines.push(`backlink ${issueRef}: ${backlink.html_url}`);
     }
+    return lines;
   }
 
   /** Native PR connections, including manual links on a non-default base; refs and branches do not count. */
@@ -123,25 +126,28 @@ export function createBody(env) {
       assert.ok(issue?.number === number && !issue.pull_request, `#${number} is not an issue of ${issueProject.repository}`);
       return String(issue.body ?? '').replaceAll('\r\n', '\n').trimEnd();
     };
+    let refused;
     const refuse = (reason, diff) => {
-      console.log(['FAILED', `blocker: ${reason}`, diff.trimEnd()].filter(Boolean).join('\n'));
-      process.exitCode = 1;
+      refused = result('failed', 'FAILED', { blockers: [reason], notes: diff.trimEnd() ? [diff.trimEnd()] : [] });
     };
     const before = current();
     const fresh = change(before, refuse);
-    if (fresh === undefined) return;
-    if (before === fresh) return console.log(`BODY #${number} already has this text`);
+    if (fresh === undefined) return refused;
+    if (before === fresh) return result('ok', 'BODY', { headline: `BODY #${number} already has this text` });
     // The text already read and compared goes over stdin: gh would take a file named "-" for stdin and write an empty body.
     github.run(['api', `repos/${issueProject.repository}/issues/${number}`, '-X', 'PATCH', '-F', 'body=@-'],
       { input: fresh });
     const after = current();
-    if (after !== fresh) return refuse(`the body of #${number} is not what was written: another session overwrote it meanwhile (diff: what you wrote, then the current body); read it, merge, write again`, diffText(fresh, after));
-    console.log(`BODY #${number} written and read back`);
+    if (after !== fresh) {
+      refuse(`the body of #${number} is not what was written: another session overwrote it meanwhile (diff: what you wrote, then the current body); read it, merge, write again`, diffText(fresh, after));
+      return refused;
+    }
+    return result('ok', 'BODY', { headline: `BODY #${number} written and read back` });
   }
 
   function body() {
     const [fresh, base] = args.words.slice(1).map(lines);
-    writeBody((before, refuse) => before === base ? fresh
+    return writeBody((before, refuse) => before === base ? fresh
       : refuse(`the body of #${number} changed since you read it (diff: your base, then the current body); read it again, merge, write again`, diffText(base, before)));
   }
 
@@ -149,7 +155,7 @@ export function createBody(env) {
   function bodyReplace() {
     const [from, to] = [args.value('--from'), args.value('--to')].map(lines);
     assert.ok(from !== '', 'The --from text is empty');
-    writeBody((before, refuse) => {
+    return writeBody((before, refuse) => {
       // Every start position counts, so "aa" in "aaa" is two matches, not one.
       const starts = [];
       for (let at = before.indexOf(from); at !== -1; at = before.indexOf(from, at + 1)) starts.push(at);
@@ -162,7 +168,10 @@ export function createBody(env) {
   }
 
   /** Connect the issue natively to the PR (what a closing keyword does only on the default branch), post the backlink comment `status` requires, and read both back. */
-  const link = () => linkIssue(number, Number(state.value), args.flag('--refs'));
+  const link = () => {
+    const [headline, ...notes] = linkIssue(number, Number(state.value), args.flag('--refs'));
+    return result('ok', 'LINKED', { headline, notes });
+  };
 
   /** `refsOnly` (link --refs): the PR only names the issue, so no native link; the backlink comment alone (#510). */
   function linkIssue(issueNumber, prNumber, refsOnly, known) {
@@ -185,8 +194,7 @@ export function createBody(env) {
         sleep(1);
       }
     }
-    console.log(refsOnly ? `#${issueNumber} is named by PR #${prNumber} (Refs, no native link)` : `#${issueNumber} is natively linked to PR #${prNumber}`);
-    postBacklink(issueNumber, pr.url);
+    return [refsOnly ? `#${issueNumber} is named by PR #${prNumber} (Refs, no native link)` : `#${issueNumber} is natively linked to PR #${prNumber}`, postBacklink(issueNumber, pr.url)];
   }
 
   /** The backlink comment alone (a partial PR must not be linked natively). An existing comment is a success without a write. The text goes over stdin, like in `body`; the guard's reader proves it. */
@@ -199,7 +207,7 @@ export function createBody(env) {
       backlink = findBacklink(issueComments(issueProject.repository, issueNumber), prUrl);
       assert.ok(backlink, `Backlink read-back differs: the comment with ${url} is not readable on #${issueNumber}; read the comments before writing again`);
     }
-    console.log(`backlink #${issueNumber}: ${backlink.html_url}`);
+    return `backlink #${issueNumber}: ${backlink.html_url}`;
   }
 
   /**

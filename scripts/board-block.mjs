@@ -1,6 +1,7 @@
 // `block` and `sub`: native blocker and sub-issue links.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
+import { result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -21,7 +22,7 @@ export function createBlock(env) {
       { owner: blockerOwner, name: blockerName, number: Number(blockerNumber) }).repository.issue ?? assert.fail('issue not found'));
     graphql(`mutation($issue:ID!,$blocker:ID!){addBlockedBy(input:{issueId:$issue,blockingIssueId:$blocker}){issue{number}}}`,
       { issue: readIssue().id, blocker: id });
-    console.log(`${project.repository}#${number} is blocked by ${blockerOwner}/${blockerName}#${blockerNumber}`);
+    return result('ok', 'LINKED', { headline: `${project.repository}#${number} is blocked by ${blockerOwner}/${blockerName}#${blockerNumber}` });
   }
 
   // Attaches CHILD as a native sub-issue of ISSUE and reads the parent link back; an existing link is a success.
@@ -36,7 +37,7 @@ export function createBlock(env) {
     if (!underParent(child)) graphql(`mutation($issue:ID!,$sub:ID!){addSubIssue(input:{issueId:$issue,subIssueId:$sub}){issue{number}}}`,
       { issue: readIssue().id, sub: child.id });
     assert.ok(underParent(read()), `#${number} did not take ${state.value} as sub-issue (read-back shows another parent)`);
-    console.log(`${project.repository}#${number} has sub-issue ${childOwner}/${childName}#${childNumber}`);
+    return result('ok', 'LINKED', { headline: `${project.repository}#${number} has sub-issue ${childOwner}/${childName}#${childNumber}` });
   }
 
   return { block, sub };

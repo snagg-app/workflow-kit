@@ -491,6 +491,18 @@ test('board check asks for the PRs of predecessors only when open predecessors a
 });
 
 
+test('--json gives verdict, blockers and exit code as values; the first default line stays the verdict', t => {
+  const { run, writeIssue } = fixture(t);
+  writeIssue(issue('Backlog'));
+  const plain = run('check', '1');
+  const json = JSON.parse(run('check', '1', '--json').stdout);
+  assert.equal(plain.status, 1);
+  assert.equal(json.verdict, 'BLOCKED');
+  assert.equal(json.exitCode, 1);
+  assert.ok(json.blockers.length > 0);
+  assert.match(plain.stdout.split('\n').find(line => /^[A-Z]+$/.test(line)) ?? '', /^BLOCKED$/);
+});
+
 test('board check asks for a short list of sub-issues and reads a longer one again in full', t => {
   const { run, writeIssue, queries } = fixture(t);
   const children = count => Array.from({ length: count }, (_, index) => ({ ...issue('Ready'), number: 100 + index, repository: { nameWithOwner: 'test/example' } }));
