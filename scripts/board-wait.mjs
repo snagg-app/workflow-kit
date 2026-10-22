@@ -3,6 +3,7 @@
 import { QuotaPause, StillWaiting, sleepers } from './github.mjs';
 import { untilText, waitInterval } from './quota.mjs';
 import { shared } from './board-args.mjs';
+import { isResult, result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the commands; `run` names the function this module returns. */
 export const specs = [
@@ -20,19 +21,23 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createWait(env) {
-  const { args, command, github, graphql, number, numberOption, project, quotaLine, rest, stallOption, startedAt } = env;
+  const { args, command, github, graphql, number, numberOption, progress, project, quotaLine, rest, stallOption, startedAt } = env;
   const { isOptional, readPr, reviews, unresolvedThreads, useBaseSettings } = env.later;
 
-  // Waiting is over either way; FAILED keeps a red head from reading as a finished review.
-  const outcome = ({ failed, reasons = [] }) => failed ? [['FAILED', ...reasons.length ? [reasons.join('; ')] : []].join(': '), 1] : ['DONE', 0];
-
-  /** Print one review snapshot with the same verdict and exit status as the background wait. */
-  function reviewsOnce() {
-    const result = reviews(stallOption());
-    const [word, code] = result.done ? outcome(result) : ['WAITING', 3];
-    console.log([word, ...result.lines, quotaLine()].filter(Boolean).join('\n'));
-    process.exitCode = code;
+  /**
+   * The result of a review read (`reviews()`): DONE, FAILED (a red head never reads as a finished review) or, while something is awaited, WAITING.
+   * Its `blocker:` lines become the blockers, every other line a note. `prior`: blockers found before the read (they make an unfinished read FAILED); `quota`: add the quota line.
+   */
+  function reviewOutcome(review, { prior = [], quota = false } = {}) {
+    const verdict = !review.done ? prior.length ? result('failed', 'FAILED') : result('waiting', 'WAITING')
+      : review.failed ? result('failed', 'FAILED', { headline: ['FAILED', ...review.reasons?.length ? [review.reasons.join('; ')] : []].join(': ') }) : result('ok', 'DONE');
+    const blocker = 'blocker: ', found = review.lines.filter(line => line.startsWith(blocker));
+    return { ...verdict, blockers: [...prior, ...found.map(line => line.slice(blocker.length))],
+      notes: [...review.lines.filter(line => !line.startsWith(blocker)), ...quota ? [quotaLine()] : []].filter(Boolean), data: { head: review.pr?.headRefOid, reasons: review.reasons ?? [] } };
   }
+
+  /** One review snapshot with the same verdict and exit status as the background wait. */
+  const reviewsOnce = () => reviewOutcome(reviews(stallOption()), { quota: true });
 
   /** Waiting for the human merge is the other recurring wait; it ends when the PR is no longer open. REST, so it costs no GraphQL points. */
   function mergeState() {
@@ -119,7 +124,7 @@ export function createWait(env) {
     }
   }
 
-  /** Looks again and again until `look` is done and returns that result; returns nothing after printing "still waiting" (exit 4). */
+  /** Looks again and again until `look` is done and returns that read; returns the result "still waiting" (WAITING, exit 4) when the time is up. */
   async function poll(look) {
     const maxMinutes = numberOption('--max-minutes', 9);
     // One deadline per run, counted from its start (`done` runs the targeted tests first; `merge` polls twice): everything must fit the one tool call.
@@ -127,9 +132,8 @@ export function createWait(env) {
     let shown, quiet = 0;
     // Exit 4: not finished, call the command again (a driver's tool call must end before its 10-minute limit).
     const stillWaiting = resetAt => {
-      process.exitCode = 4;
       const quotaReset = resetAt ?? (command === 'wait' && github.quota?.remaining < sleepers.wait ? github.quota.resetAt : undefined);
-      console.log(['WAITING', shown, `still waiting: call ${command} again${quotaReset ? ` after ${quotaReset} (GitHub quota pause)` : ''}`, quotaLine()].filter(Boolean).join('\n'));
+      return result('again', 'WAITING', { notes: [shown, `still waiting: call ${command} again${quotaReset ? ` after ${quotaReset} (GitHub quota pause)` : ''}`, quotaLine()].filter(Boolean) });
     };
     try {
       for (;;) {
@@ -138,7 +142,7 @@ export function createWait(env) {
         // Interim output names what is still awaited, once per change, so a background run is never silent.
         const waiting = lines.filter(line => line.startsWith('waiting:')).join('\n');
         if (waiting !== shown) {
-          console.log(['WAITING', shown = waiting, quotaLine()].filter(Boolean).join('\n'));
+          progress(['WAITING', shown = waiting, quotaLine()].filter(Boolean).join('\n'));
           quiet = 0;
         }
         if (Date.now() >= github.deadline) return stillWaiting(result.pausedUntil);
@@ -148,16 +152,13 @@ export function createWait(env) {
       }
     } catch (error) {
       if (!(error instanceof StillWaiting)) throw error;
-      stillWaiting(error.resetAt);
+      return stillWaiting(error.resetAt);
     }
   }
 
   async function wait() {
-    const result = await poll(args.flag('--merged') ? mergeState : reviewsForHead);
-    if (!result) return;
-    const [word, code] = outcome(result);
-    process.exitCode = code;
-    console.log([word, ...result.lines, quotaLine()].filter(Boolean).join('\n'));
+    const polled = await poll(args.flag('--merged') ? mergeState : reviewsForHead);
+    return isResult(polled) ? polled : reviewOutcome(polled, { quota: true });
   }
 
   /**
@@ -166,15 +167,15 @@ export function createWait(env) {
    * the command ends "still waiting" (exit 4) with the reset time, like `wait`.
    */
   async function quotaWait() {
-    const result = await poll(() => {
+    const polled = await poll(() => {
       for (;;) {
         graphql('query{viewer{login}}'); // sleeps first while the last answer showed too few points, and again when a refusal comes
         if (!(github.quota?.remaining < sleepers[command])) return { done: true }; // an answer without headers is an answer
         github.sleepUntilReset(github.quota.resetAt);
       }
     });
-    if (result) console.log(['DONE', quotaLine()].join('\n'));
+    return isResult(polled) ? polled : result('ok', 'DONE', { notes: [quotaLine()].filter(Boolean) });
   }
 
-  return { outcome, reviewsOnce, reviewsForHead, poll, wait, quotaWait };
+  return { reviewOutcome, reviewsOnce, reviewsForHead, poll, wait, quotaWait };
 }

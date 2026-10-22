@@ -2,6 +2,7 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 import { shared } from './board-args.mjs';
+import { failed, isResult, result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the commands; `run` names the function this module returns. */
 export const specs = [
@@ -21,16 +22,18 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createHandoff(env) {
-  const { args, graphql, handoffHeading, isSpec, issueProject, name, number, numberOption, owner, project, projectItem, projectStatus, readIssue, rest, sleep, specRefusal, stallOption, state, statuses, text, texts } = env;
-  const { check, connectedIssues, isPartialPr, mayStart, outcome, readPr, reviews, set } = env.later;
+  const { args, graphql, handoffHeading, isSpec, issueProject, name, number, numberOption, owner, project, projectItem, projectStatus, readIssue, rest, sleep, specRefusal, stallOption, state, statuses, step, text, texts } = env;
+  const { check, connectedIssues, isPartialPr, mayStart, readPr, reviewOutcome, reviews, set } = env.later;
 
   /**
    * Everything the issue side of the handoff still lacks (readiness, review status, assignment) on the
-   * supplied issue snapshot, or undefined when check() already printed its verdict and stopped.
+   * supplied issue snapshot, or the result of check() when that already stops (BLOCKED, UNKNOWN).
    * `reviewedHead`: the PR head the proof was gathered for; a stacked layer must still be that head when this reads it.
    */
   function handoffIssueReasons(issue, viewer, reviewedHead, currentPrNumber) {
-    if (!mayStart(check(issue, undefined, currentPrNumber))) return;
+    const judged = check(issue, undefined, currentPrNumber);
+    if (!mayStart(judged)) return judged;
+    step(judged);
     assert.ok(issue.id, 'Issue identity is unreadable');
     const status = projectStatus(issue);
     const reasons = [];
@@ -78,14 +81,10 @@ export function createHandoff(env) {
     return reasons;
   }
 
-  /** The recheck before the write: true when the issue side holds, otherwise the verdict is printed. */
+  /** The recheck before the write: nothing when the issue side holds, otherwise the result that stops the handoff. */
   function handoffIssue(issue, viewer, reviewedHead, currentPrNumber) {
     const reasons = handoffIssueReasons(issue, viewer, reviewedHead, currentPrNumber);
-    if (reasons?.length) {
-      console.log(['FAILED', ...reasons.map(reason => `blocker: ${reason}`)].join('\n'));
-      process.exitCode = 1;
-    }
-    return reasons?.length === 0;
+    return isResult(reasons) ? reasons : reasons.length ? failed(reasons) : undefined;
   }
 
   /**
@@ -145,55 +144,40 @@ export function createHandoff(env) {
     const pr = reviewed?.pr ?? readPr(prNumber);
     if (checks.length) assert.equal(typeof pr.bodyHTML, 'string', 'The rendered PR body is unreadable');
     assert.equal(typeof pr.isDraft, 'boolean', 'PR draft state is unreadable');
-    const blockers = reasons => reasons.map(reason => `blocker: ${reason}`);
     // Somebody else merged it while merge waited (#556): the goal is reached, so merge goes on with its steps after a merge. Handoff still needs an open PR.
-    if (action === 'merge' && pr.state === 'MERGED') return { pr, merged: true };
-    if (pr.state !== 'OPEN' || pr.isDraft) {
-      console.log(['FAILED', ...blockers([...prior, `${action} needs an open non-draft PR`])].join('\n'));
-      process.exitCode = 1;
-      return;
-    }
-    const result = reviewed ?? reviews(stallOption(), Date.now(), prNumber, pr, undefined, undefined, action === 'handoff');
-    console.log(result.lines.join('\n'));
-    if (!result.done || result.failed) {
-      process.exitCode = result.failed || prior.length ? 1 : 3;
-      console.log([result.failed ? outcome(result)[0] : prior.length ? 'FAILED' : 'WAITING', ...blockers(prior)].join('\n'));
-      return;
-    }
-    if (expectedHead) assert.equal(result.pr.headRefOid, expectedHead, `PR head changed during ${action}`);
+    if (action === 'merge' && pr.state === 'MERGED') return { pr, merged: true, lines: [] };
+    if (pr.state !== 'OPEN' || pr.isDraft) return failed([...prior, `${action} needs an open non-draft PR`]);
+    const review = reviewed ?? reviews(stallOption(), Date.now(), prNumber, pr, undefined, undefined, action === 'handoff');
+    // The lines of the read explain a stop; when the gate holds they are details.
+    const explained = outcome => ({ ...outcome, blockers: [...review.lines.filter(line => line.startsWith('blocker: ')).map(line => line.slice('blocker: '.length)), ...outcome.blockers],
+      notes: [...review.lines.filter(line => !line.startsWith('blocker: ')), ...outcome.notes] });
+    if (!review.done || review.failed) return reviewOutcome(review, { prior });
+    if (expectedHead) assert.equal(review.pr.headRefOid, expectedHead, `PR head changed during ${action}`);
     const reasons = [...prior];
-    if (result.lines.some(line => line.startsWith('blocker:') || /^unresolved threads: [1-9]/.test(line))) {
+    if (review.lines.some(line => line.startsWith('blocker:') || /^unresolved threads: [1-9]/.test(line))) {
       reasons.push(`resolve review blockers and threads before ${action}`);
     }
-    reasons.push(...selfReviewReasons(result.pr.bodyHTML, checks), ...extra(result));
+    reasons.push(...selfReviewReasons(review.pr.bodyHTML, checks), ...extra(review));
     // Handoff and merge alike: a PR text edited after the handoff must not close a spec either.
-    for (const specNumber of closedSpecs(result.pr.body)) reasons.push(specRefusal(specNumber, `the text of PR #${prNumber} closes it; write "Refs #${specNumber}" instead`));
+    for (const specNumber of closedSpecs(review.pr.body)) reasons.push(specRefusal(specNumber, `the text of PR #${prNumber} closes it; write "Refs #${specNumber}" instead`));
     const undetermined = state => !state || state === 'UNKNOWN';
-    let state = result.pr.mergeStateStatus;
+    let state = review.pr.mergeStateStatus;
     // merge looks longer than handoff (#721): about a minute at the default 3 s pause.
     for (let read = 1; undetermined(state) && read < (action === 'merge' ? 20 : mergeReads); read++) {
       sleep(numberOption('--interval', 3));
       const fresh = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
       pullRequest(number:$number){headRefOid mergeStateStatus}}}`, { owner, name, number: prNumber }).repository.pullRequest;
-      assert.equal(fresh?.headRefOid, result.pr.headRefOid, `PR head changed during ${action}`);
+      assert.equal(fresh?.headRefOid, review.pr.headRefOid, `PR head changed during ${action}`);
       state = fresh.mergeStateStatus;
     }
     // The snapshot's own DIRTY is already a blocker line of reviews(); a DIRTY that GitHub computed during the re-reads is new.
-    if (state === 'DIRTY' && result.pr.mergeStateStatus !== 'DIRTY') reasons.push('merge conflicts: resolve them before ' + action);
+    if (state === 'DIRTY' && review.pr.mergeStateStatus !== 'DIRTY') reasons.push('merge conflicts: resolve them before ' + action);
     if (!mergeStates.includes(state)) {
-      if (!reasons.length) {
-        console.log('WAITING\nwaiting: PR mergeability is not determined');
-        process.exitCode = 3;
-        return;
-      }
+      if (!reasons.length) return explained(result('waiting', 'WAITING', { notes: ['waiting: PR mergeability is not determined'] }));
       if (undetermined(state)) reasons.push('PR mergeability is not determined (GitHub is still computing it): run again in a minute');
     }
-    if (reasons.length) {
-      console.log(['FAILED', ...blockers(reasons)].join('\n'));
-      process.exitCode = 1;
-      return;
-    }
-    return result;
+    if (reasons.length) return explained(failed(reasons));
+    return review;
   }
 
   /**
@@ -215,14 +199,13 @@ export function createHandoff(env) {
 
   /** Read all PR gates and native links, optionally requiring the previously checked head; `prior`: see finishedPr. */
   function handoffPr(issueId, viewer, expectedHead, prior, partial) {
-    const result = finishedPr(Number(state.value), 'handoff', expectedHead, ({ comments, pr }) => {
+    return finishedPr(Number(state.value), 'handoff', expectedHead, ({ comments, pr }) => {
       const reasons = [];
       const comment = findHandoffComment(comments, viewer, pr.headRefOid);
       if (!comment) reasons.push(`no handoff comment for head ${pr.headRefOid.slice(0, 7)} on PR #${state.value}: write FILE (<Ergebnis in einem Satz>, then "### Retro" with one list line per finding, or "- Keine Funde"; README: Handoff comment) and run board.mjs done ${number} FILE`);
       if (!partial && !connectedIssues(pr).has(issueId)) reasons.push(`PR #${state.value} is not natively linked to issue #${number}`);
       return reasons;
     }, prior);
-    return result?.pr;
   }
 
   /** Guard the Human review write with current PR proof followed by current issue prerequisites. */
@@ -236,18 +219,22 @@ export function createHandoff(env) {
     // `--refs` is the same for a PR that only names the issue, whether or not another PR closes it (#510).
     const partial = args.flag('--refs') || isPartialPr(issue, currentPrNumber);
     const prior = partial ? [] : handoffIssueReasons(issue, viewer, undefined, currentPrNumber);
-    if (!prior) return;
-    const pr = handoffPr(issue.id, viewer, undefined, prior, partial);
-    if (!pr) return;
-    if (partial) return console.log(`HANDOFF #${number} PR #${state.value} head ${pr.headRefOid} (partial PR: the issue status stays, the closing PR hands it off)`);
+    if (isResult(prior)) return prior;
+    const gate = handoffPr(issue.id, viewer, undefined, prior, partial);
+    if (isResult(gate)) return gate;
+    const { pr } = gate, data = { issue: number, pr: Number(state.value), head: pr.headRefOid };
+    if (partial) return result('ok', 'HANDOFF', { headline: `HANDOFF #${number} PR #${state.value} head ${pr.headRefOid} (partial PR: the issue status stays, the closing PR hands it off)`, details: gate.lines, data });
+    let stopped;
     if (!set('Status', statuses.humanReview, () => {
-      if (!handoffPr(issue.id, viewer, pr.headRefOid)) return;
+      stopped = handoffPr(issue.id, viewer, pr.headRefOid);
+      if (isResult(stopped)) return;
       const current = readIssue();
       assert.equal(current?.id, issue.id, 'Issue identity changed during handoff');
-      return handoffIssue(current, viewer, pr.headRefOid, currentPrNumber) ? current : undefined;
-    })) return;
+      stopped = handoffIssue(current, viewer, pr.headRefOid, currentPrNumber);
+      return stopped ? undefined : current;
+    })) return stopped;
     assert.equal(projectItem(readIssue())?.status?.name, statuses.humanReview, `${statuses.humanReview} status read-back differs`);
-    console.log(`HANDOFF #${number} PR #${state.value} head ${pr.headRefOid}`);
+    return result('ok', 'HANDOFF', { headline: `HANDOFF #${number} PR #${state.value} head ${pr.headRefOid}`, details: gate.lines, data });
   }
 
   /** Mark a Draft PR ready only for the explicitly expected pushed commit; stale metadata is waited out, never trusted. */
@@ -261,10 +248,7 @@ export function createHandoff(env) {
       return { id: pull.node_id, state: pull.state === 'open' ? 'OPEN' : pull.merged ? 'MERGED' : 'CLOSED', isDraft: pull.draft, headRefOid: pull.head.sha,
         isCrossRepository: pull.head.repo?.id !== pull.base.repo.id, headRepository: { nameWithOwner: pull.head.repo?.full_name } };
     };
-    const refuse = (...reasons) => {
-      console.log(['FAILED', ...reasons.map(reason => `blocker: ${reason}`)].join('\n'));
-      process.exitCode = 1;
-    };
+    const refuse = failed;
     let pr;
     for (let attempt = 1; ; attempt++) {
       pr = read();
@@ -274,7 +258,7 @@ export function createHandoff(env) {
       if (pr.isCrossRepository || pr.headRepository?.nameWithOwner?.toLowerCase() !== project.repository.toLowerCase()) return refuse(`PR #${prNumber} does not come from a branch of ${project.repository}`);
       if (!pr.isDraft) {
         if (!pr.headRefOid.startsWith(sha.toLowerCase())) return refuse(`PR #${prNumber} is already ready with head ${pr.headRefOid.slice(0, 7)}, not ${sha.slice(0, 7)}`);
-        return console.log(`READY #${prNumber} head ${pr.headRefOid} (already ready)`);
+        return result('ok', 'READY', { headline: `READY #${prNumber} head ${pr.headRefOid} (already ready)`, data: { pr: prNumber, head: pr.headRefOid } });
       }
       if (pr.headRefOid.startsWith(sha.toLowerCase())) break;
       if (attempt >= attempts) return refuse(`PR #${prNumber} still reports head ${pr.headRefOid.slice(0, 7)} after ${attempts} reads; expected ${sha.slice(0, 7)}`);
@@ -291,7 +275,7 @@ export function createHandoff(env) {
       assert.ok(attempt < attempts, `Ready read-back differs: draft ${done.isDraft}, head ${done.headRefOid.slice(0, 7)}`);
       sleep(interval);
     }
-    console.log(`READY #${prNumber} head ${pr.headRefOid}`);
+    return result('ok', 'READY', { headline: `READY #${prNumber} head ${pr.headRefOid}`, data: { pr: prNumber, head: pr.headRefOid } });
   }
 
   return { findHandoffComment, selfReviewChecks, selfReviewReasons, finishedPr, handoff, ready };

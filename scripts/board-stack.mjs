@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { failed, result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -13,7 +14,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStack(env) {
-  const { graphql, isSpec, loadDeliveries, name, number, owner, project, projectDirectory, projectItem, readIssue, rest, restAll, stackOrderText, statuses, texts } = env;
+  const { graphql, isSpec, loadDeliveries, name, number, owner, progress, project, projectDirectory, projectItem, readIssue, rest, restAll, stackOrderText, statuses, texts } = env;
   const { filesText, findHandoffComment, finishedPr, readPr, selfReviewChecks, selfReviewReasons, unresolvedThreads } = env.later;
 
   function readStackPr(prNumber) {
@@ -214,11 +215,10 @@ export function createStack(env) {
    * A real conflict stops it: the layer and the files are named, the merge stays open in the printed worktree.
    */
   function stackSync() {
-    const fail = reason => { console.log(`FAILED\nblocker: ${reason}`); process.exitCode = 1; };
     const stacks = readStacks();
-    if (stacks.length !== 1) return fail(`PR #${number} is ${stacks.length ? 'in several native stacks' : 'not in a native stack'}: stack-sync syncs one stack`);
+    if (stacks.length !== 1) return failed(`PR #${number} is ${stacks.length ? 'in several native stacks' : 'not in a native stack'}: stack-sync syncs one stack`);
     const open = stackMembers(stacks[0]).filter(member => member.state === 'open');
-    if (open.at(-1)?.number !== number) return fail(`PR #${number} is not the top open layer of its stack${open.length ? ` (that is PR #${open.at(-1).number})` : ''}`);
+    if (open.at(-1)?.number !== number) return failed(`PR #${number} is not the top open layer of its stack${open.length ? ` (that is PR #${open.at(-1).number})` : ''}`);
     const run = env.gitAt;
     run(projectDirectory, 'fetch', 'origin');
     const tree = mkdtempSync(join(tmpdir(), 'stack-sync-'));
@@ -232,14 +232,14 @@ export function createStack(env) {
           const files = run(tree, 'diff', '--name-only', '--diff-filter=U').split('\n').filter(Boolean);
           if (!files.length) throw error;
           keep = true;
-          return fail(`merging ${base} into PR #${layer.number} (${layer.head.ref}) conflicts in ${filesText(files)}; resolve and commit in ${tree}, push ${layer.head.ref}, then run stack-sync again`);
+          return failed(`merging ${base} into PR #${layer.number} (${layer.head.ref}) conflicts in ${filesText(files)}; resolve and commit in ${tree}, push ${layer.head.ref}, then run stack-sync again`);
         }
         const synced = run(tree, 'rev-parse', 'HEAD') !== run(tree, 'rev-parse', `origin/${layer.head.ref}`);
         if (synced) run(tree, 'push', 'origin', `HEAD:refs/heads/${layer.head.ref}`);
-        console.log(`PR #${layer.number} ${layer.head.ref}: ${synced ? 'merged and pushed' : 'already up to date'}`);
+        progress(`PR #${layer.number} ${layer.head.ref}: ${synced ? 'merged and pushed' : 'already up to date'}`);
         base = run(tree, 'rev-parse', 'HEAD');
       }
-      console.log(`DONE stack of PR #${number} is synced; CI starts on the pushed heads`);
+      return result('ok', 'DONE', { headline: `DONE stack of PR #${number} is synced; CI starts on the pushed heads` });
     } finally {
       if (!keep) run(projectDirectory, 'worktree', 'remove', '--force', tree);
     }

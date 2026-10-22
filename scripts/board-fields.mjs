@@ -1,6 +1,7 @@
 // Project fields: reading the options, guarded writes and `field`.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
+import { linesOf, result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -14,7 +15,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createFields(env) {
-  const { args, command, decisionWait, github, graphql, isSpec, issueName, issueOwner, issueProject, number, projectItem, readIssue, restAll, specRefusal, state, statusName, statuses } = env;
+  const { args, command, decisionWait, github, graphql, isSpec, issueName, issueOwner, issueProject, number, progress, projectItem, readIssue, restAll, specRefusal, state, statusName, statuses } = env;
   const { check, mayStart, verifyBacklinks, waitReasons } = env.later;
 
   /** Specs are untouched outside a human-invoked spec-review; re-read children immediately before Human review. */
@@ -85,8 +86,9 @@ export function createFields(env) {
     return { fieldName, field, linked, option };
   }
 
-  /** Guards of a transition; a refusal throws. They print (backlinks), so run them only after every pair is valid. */
+  /** Guards of a transition; a refusal throws. They report (backlinks), so run them only after every pair is valid. Returns the lines to report. */
   function guardOption(issue, { fieldName, option }) {
+    const notes = [];
     guardSpecStatus(issue, { fieldName, option });
     if (fieldName === 'Status' && option.name === statuses.ready) {
       // Ready contradicts an open decision wait: it stays Backlog until the line is removed (#514).
@@ -99,16 +101,16 @@ export function createFields(env) {
       assert.ok(viewer?.login, 'Cannot verify the authenticated GitHub user');
       assert.ok(issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === viewer.login.toLowerCase()),
         `Assign yourself first: gh issue edit ${number} --repo ${issueProject.repository} --add-assignee "@me". Verify session ownership before assigning.`);
-      // A refusal is an error like the others: its verdict lines become the one ERROR line instead of a second output format.
-      const log = console.log, verdict = [];
       // An open issue in Done was reopened by a human (a merge closes it): it may leave Done, with a note (#510). A closed one stays blocked.
       const wasDone = issue.state === 'OPEN' && projectItem(issue)?.status?.name === statuses.done;
       const judged = wasDone ? { ...issue, projectItems: { nodes: issue.projectItems.nodes.map(item => item === projectItem(issue) ? { ...item, status: { name: statuses.ready } } : item) } } : issue;
-      console.log = (...parts) => verdict.push(parts.join(' '));
-      try { if (!mayStart(check(judged))) throw new Error(verdict.join('; ')); } finally { console.log = log; }
-      if (wasDone) log(`note: #${issue.number} is open again and was Done; it moves to In progress`);
+      // A refusal is an error like the others: its verdict lines become the one ERROR line instead of a second output format.
+      const verdict = check(judged);
+      if (!mayStart(verdict)) throw new Error(linesOf(verdict).join('; '));
+      if (wasDone) notes.push(`note: #${issue.number} is open again and was Done; it moves to In progress`);
     }
-    if (fieldName === 'Status' && statusName(option.name) === statuses.automatedReview) verifyBacklinks(issue);
+    if (fieldName === 'Status' && statusName(option.name) === statuses.automatedReview) notes.push(...verifyBacklinks(issue));
+    return notes;
   }
 
   function writeOption(issue, plan) {
@@ -154,8 +156,8 @@ export function createFields(env) {
       issue = beforeWrite();
       if (!issue) return;
     }
-    guardOption(issue, plan);
-    console.log(writeOption(issue, plan));
+    guardOption(issue, plan).forEach(progress);
+    progress(writeOption(issue, plan));
     return plan.option.name;
   }
 
@@ -186,12 +188,13 @@ export function createFields(env) {
   /** Any single-select fields: every pair is validated before the first write, then all are read back together so a silent API no-op cannot pass. */
   function setField() {
     const issue = readIssue();
-    console.log(applyFields(issue, planFields(fieldPairs())).join('\n'));
+    const lines = applyFields(issue, planFields(fieldPairs()));
+    return result('ok', 'SET', { headline: null, notes: lines, data: { fields: lines } });
   }
 
-  /** Write resolved plans on the issue and read them all back; returns one confirmation line per plan. */
+  /** Write resolved plans on the issue and read them all back; returns the lines to report: guard notes, then one confirmation line per plan. */
   function applyFields(issue, plans) {
-    for (const plan of plans) guardOption(issue, plan);
+    const notes = plans.flatMap(plan => guardOption(issue, plan));
     // Confirmation lines come after the read-back, so a failed call never shows a write as confirmed.
     const written = plans.map(plan => writeOption(issue, plan));
     const { repository } = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
@@ -204,7 +207,7 @@ export function createFields(env) {
       const stored = values.find(entry => entry?.field?.name === fieldName)?.name;
       assert.equal(stored, option.name, `Read-back of ${fieldName} shows ${stored ?? 'no value'}`);
     }
-    return written;
+    return [...notes, ...written];
   }
 
   return { dropFieldsCache, selectField, resolveOption, writeOption, set, planFields, setField, fieldWords };

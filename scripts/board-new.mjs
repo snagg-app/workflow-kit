@@ -2,6 +2,7 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -196,7 +197,7 @@ export function createNew(env) {
       readBackIssue(created, plan);
       step = 'setting the Project fields';
       setFields([{ id: created.node_id, number: created.number, plans: plan.plans }]);
-      console.log(newLine(created, plan));
+      return result('ok', 'NEW', { headline: newLine(created, plan), data: { issues: [created.html_url] } });
     } catch (error) {
       throw new Error(`${created.html_url} was created, but ${step} failed: ${String(error.stderr || error.message).trim()}; finish by hand with board.mjs field, do not create it again`, { cause: error });
     }
@@ -239,7 +240,8 @@ export function createNew(env) {
       for (const { created, plan } of made) readBackIssue(created, plan);
       step = 'setting the Project fields';
       setFields(made.map(({ created, plan }) => ({ id: created.node_id, number: created.number, plans: plan.plans })));
-      console.log(made.map(({ created, plan }) => newLine(created, plan)).join('\n'));
+      const [headline, ...notes] = made.map(({ created, plan }) => newLine(created, plan));
+      return result('ok', 'NEW', { headline, notes, data: { issues: made.map(({ created }) => created.html_url) } });
     } catch (error) {
       throw new Error(`${known()}, but ${step} failed: ${String(error.stderr || error.message).trim()}; finish by hand with board.mjs field/status, do not create them again`, { cause: error });
     }

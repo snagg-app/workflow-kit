@@ -33,6 +33,9 @@ export const shared = {
   grace: { value: 'MINUTES', kind: 'minutes', help: 'Wait this long for reviewers that start on Ready or a push (default 3, 0 = off).' },
 };
 
+/** Every command takes these two: they only change how the result prints (board-result.mjs). */
+const outputFlags = { '--verbose': { help: 'Print the details too.' }, '--json': { help: 'Print the result as one JSON document.' } };
+
 /** OWNER/REPO#N names a blocker in another repository; N or #N one in this project's repository. */
 export const blockerRepository = (reference, project) => reference.includes('/') ? reference.slice(0, reference.lastIndexOf('#')) : project.repository;
 export const validBlocker = (reference, project) => kinds.reference.ok(reference ?? '', project);
@@ -49,7 +52,7 @@ export function usageOf(spec) {
 
 /** `board.mjs help COMMAND`: usage, what the command does, its flags and where the long text is (about 0.3 to 1 KB). */
 export function helpOf(spec) {
-  const flags = Object.entries(spec.flags ?? {}).map(([flag, def]) => `  ${flagText(flag, def).padEnd(24)} ${def.help ?? ''}`.trimEnd());
+  const flags = Object.entries({ ...spec.flags, ...outputFlags }).map(([flag, def]) => `  ${flagText(flag, def).padEnd(24)} ${def.help ?? ''}`.trimEnd());
   return [usageOf(spec), `${spec.writes ? 'Writes.' : 'Read-only.'} ${spec.summary}`, ...flags, ...(spec.doc ? [`Details: ${spec.doc}`] : [])].join('\n');
 }
 
@@ -74,7 +77,7 @@ export function parseArgs(specs, argv, project) {
   for (let index = 0; index < given.length; index++) {
     const text = given[index];
     if (!/^-./.test(text)) { words.push(text); continue; } // a lone "-" is a file name (`body ISSUE - BASE`), not a flag
-    const def = spec.flags?.[text];
+    const def = outputFlags[text] ?? spec.flags?.[text];
     if (!def) return fail(`unknown option ${text}`);
     if (flags.has(text) && !def.many) return fail(`${text} may appear once`);
     if (!def.value) { flags.set(text, []); continue; }

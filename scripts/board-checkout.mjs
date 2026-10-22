@@ -65,8 +65,7 @@ export function createCheckout({ projectDirectory, sleep }) {
     try {
       return git('rev-parse', 'HEAD');
     } catch (error) {
-      console.error(`ready --local cannot read the head of ${projectDirectory}: ${String(error.stderr || error.message).trim()}`);
-      process.exit(2);
+      throw new Error(`cannot read the head of ${projectDirectory}: ${String(error.stderr || error.message).trim()}`, { cause: error });
     }
   }
 

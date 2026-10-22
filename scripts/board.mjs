@@ -14,6 +14,7 @@ import { configError, createOptions, helpOf, listOf, parseArgs, usageOf } from '
 import { commandSpecs } from './board-commands.mjs';
 import { createProcess } from './board-process.mjs';
 import { createCheckout } from './board-checkout.mjs';
+import { createOutput, isResult, result } from './board-result.mjs';
 import { createCommon } from './board-common.mjs';
 import { createClaims } from './board-claims.mjs';
 import { createCheck } from './board-check.mjs';
@@ -35,6 +36,8 @@ import { createMerge } from './board-merge.mjs';
 // A subfolder of the checkout (or of --cwd) works like its root: the project file is found there.
 const startDirectory = takeCwd();
 const call = process.argv.slice(2);
+// The only printer of this call (board-result.mjs); replaced once the arguments are known and --json / --verbose can apply.
+let output = createOutput();
 // `--issue-repo OWNER/NAME` may stand anywhere in the call (before the command too); the parser reads it after the command.
 const issueRepoAt = call.indexOf('--issue-repo');
 if (issueRepoAt >= 0) call.push(...call.splice(issueRepoAt, 2));
@@ -42,7 +45,7 @@ if (issueRepoAt >= 0) call.push(...call.splice(issueRepoAt, 2));
 if (call[0] === 'help' || call.includes('--help') || call.includes('-h')) {
   const target = commandSpecs.find(spec => spec.name === (call[0] === 'help' ? call[1] : call[0]));
   const unknown = call[0] === 'help' && call[1] !== undefined && !target;
-  (unknown ? console.error : console.log)(unknown ? `unknown command "${call[1]}"\n${listOf(commandSpecs)}` : target ? helpOf(target) : listOf(commandSpecs));
+  (unknown ? output.diagnostic : output.text)(unknown ? `unknown command "${call[1]}"\n${listOf(commandSpecs)}` : target ? helpOf(target) : listOf(commandSpecs));
   process.exit(unknown ? 2 : 0);
 }
 let projectDirectory;
@@ -50,13 +53,13 @@ try { projectDirectory = projectRoot(startDirectory); } catch (error) {
   // Only the two expected misses get a short line; any other failure (EACCES, ELOOP) keeps its own message.
   const missing = ['ENOENT', 'ENOTDIR'].includes(error.code);
   if (!missing && error.code !== 'ERR_ASSERTION') throw error;
-  console.error(`${startDirectory}: ${missing ? 'is not a directory' : 'is not inside a Git checkout'}`);
+  output.diagnostic(`${startDirectory}: ${missing ? 'is not a directory' : 'is not inside a Git checkout'}`);
   process.exit(2);
 }
 const command = call[0];
 const projectFile = join(projectDirectory, '.github/workflow-project.json');
 if (!existsSync(projectFile)) {
-  console.error(`${projectFile} is missing: run board.mjs inside the project, or name it with --cwd PROJECT_DIR`);
+  output.diagnostic(`${projectFile} is missing: run board.mjs inside the project, or name it with --cwd PROJECT_DIR`);
   process.exit(2);
 }
 const project = JSON.parse(readFileSync(projectFile, 'utf8'));
@@ -71,14 +74,16 @@ const commandNames = commandSpecs.map(spec => spec.name);
 const parsed = parseArgs(commandSpecs, call, project);
 const configProblem = parsed.args && configError(command, project);
 if (configProblem) {
-  console.error(configProblem);
+  output.diagnostic(configProblem);
   process.exit(2);
 }
 if (!parsed.args) {
-  console.error([parsed.error, parsed.spec ? usageOf(parsed.spec) : listOf(commandSpecs)].filter(Boolean).join('\n'));
+  output.diagnostic([parsed.error, parsed.spec ? usageOf(parsed.spec) : listOf(commandSpecs)].filter(Boolean).join('\n'));
   process.exit(2);
 }
 const { spec, args } = parsed;
+// From here on the call is valid: the printer knows --json and --verbose (a refused call above prints plain text).
+output = createOutput({ json: args.flag('--json'), verbose: args.flag('--verbose') });
 const options = createOptions({ project, args });
 // `--issue-repo OWNER/NAME` (start, done): the issue lives in that repository and on its board (a kit issue fixed in
 // the project); PR, branch and tests stay in the project's.
@@ -89,10 +94,6 @@ const gh = externalTool('gh', process.cwd(), projectDirectory);
 const { sleep, runShell } = createProcess();
 const checkout = createCheckout({ projectDirectory, sleep });
 const { git, gitAt, localHead } = checkout;
-
-// The first argument after the PR; `ready PR --local` (the step `done` takes) reads the head from the checkout, so a shell never has to splice `$(git rev-parse HEAD)` into the call.
-// The PR must still show exactly that head before it is marked ready, so a commit that was not pushed is refused like a mistyped id.
-const value = command === 'ready' && args.flag('--local') ? localHead() : args.words[1];
 
 const startedAt = Date.now();
 const github = createGithub({ tool: gh, command, projectDirectory, sleep });
@@ -108,23 +109,25 @@ function useIssueRepo() {
   statuses = statusNames(issueProject);
 }
 
-// field and new report a failure as one "ERROR - reason" line: their output (verdicts, backlinks, confirmations)
-// is held until the command succeeds, so no failed call shows a write or a check as confirmed. The other commands keep ERROR
-// with "- reason" below it.
-const oneLine = spec.oneLine, print = console.log, held = [];
-if (oneLine) console.log = (...parts) => held.push(parts.join(' '));
+// field and new report a failure as one "ERROR - reason" line, and they print only their result (no progress), so no failed call shows a write or a check
+// as confirmed. The other commands keep ERROR with "- reason" below it.
+const oneLine = spec.oneLine;
 let quotaLine = () => undefined;
 try {
   if (['start', 'done'].includes(command)) useIssueRepo();
   // What commands hand to each other during one run: the PR `done` works on (`value`: the steps it calls read their PR where a called `handoff` reads its argument),
   // the base PR of the issue the last `check` judged STACKABLE (`stackedOn`: handoff compares it with the PR's base branch), a PR that only says "Refs #N"
   // (no native closer) which `start --takeover` finds (`adoptedPr`, #649), and the [PR, ...OTHER_ISSUE] `done` knows (`delivered`; else they follow "Automated review" on the command line).
-  const state = { value, stackedOn: undefined, adoptedPr: undefined, delivered: undefined };
+  // `value` is the first argument after the PR; `ready PR --local` (the step `done` takes) reads the head from the checkout, so a shell never has to splice `$(git rev-parse HEAD)` into the call.
+  // The PR must still show exactly that head before it is marked ready, so a commit that was not pushed is refused like a mistyped id.
+  const state = { value: command === 'ready' && args.flag('--local') ? localHead() : args.words[1], stackedOn: undefined, adoptedPr: undefined, delivered: undefined };
   // The commands call each other by name, when they run; every module adds its functions here.
   const registry = {};
   const later = new Proxy(registry, { get: (target, key) => (...parts) => target[key](...parts) });
   const shared = { project, owner, name, number, command, github, graphql, rest, restAll, gh, projectDirectory, issueProject, issueOwner, issueName, statuses, texts,
-    startedAt, state, git, gitAt, checkout, localHead, sleep, runShell, args, ...options, later };
+    startedAt, state, git, gitAt, checkout, localHead, sleep, runShell, args, ...options, later,
+    // Lines that must show while the command runs; field and new have none (a failed call must not show a write as confirmed).
+    progress: oneLine ? () => undefined : output.progress, step: oneLine ? () => undefined : output.step };
   const common = createCommon(shared);
   const env = { ...shared, ...common };
   quotaLine = common.quotaLine;
@@ -136,21 +139,23 @@ try {
     stackOrderText: common.stackOrderText, conflictLine: later.conflictLine }));
   Object.assign(registry, createMerge({ project, owner, name, github, projectDirectory, number, stack: options.stack, stackState: registry.stackState, numberOption: options.numberOption,
     sleep, readyQuery: common.readyQuery, dependentPrs: later.dependentPrs, runShell, gitAt, mergeGate: later.mergeGate, stackReasons: later.stackReasons, reviewsForHead: later.reviewsForHead,
-    poll: later.poll, readPr: later.readPr, baseMovement: later.baseMovement, filesText: later.filesText }));
+    poll: later.poll, progress: shared.progress, readPr: later.readPr, baseMovement: later.baseMovement, filesText: later.filesText }));
   // check, reviews, handoff, ready and link are the steps `start` and `done` take (`hidden` in their description): callable for those two and for the tests, but not listed.
-  await registry[spec.run]();
-  console.log = print;
-  for (const line of held) print(line);
+  const outcome = await registry[spec.run]();
+  if (isResult(outcome)) {
+    output.finish(outcome);
+    process.exitCode = outcome.exitCode;
+  }
 } catch (error) {
-  console.log = print;
   // A failed read is never "no blockers" and never a finished review.
   if (!commandNames.filter(known => !['next', 'sweep', 'block', 'sub'].includes(known)).includes(command)) throw error;
   const message = String(error.stderr || error.message).trim();
-  console.log(oneLine ? `ERROR - ${message.replace(/\s*\n\s*/g, ' ')}` : `${command === 'check' ? 'UNKNOWN' : 'ERROR'}\n- ${message}`);
+  output.finish(oneLine ? result('error', 'ERROR', { headline: `ERROR - ${message.replace(/\s*\n\s*/g, ' ')}`, blockers: [message], inline: true })
+    : result('error', command === 'check' ? 'UNKNOWN' : 'ERROR', { blockers: [message], bullet: '- ' }));
   process.exitCode = 2;
 } finally {
   // Waiting commands already print their quota with the verdict; all other commands need the same evidence, also on failure.
   const alreadyPrintedQuota = ['reviews', 'wait', 'quota-wait'].includes(command)
     || (process.exitCode === 4 && ['handoff', 'merge'].includes(command));
-  if (github.quota && (process.exitCode === 2 || !alreadyPrintedQuota)) console.error(quotaLine());
+  if (github.quota && (process.exitCode === 2 || !alreadyPrintedQuota)) output.diagnostic(quotaLine());
 }

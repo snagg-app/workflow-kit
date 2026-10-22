@@ -1,6 +1,7 @@
 // `check ISSUE`: the start verdict of an issue and the reasons behind it.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
+import { result } from './board-result.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -120,12 +121,8 @@ export function createCheck(env) {
   /** True when open predecessors are the only thing holding the issue: a stack may then replace the wait. */
   const heldOnlyByOpenPredecessors = (reasons, predecessors) => predecessors.open.length > 0 && reasons.length === predecessors.open.length;
 
-  /** STARTABLE and STACKABLE both allow work; check() reports the latter with exit 4, which a successful guarded command must not keep. */
-  function mayStart(verdict) {
-    if (!['STARTABLE', 'STACKABLE'].includes(verdict)) return false;
-    process.exitCode = 0;
-    return true;
-  }
+  /** STARTABLE and STACKABLE both allow work; check() reports the latter with exit 4, which only the `check` command keeps. */
+  const mayStart = judged => ['STARTABLE', 'STACKABLE'].includes(judged.verdict);
 
   /** Verdict inputs of one issue, shared by the issue itself and its sub-issues. */
   function issueReasons(issue) {
@@ -228,32 +225,34 @@ export function createCheck(env) {
     } catch (error) { unknown.push(`own open work is unreadable: ${String(error.stderr || error.message).trim()}`); }
     const plain = verdictOf({ blocked, unknown });
     const verdict = state.stackedOn && plain === 'STARTABLE' ? 'STACKABLE' : plain;
-    console.log(`${issueProject.repository}#${issue.number} ${issue.title}\nstatus: ${status ?? '-'}, assignees: ${logins(issue) || 'none'}\n${verdict}`);
-    for (const reason of [...blocked, ...unknown]) console.log(`- ${reason}`);
+    const lines = [];
     // Only where loadDeliveries ran (open predecessors alone hold the issue) the PRs are known; elsewhere nothing is claimed.
-    for (const predecessor of predecessors.open) if (predecessor.closedByPullRequestsReferences?.nodes) console.log(predecessorLine(predecessor));
-    if (state.stackedOn) console.log(state.stackedOn.state === 'MERGED'
+    for (const predecessor of predecessors.open) if (predecessor.closedByPullRequestsReferences?.nodes) lines.push(predecessorLine(predecessor));
+    if (state.stackedOn) lines.push(state.stackedOn.state === 'MERGED'
       ? `stack base: PR #${state.stackedOn.number} is already merged into ${state.stackedOn.baseRefName}: no stack, work on ${state.stackedOn.baseRefName}; see docs/CONTRIBUTING.md#stacked-pull-requests`
       : `stack base: PR #${state.stackedOn.number}${state.stackedOn.stackNumber ? ` in stack #${state.stackedOn.stackNumber}` : ''} (branch ${state.stackedOn.headRefName}, base ${state.stackedOn.baseRefName}); see docs/CONTRIBUTING.md#stacked-pull-requests`);
-    for (const note of notes) console.log(`note: ${note}`);
-    if (claims) for (const line of baseLines(issue, state.stackedOn)) console.log(line);
+    for (const note of notes) lines.push(`note: ${note}`);
+    if (claims) lines.push(...baseLines(issue, state.stackedOn));
     if (claims) {
       const linked = issue.closedByPullRequestsReferences;
       const prs = openPrs(issue).map(pr => `${refOf(pr.repository, pr.number)} (Session ${claimOf(pr)?.[2] ?? 'unknown'})`);
       // A list cut at 100 is never presented as complete.
       const cut = linked?.totalCount > linked?.nodes?.length ? ` (first ${linked.nodes.length} of ${linked.totalCount})` : '';
-      if (prs.length) console.log(`open PR: ${prs.join(', ')}${cut}`);
-      else if (commentClaims(issue).length) console.log(`claim: session ${commentClaims(issue).at(-1)[2]} (no PR yet)`);
+      if (prs.length) lines.push(`open PR: ${prs.join(', ')}${cut}`);
+      else if (commentClaims(issue).length) lines.push(`claim: session ${commentClaims(issue).at(-1)[2]} (no PR yet)`);
     }
+    const children = [];
     if (claims && issue.subIssues?.nodes?.length) {
-      if (issue.subIssues.totalCount > issue.subIssues.nodes.length) console.log(`note: ${issue.subIssues.nodes.length} of ${issue.subIssues.totalCount} sub-issues listed`);
+      if (issue.subIssues.totalCount > issue.subIssues.nodes.length) lines.push(`note: ${issue.subIssues.nodes.length} of ${issue.subIssues.totalCount} sub-issues listed`);
       for (const child of issue.subIssues.nodes) {
-        console.log(`${refOf(child.repository, child.number)}  ${projectItem(child)?.status?.name ?? '-'}  ${logins(child) || '-'}  ${verdictOf(issueReasons(child))}`);
+        children.push(`${refOf(child.repository, child.number)}  ${projectItem(child)?.status?.name ?? '-'}  ${logins(child) || '-'}  ${verdictOf(issueReasons(child))}`);
       }
     }
     // STACKABLE is not 0: a caller that knows only STARTABLE must not start it without the stack rules.
-    process.exitCode = { STARTABLE: 0, BLOCKED: 1, UNKNOWN: 2, STACKABLE: 4 }[verdict];
-    return verdict;
+    return result({ STARTABLE: 'ok', BLOCKED: 'failed', UNKNOWN: 'error', STACKABLE: 'again' }[verdict], verdict, { bullet: '- ',
+      title: [`${issueProject.repository}#${issue.number} ${issue.title}`, `status: ${status ?? '-'}, assignees: ${logins(issue) || 'none'}`],
+      blockers: [...blocked, ...unknown], notes: [...lines, ...children],
+      data: { issue: issue.number, status, stackedOn: state.stackedOn?.number } });
   }
 
   const checkCommand = () => check(readIssue(true), { session: sessionOption() });
