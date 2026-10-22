@@ -13,6 +13,7 @@ sets `submodule.recurse true` and `push.recurseSubmodules no` in the clone (only
 sets In progress and posts the claim comment (`Agent: claude|codex, Session: ID` and `Basis: BRANCH`, the base: the base PR's branch of a stack,
 else the Project base field, else the default branch). It creates no branch and no PR: the first `done` pushes your branch
 (`<agent>/<number>-<title>`, or the checkout's own branch of that shape) and opens the Draft PR (`Closes #N` and the claim line) with its native link.
+When the branch already has an open PR that the issue does not list yet, `done` reuses and links it instead of opening a second one (GitHub answers 422, #725).
 An issue that already has an open PR (a takeover, a resume) continues on that PR's branch (`git switch`). Then it runs `git fetch origin`, brings the kit to its pin, and
 last the optional `"setup"` shell command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`, run like a `push` command, in the checkout, with `BRANCH`);
 if it fails, `start` ends with an error and the output, claim and status stay, and `start` again resumes. The claim holds the issue for every session whose ID it does not name; once the PR exists, its body line is the claim. Keep the claim
