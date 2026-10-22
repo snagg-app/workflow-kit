@@ -183,6 +183,14 @@ on the project board.
 
 ## Hooks
 
+Two levels. Level 0 serves every agent, with or without hooks: `AGENTS.md`, the shared skills,
+`board.mjs` and `node .vendor/workflow-kit/scripts/kit.mjs check`. `kit check` is the one place of
+the kit checks (kit link and state, stale branch, missing `node_modules`; `scripts/kit-check.mjs`);
+`board.mjs start` and `next` call it and print the same hints. An agent without hooks runs
+`kit check` at session start and follows the hints. Level 1 is Claude and Codex: the hook below
+runs the same check earlier, at session start. Hooks speed it up; nothing depends on them.
+The kit adds no adapter for further agents.
+
 The hook module `scripts/kit-hook.mjs` installs the Ponytail and Impeccable hooks, fast-forwards a
 clean stale checkout, clones the shared kit when it is missing, links it into the project and pulls
 it to the newest `main` by itself; its hints name the command when it cannot ([Hooks](README.md#hooks)). Follow the hint: restart once after "hooks are OFF",

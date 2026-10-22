@@ -159,7 +159,7 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail', 'scripts/impeccable'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
-  for (const file of ['kit-hook', 'provider', 'provider-ponytail', 'provider-impeccable', 'provider-links', 'agents', 'checkout-root', 'project-profile'])
+  for (const file of ['kit-hook', 'kit-check', 'provider', 'provider-ponytail', 'provider-impeccable', 'provider-links', 'agents', 'checkout-root', 'project-profile'])
     copyFileSync(path.join(root, `scripts/${file}.mjs`), path.join(checkout, `scripts/${file}.mjs`));
   copyFileSync(path.join(root, 'scripts/versions.json'), path.join(checkout, 'scripts/versions.json'));
   mkdirSync(path.join(checkout, '.git'));

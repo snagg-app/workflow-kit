@@ -99,7 +99,7 @@ for (const name of templates) {
 }
 // The kit's handlers come from the agent table and the project's functions (profile); without an entry, a file only loses them.
 const features = projectFeatures(root);
-const hookTemplates = new Map(Object.entries(agents).map(([name, agent]) => [agent.hooks.file, hookSettings(name, features)]));
+const hookTemplates = new Map(Object.entries(agents).filter(([, agent]) => agent.hooks).map(([name, agent]) => [agent.hooks.file, hookSettings(name, features)]));
 const githubHooks = existsSync(join(root, '.github/hooks')) ? readdirSync(join(root, '.github/hooks')).map(file => `.github/hooks/${file}`) : [];
 for (const name of new Set([...hookTemplates.keys(), '.cursor/hooks.json', ...githubHooks]))
   if (isHooks(name) && (hookTemplates.has(name) || existsSync(safe(name)))) mergeHooks(name, hookTemplates.get(name));

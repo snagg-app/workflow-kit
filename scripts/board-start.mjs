@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { shared } from './board-args.mjs';
 import { pushPlan, targetBranch } from './board-checkout.mjs';
 import { result } from './board-result.mjs';
+import { kitCheck, modulesCheck } from './kit-check.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -66,6 +67,8 @@ export function createStart(env) {
     const agent = process.env.CODEX_THREAD_ID ? 'codex' : 'claude', modules = join(projectDirectory, '.gitmodules');
     const session = sessionOption();
     assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
+    // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
+    [...kitCheck(projectDirectory, { git }), ...modulesCheck(projectDirectory, { git })].forEach(progress);
     // One checkout-wide setting each, so a kit commit never rides along with a project push and a branch switch follows the kit pin.
     if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);
     const issue = readIssue();

@@ -63,7 +63,10 @@ every branch and worktree has the newest kit without a merge. After a kit update
 `kit setup` again and commit what it changes; a run that changes nothing proves nothing
 about the new kit.
 
-The kit supports only Codex and Claude Code. Projects from earlier kit versions keep
+The kit has hook adapters only for Codex and Claude Code. Any other agent works at level 0
+(`AGENTS.md`, skills, `board.mjs`, `kit.mjs check`; see [Hooks](AGENT_RULES.md#hooks)); an
+agent without hooks has `hooks: null` in `scripts/agents.mjs`, and `kit setup` then names the one
+line for its `AGENTS.md`. Projects from earlier kit versions keep
 their copies for Antigravity, Cursor, OpenCode, Pi and Copilot: `init-project` removes
 only the kit's handlers from `.cursor/hooks.json` and `.github/hooks/*.json`, and the
 kit never deletes other project files. Delete `.agent/`, `.cursor/`, `.opencode/`,
