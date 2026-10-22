@@ -34,7 +34,7 @@ function install() {
     try {
       // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
       for (const name of ['ponytail', 'impeccable'])
-        spawnSync(process.execPath, [path.join(scripts, `install-${name}-hooks.mjs`)], { stdio: ['ignore', log, log], timeout: 300_000 });
+        spawnSync(process.execPath, [path.join(scripts, 'provider.mjs'), name, 'install'], { stdio: ['ignore', log, log], timeout: 300_000 });
     } finally {
       closeSync(log);
     }
@@ -257,9 +257,9 @@ else {
       if (parsed.hookSpecificOutput?.additionalContext) context.push(parsed.hookSpecificOutput.additionalContext);
     } catch { if (text) context.push(text); }
   } else if (event === 'SessionStart') {
-    say('Ponytail hooks are OFF. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs (maintainer pre-authorized, writes no trust).');
+    say('Ponytail hooks are OFF. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs ponytail install (maintainer pre-authorized, writes no trust).');
   }
   if (event === 'SessionStart' && fresh && !existsSync(engine))
-    say('Impeccable hooks are OFF, UI checks do not run. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/install-impeccable-hooks.mjs (maintainer pre-authorized, writes no trust).');
+    say('Impeccable hooks are OFF, UI checks do not run. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs impeccable install (maintainer pre-authorized, writes no trust).');
   emit();
 }

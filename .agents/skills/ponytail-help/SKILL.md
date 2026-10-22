@@ -44,7 +44,7 @@ resume with `/ponytail` (off enables the default level; an active mode reports i
 
 This checkout bundles skills plus Node.js lifecycle hooks for Codex, Claude Code,
 Copilot and Cursor. From a reviewed checkout, initialize them with
-`node .vendor/workflow-kit/scripts/install-ponytail-hooks.mjs`, then enable the host's project trust/hooks
+`node .vendor/workflow-kit/scripts/provider.mjs ponytail install`, then enable the host's project trust/hooks
 to activate the default mode at session start. Default priority: `PONYTAIL_DEFAULT_MODE`, then personal
 Ponytail config `defaultMode`, then `full`. Supported defaults: off/lite/full/ultra.
 `/ponytail default lite` saves a personal default; ordinary mode switches do not.

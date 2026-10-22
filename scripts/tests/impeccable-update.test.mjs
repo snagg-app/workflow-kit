@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { releasePins, updateImpeccable } from '../update-impeccable.mjs';
+import { releasePins, updateImpeccable } from '../impeccable-release.mjs';
 import { skipWithoutSubmodules } from './fixtures.mjs';
 
 const skip = skipWithoutSubmodules();
@@ -66,7 +66,7 @@ function unstagedProposal(root) {
 
 test('a stale Renovate engine pin is completed for every hook and provider, then reruns without drift', { skip }, async t => {
   const { root, expected } = fixture(t);
-  const before = spawnSync(process.execPath, [join(root, 'scripts/setup-impeccable.mjs')], { cwd: root, encoding: 'utf8' });
+  const before = spawnSync(process.execPath, [join(root, 'scripts/provider.mjs'), 'impeccable', 'setup'], { cwd: root, encoding: 'utf8' });
   assert.notEqual(before.status, 0, 'Reproduce the incomplete skill/engine update before fixing it');
   unstagedProposal(root);
   const tree = () => execFileSync('git', ['write-tree'], { cwd: root, encoding: 'utf8' });
