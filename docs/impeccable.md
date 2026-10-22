@@ -13,7 +13,7 @@ After proposing the official `skill-v` tag and gitlink, run one command from the
 kit checkout:
 
 ```sh
-node scripts/update-impeccable.mjs
+node scripts/provider.mjs impeccable update
 ```
 
 It reads the engine version from both pinned skill packages, checks the
@@ -37,7 +37,7 @@ showed Community (Free), Renovate 44.125.1, and only `^git add --all$`,
 According to the [Mend FAQ](https://docs.renovatebot.com/mend-hosted/faq/#how-can-i-run-arbitrary-commands-through-postupgradetasks),
 Free users cannot request arbitrary commands. An org admin must first request
 Community (OSS) eligibility for the MIT-licensed `snagg-app/workflow-kit`, then
-ask Mend to allowlist exactly `^node scripts/update-impeccable\.mjs$` for this
+ask Mend to allowlist exactly `^node scripts/provider\.mjs impeccable update$` for this
 repository. OSS acceptance and command approval are Mend's decisions.
 
 Prepared [Mend Hosted Request](https://github.com/renovatebot/renovate/discussions/new?category=mend-hosted-request)
@@ -45,7 +45,7 @@ text, for the org admin to submit:
 
 > Please assess snagg-app/workflow-kit (https://github.com/snagg-app/workflow-kit,
 > MIT) for the Community (OSS) plan and allowlist
-> `^node scripts/update-impeccable\.mjs$` for this repository. This command
+> `^node scripts/provider\.mjs impeccable update$` for this repository. This command
 > completes only official Impeccable skill updates: it reads upstream files as
 > data, validates five public engine artifacts and checksums, and runs our
 > existing generators. It makes six public HTTPS metadata reads per update,
@@ -65,7 +65,7 @@ Do not treat a skipped or forbidden command as a successful update.
 ## Hooks
 
 Follow [hook installation and trust](../README.md#hooks). Hooks run only the
-engine installed by `install-impeccable-hooks.mjs` in
+engine installed by `provider.mjs impeccable install` in
 `~/.impeccable/workflow-kit/engine-<version>/`, verified against `SHA256SUMS` even when
 reused. Without it, SessionStart prints an install hint; edit/Stop hooks stay
 silent without claiming analysis. Engine 0.1.15 analyzes only session-touched files at Stop.

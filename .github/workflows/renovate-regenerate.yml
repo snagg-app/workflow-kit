@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           authors=$(git log --format='%an' origin/main..HEAD | sort -u)
           if [ -n "$(printf '%s\n' "$authors" | grep -v -x -e 'renovate\[bot\]' -e 'github-actions\[bot\]' || true)" ]; then
-            echo "::notice::Commits by someone else on this branch; regenerate by hand: node scripts/update-ponytail.mjs"
+            echo "::notice::Commits by someone else on this branch; regenerate by hand: node scripts/provider.mjs ponytail update"
             echo "SKIP=true" >> "$GITHUB_ENV"
             exit 0
           fi
@@ -93,8 +93,8 @@ jobs:
           set -euo pipefail
           changed=$(git diff --name-only origin/main...HEAD)
           # Ponytail first: the other generators fail on a stale adaptation patch.
-          if grep -qx '.vendor/ponytail' <<<"$changed"; then node scripts/update-ponytail.mjs; fi
-          if grep -qx '.vendor/impeccable' <<<"$changed"; then node scripts/update-impeccable.mjs; fi
+          if grep -qx '.vendor/ponytail' <<<"$changed"; then node scripts/provider.mjs ponytail update; fi
+          if grep -qx '.vendor/impeccable' <<<"$changed"; then node scripts/provider.mjs impeccable update; fi
           node scripts/init-project.mjs --existing
           node scripts/setup-skills.mjs
       - name: Commit and push

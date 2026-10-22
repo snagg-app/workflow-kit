@@ -1,23 +1,18 @@
-// Port scripts/ponytail/adaptations.patch to the Ponytail revision the submodule now points at,
-// then regenerate the committed skills. Run after a submodule bump (Renovate or manual).
+// Port scripts/ponytail/adaptations.patch to the Ponytail revision the submodule now points at (the update of provider-ponytail.mjs).
 // The old patch is replayed onto the previous upstream files and 3-way merged with the new upstream files,
 // like `quilt refresh`; a real conflict stops with the file name instead of guessing.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join, relative } from 'node:path';
 import { checkDirectory } from './provider-links.mjs';
 
-const kit = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const source = join(kit, '.vendor/ponytail');
-const patchPath = join(kit, 'scripts/ponytail/adaptations.patch');
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'core.autocrlf=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 const lf = text => text.replaceAll('\r\n', '\n');
 
 /** Files and contents of the patched upstream paths at one revision; a CI checkout may only hold the new pin. */
-const upstream = (revision, files) => {
+const upstream = (source, revision, files) => {
   try { git(source, 'cat-file', '-e', `${revision}^{commit}`); }
   catch { git(source, 'fetch', '--no-tags', 'origin', revision); }
   return Object.fromEntries(files.map(file => {
@@ -157,31 +152,32 @@ export function patchedFiles(patch) {
   return [...patch.matchAll(/^diff --git a\/(\S+) b\/\S+$/gm)].map(match => match[1]);
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+/** `from`: the upstream revision the patch targets now; by default the pin of the last commit that changed the patch. */
+export async function updatePatch(kit, submodule, patchFile, from) {
+  const source = join(kit, submodule), patchPath = join(kit, patchFile);
   const to = git(source, 'rev-parse', 'HEAD').trim();
   // The generators read the index pin and reset the submodule to it, so stage a bump that is only checked out.
-  if (git(kit, 'rev-parse', ':.vendor/ponytail').trim() !== to) git(kit, 'add', '--', '.vendor/ponytail');
+  if (git(kit, 'rev-parse', `:${submodule}`).trim() !== to) git(kit, 'add', '--', submodule);
   const patch = lf(readFileSync(patchPath, 'utf8'));
   const files = patchedFiles(patch);
-  const target = upstream(to, files);
+  const target = upstream(source, to, files);
   // A patch that already fits the new upstream (earlier run, or unrelated pin bump) needs no port.
   if (patchApplies(patch, target)) {
     console.log(`Ponytail adaptations already fit ${to.slice(0, 7)}.`);
   } else {
     // The patch targets the pin recorded in the last commit that changed it; pass a revision when the history is shallow.
-    const lastPatchCommit = git(kit, 'log', '-1', '--format=%H', '--', 'scripts/ponytail/adaptations.patch').trim();
-    const from = process.argv[2] ?? (lastPatchCommit && git(kit, 'ls-tree', lastPatchCommit, '.vendor/ponytail').split(/\s+/)[2]);
-    assert.ok(from, 'No previous upstream revision: pass it as the first argument');
+    const lastPatchCommit = git(kit, 'log', '-1', '--format=%H', '--', patchFile).trim();
+    from ??= lastPatchCommit && git(kit, 'ls-tree', lastPatchCommit, submodule).split(/\s+/)[2];
+    assert.ok(from, 'No previous upstream revision: pass it as the argument after update');
     const resolved = loadResolved(kit, files, to);
     try {
-      writeFileSync(patchPath, refreshPatch({ patch, from: upstream(from, files), to: target, files, resolved }));
+      writeFileSync(patchPath, refreshPatch({ patch, from: upstream(source, from, files), to: target, files, resolved }));
     } catch (error) {
       if (!error.conflicts) throw error;
       const dir = saveConflicts(kit, error.conflicts, to);
-      throw new Error(`${error.message}. Resolve the conflict markers in ${dir}, then run node scripts/update-ponytail.mjs again.`);
+      throw new Error(`${error.message}. Resolve the conflict markers in ${dir}, then run node scripts/provider.mjs ponytail update again.`);
     }
     clearResolved(kit);
     console.log(`Ponytail adaptations ported from ${from.slice(0, 7)} to ${to.slice(0, 7)}.`);
   }
-  execFileSync(process.execPath, [join(kit, 'scripts/setup-ponytail.mjs')], { stdio: 'inherit' });
 }

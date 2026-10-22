@@ -1,10 +1,10 @@
-// Complete a reviewed submodule update before committing its generated outputs.
+// Complete a reviewed submodule update before committing its generated outputs (the update of provider-impeccable.mjs).
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { externalTool, projectRoot } from './checkout-root.mjs';
+import { externalTool } from './checkout-root.mjs';
 import { providers } from './agents.mjs';
 import { checkDirectory } from './provider-links.mjs';
 
@@ -98,9 +98,4 @@ export async function updateImpeccable(kit, { release, checksum } = {}) {
     execFileSync(process.execPath, [join(kit, 'scripts', command), ...command === 'init-project.mjs' ? ['--existing'] : []],
       { cwd: kit, stdio: 'inherit' });
   console.log(`Complete Impeccable update: ${tag}, engine ${version}; review and commit the generated diff.`);
-}
-
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  assert.equal(projectRoot(), kitRoot, 'Run update-impeccable inside the workflow-kit checkout');
-  await updateImpeccable(kitRoot);
 }

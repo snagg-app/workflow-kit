@@ -22,7 +22,7 @@
       ],
       "versioning": "regex:^skill-v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)$",
       "postUpgradeTasks": {
-        "commands": ["node scripts/update-impeccable.mjs"],
+        "commands": ["node scripts/provider.mjs impeccable update"],
         "executionMode": "branch",
         "fileFilters": [
           "scripts/impeccable/**",

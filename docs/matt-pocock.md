@@ -1,7 +1,7 @@
 # Matt Pocock skills
 
 Source: [mattpocock/skills](https://github.com/mattpocock/skills), pinned at
-`.vendor/matt-pocock-skills` (MIT). `setup-matt-pocock.mjs` copies complete skills,
+`.vendor/matt-pocock-skills` (MIT). `provider-matt-pocock.mjs` (run by `provider.mjs`) copies complete skills,
 including references, templates, scripts and `agents/openai.yaml`, without
 executing upstream installers.
 
@@ -15,7 +15,7 @@ in an update (changed files, new reference files, new revision) passes without a
 the Renovate regenerate workflow regenerates the outputs, and the test compares every
 tracked file of every listed skill with the published copy.
 
-**Deviations from upstream** (`adapt` in `setup-matt-pocock.mjs`). The generated `retro`
+**Deviations from upstream** (`adapt` in `provider-matt-pocock.mjs`). The generated `retro`
 copy drops `disable-model-invocation`, because the review loop makes every agent run the
 retro before handoff and the Skill tool refuses a flagged skill. The generated `implement`
 copy leaves the full test suite to CI instead of running it once at the end

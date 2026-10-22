@@ -6,6 +6,7 @@ import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { materialize } from '../provider-links.mjs';
+import { coreSkills } from '../project-profile.mjs';
 import { kitCheckout, skipWithoutSubmodules } from './fixtures.mjs';
 
 const kit = fileURLToPath(new URL('../../', import.meta.url));
@@ -36,6 +37,8 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   // The first run names the fixture with --cwd from another checkout, which must stay untouched; the second runs in the fixture.
   const elsewhere = temporary(t, 'workflow-kit elsewhere ');
   execFileSync('git', ['init', '--quiet', elsewhere]);
+  mkdirSync(join(fixture, '.github')); // the commit step below needs every kit skill, which only "all" keeps
+  writeFileSync(join(fixture, '.github/workflow-project.json'), '{"skills": "all"}');
   for (const [cwd, args] of [[elsewhere, ['--cwd', fixture]], [fixture, []]]) {
     const result = setup('setup-skills.mjs', cwd, ...args);
     assert.equal(result.status, 0, result.stderr);
@@ -67,7 +70,7 @@ test('generated skills and hook sources survive a plain clone without setup', { 
         for (const file of ['SKILL.md', 'LICENSE', 'NOTICE.md'])
           assert.deepEqual(readFileSync(join(clone, path, file)), readFileSync(join(kit, '.agents/skills/find-skills', file)));
     }
-  for (const retired of ['.agent', '.cursor', '.github', '.opencode', '.pi'])
+  for (const retired of ['.agent', '.cursor', '.opencode', '.pi'])
     assert.equal(existsSync(join(fixture, retired)), false, `No output for unsupported agents: ${retired}`);
   assert.ok(lstatSync(join(clone, '.agents/hooks/ponytail-activate.js')).isFile());
   assert.ok(lstatSync(join(clone, '.codex/agents/impeccable_finish_reviewer.toml')).isFile());
@@ -82,7 +85,7 @@ test('setup never runs a Git from the checkout or the working directory', t => {
   mkdirSync(tools);
   copyFileSync(process.execPath, git);
   chmodSync(git, 0o755);
-  const result = spawnSync(process.execPath, [join(kit, 'scripts/setup-ponytail.mjs')],
+  const result = spawnSync(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'setup'],
     { cwd: root, encoding: 'utf8', env: { ...process.env, PATH: [tools, '.'].join(delimiter) } });
   assert.notEqual(result.status, 0);
   assert.equal(existsSync(join(root, '.workflow-kit')), false, 'Refused before any write');
@@ -101,7 +104,12 @@ test('the project file chooses the kit skills; the project\'s own skills stay', 
   execFileSync('git', ['init', '--quiet', fixture]);
   const setup = () => spawnSync(process.execPath, [join(scripts, 'setup-skills.mjs')], { cwd: fixture, encoding: 'utf8' });
   const has = (provider, name) => existsSync(join(fixture, provider, 'skills', name));
-  assert.equal(setup().status, 0);
+  const first = setup();
+  assert.equal(first.status, 0, first.stderr);
+  for (const provider of ['.agents', '.claude']) {
+    assert.deepEqual(coreSkills.filter(name => !has(provider, name)), [], 'the core is active without a choice');
+    assert.ok(!has(provider, 'tdd') && !has(provider, 'impeccable'), provider);
+  }
   mkdirSync(join(fixture, '.claude/skills/mine'), { recursive: true });
   mkdirSync(join(fixture, '.github'));
   const profile = join(fixture, '.github/workflow-project.json');
@@ -113,6 +121,12 @@ test('the project file chooses the kit skills; the project\'s own skills stay', 
     assert.ok(!has(provider, 'grilling') && !has(provider, 'find-skills') && !has(provider, 'impeccable'), provider);
   }
   assert.ok(has('.claude', 'mine'), 'a skill of the project is not touched');
+  writeFileSync(profile, JSON.stringify({ skills: ['core', 'tdd'] }));
+  assert.equal(setup().status, 0);
+  assert.ok(has('.agents', 'tdd') && has('.agents', 'grilling') && !has('.agents', 'impeccable'));
+  writeFileSync(profile, JSON.stringify({ skills: 'all' }));
+  assert.equal(setup().status, 0);
+  assert.ok(has('.agents', 'impeccable') && has('.claude', 'tdd'));
   writeFileSync(profile, JSON.stringify({ skills: ['tdd', 'typo'] }));
   assert.notEqual(setup().status, 0);
 });

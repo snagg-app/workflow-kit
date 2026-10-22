@@ -7,6 +7,9 @@ kit paths drop the `.vendor/workflow-kit/` prefix (`node scripts/board.mjs start
   `.agents/skills/find-skills` snapshot. Update its source notice with its upstream
   pin. Kit-owned skills (`spec-review`) are edited in `.agents/skills/` only;
   `.claude/skills` holds only links to them (and the Impeccable copy), so edit nothing there.
+- One engine, `scripts/provider.mjs <provider> <setup|install|update>`, publishes and installs the skills and hooks of every provider
+  (lock, error log, checksum, never overwrite, cleanup live there only). A provider is a description `scripts/provider-<name>.mjs` plus one line in the
+  engine's list: a fourth provider adds no safety code.
 - After scripts, templates or patches change, run [Developing the kit](README.md#developing-the-kit)
   and [Commit generated files](README.md#commit-generated-files), including executable modes.
 - Tests cover behavior that protects users (no checkout code in hooks, no lost

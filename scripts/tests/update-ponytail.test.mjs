@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { clearResolved, loadResolved, patchApplies, patchedFiles, refreshPatch, saveConflicts } from '../update-ponytail.mjs';
+import { clearResolved, loadResolved, patchApplies, patchedFiles, refreshPatch, saveConflicts } from '../ponytail-patch.mjs';
 
 const lines = (...overrides) => Array.from({ length: 12 }, (_, i) => overrides.find(([n]) => n === i + 1)?.[1] ?? `line ${i + 1}`).join('\n') + '\n';
 const FILE = 'hooks/ponytail-example.js';

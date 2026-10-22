@@ -36,10 +36,17 @@ export function textsFor(project) {
   return texts[language];
 }
 
-/** The kit skills the project keeps, from "skills" (a list of names); null keeps all of them. */
+/** The skills every project gets without a choice. Why these: docs/skill-core.md. */
+export const coreSkills = ['spec-review', 'find-skills', 'pr', 'code-review', 'ponytail', 'ponytail-review', 'grilling', 'writing-for-agents', 'codebase-design', 'to-tickets'];
+
+/**
+ * The kit skills the project keeps, from "skills": a list of names, where "core" stands for the core set;
+ * "all" keeps every kit skill (null). Omitted means the core set.
+ */
 export function activeSkills(project) {
-  if (project.skills === undefined) return null;
+  if (project.skills === undefined) return coreSkills;
+  if (project.skills === 'all') return null;
   assert.ok(Array.isArray(project.skills) && project.skills.every(name => typeof name === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)),
-    'skills in .github/workflow-project.json must be a list of kit skill names, for example ["tdd", "ponytail"]; omit it to keep all kit skills');
-  return project.skills;
+    'skills in .github/workflow-project.json must be "all" or a list of kit skill names, for example ["core", "tdd"]; omit it to keep the core skills');
+  return project.skills.flatMap(name => name === 'core' ? coreSkills : [name]);
 }
