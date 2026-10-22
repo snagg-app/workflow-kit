@@ -15,7 +15,7 @@ choose one source in the agent's settings.
 
 Follow [hook installation and trust](../README.md#hooks).
 `provider.mjs ponytail install` copies generated hooks to
-`~/.ponytail/workflow-kit/<version>/`, refusing destinations inside any Git checkout.
+`~/.ponytail/workflow-kit/<version>-<content hash>/`, refusing destinations inside any Git checkout.
 Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 
 - The launchers never search PATH and never run checkout files. Only the hook module
@@ -26,7 +26,7 @@ Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 - If that Node is removed later, SessionStart reports the hooks as off and reinstalls them for the next start.
 - The installers list older installations they no longer need; they never delete them.
 
-Snapshots are immutable per version; changed same-version snapshots are refused.
+Snapshots are immutable and named by version plus a hash of the copied files, so checkouts at different states install side by side; a snapshot that differs from its name is refused.
 New versions change hook commands and need trust again. Execution policies stay
 unchanged; no PowerShell script file runs.
 

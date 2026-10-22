@@ -1,5 +1,6 @@
 // Anbieter Ponytail (DietrichGebert/ponytail): Skills und Hook-Quellen, angepasst durch scripts/ponytail/adaptations.patch. Die Engine steht in provider.mjs.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { providers, sourceProviders } from './agents.mjs';
@@ -10,6 +11,17 @@ const hooks = ['activate', 'config', 'instructions', 'mode-tracker', 'runtime', 
 // What the personal installation copies from the project's committed files.
 const installed = ['.agents/hooks/LICENSE.md', ...hooks.map(name => `.agents/hooks/${name}.js`),
   '.agents/skills/ponytail/SKILL.md', '.agents/skills/ponytail/LICENSE.md', '.agents/skills/ponytail/NOTICE.md'];
+/** The committed files the personal installation copies, by name. */
+const sources = root => installed.map(file => {
+  if (!existsSync(path.join(root, file))) throw new Error(`Committed Ponytail sources missing in ${root} (${file}); restore the project's skill/hook files or complete its reviewed kit update.`);
+  return [file, readFileSync(path.join(root, file))];
+});
+/** Version plus a hash of the copied files: checkouts at different states get different snapshots instead of refusing each other's. */
+export function snapshotDirectory(version, root) {
+  const hash = createHash('sha256');
+  for (const [file, bytes] of sources(root)) hash.update(`${file}|${bytes.length}|`).update(bytes);
+  return `${version}-${hash.digest('hex').slice(0, 12)}`;
+}
 const put = (file, content) => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, content); };
 
 export default {
@@ -40,13 +52,10 @@ export default {
 
   install: {
     home: ['.ponytail', 'workflow-kit'],
-    directory: version => version,
+    directory: (version, c) => snapshotDirectory(version, c.root),
     // The launchers pin the Node that runs the installer, which must be personal trusted code too.
     before: c => c.outside(path.dirname(realpathSync(process.execPath)), 'Run the installer with a Node installed outside Git checkouts.'),
-    files: c => Object.fromEntries(installed.map(file => {
-      if (!existsSync(path.join(c.root, file))) throw new Error(`Committed Ponytail sources missing in ${c.root} (${file}); restore the project's skill/hook files or complete its reviewed kit update.`);
-      return [file, { bytes: readFileSync(path.join(c.root, file)) }];
-    })),
+    files: c => Object.fromEntries(sources(c.root).map(([file, bytes]) => [file, { bytes }])),
     // The launchers only bind this Node; rerunning the installer after a Node change rewrites them.
     after(destination) {
       const node = realpathSync(process.execPath);
