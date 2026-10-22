@@ -6,7 +6,9 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statS
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { projectRoot } from './checkout-root.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
+import { snapshotDirectory } from './provider-ponytail.mjs';
 import { projectFeatures } from './project-profile.mjs';
 
 const self = fileURLToPath(import.meta.url);
@@ -27,6 +29,9 @@ function locked(lock, stale, work) {
   try { work(); } finally { rmSync(lock, { recursive: true, force: true }); }
 }
 
+/** The checkout both the installer and the launcher lookup read the Ponytail files from. */
+const hookProject = () => projectRoot(process.env.CLAUDE_PROJECT_DIR || undefined);
+
 /** One installer run per machine, for the functions the project uses. */
 function install(names) {
   const home = path.join(homedir(), '.ponytail', 'workflow-kit');
@@ -36,7 +41,7 @@ function install(names) {
     try {
       // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
       for (const name of names)
-        spawnSync(process.execPath, [path.join(scripts, 'provider.mjs'), name, 'install'], { stdio: ['ignore', log, log], timeout: 300_000 });
+        spawnSync(process.execPath, [path.join(scripts, 'provider.mjs'), name, 'install'], { cwd: hookProject(), stdio: ['ignore', log, log], timeout: 300_000 });
     } finally {
       closeSync(log);
     }
@@ -88,7 +93,9 @@ function fingerprint(dir, input) {
 
 /** The installed snapshots are personal and pinned to the Node that installed them, never a PATH lookup. */
 function launcher(action, ...extra) {
-  const file = path.join(homedir(), '.ponytail', 'workflow-kit', versions.ponytail, windows ? 'launch.cmd' : 'launch.sh');
+  let directory;
+  try { directory = snapshotDirectory(versions.ponytail, hookProject()); } catch { return null; } // the installer names the snapshot the same way
+  const file = path.join(homedir(), '.ponytail', 'workflow-kit', directory, windows ? 'launch.cmd' : 'launch.sh');
   if (!existsSync(file)) return null;
   const args = [action, agent, ...extra];
   return windows

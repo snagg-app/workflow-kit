@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { snapshotDirectory } from '../provider-ponytail.mjs';
 import { run as exec } from './fixtures.mjs';
 
 const root = process.env.WORKFLOW_KIT_TARGET || fileURLToPath(new URL('../../', import.meta.url));
@@ -47,8 +48,18 @@ test('installed hooks run for every event and agent without executing checkout p
   mkdirSync(path.dirname(checkoutNode));
   copyFileSync(process.execPath, checkoutNode);
   assert.notEqual(install({}, checkoutNode).status, 0, 'A Node inside a checkout is never pinned');
-  writeFileSync(path.join(checkout, '.agents/hooks/ponytail-activate.js'), 'throw new Error("changed");\n');
-  assert.notEqual(install().status, 0, 'Changed hook code needs a new snapshot version');
+  // Another checkout state gets its own snapshot next to the first; neither refuses the other (#735).
+  const hookFile = path.join(checkout, '.agents/hooks/ponytail-activate.js'), original = readFileSync(hookFile);
+  const first = snapshotDirectory(version, checkout);
+  writeFileSync(hookFile, 'throw new Error("changed");\n');
+  assert.notEqual(snapshotDirectory(version, checkout), first, 'the content is part of the snapshot name');
+  assert.equal(install().status, 0, 'Changed hook code installs a snapshot of its own');
+  writeFileSync(hookFile, original);
+  assert.equal(install().status, 0, 'The first state still installs and verifies');
+  const snapshotFile = path.join(env.HOME, '.ponytail/workflow-kit', first, '.agents/hooks/ponytail-activate.js');
+  writeFileSync(snapshotFile, 'tampered');
+  assert.notEqual(install().status, 0, 'A snapshot that differs from its name is still refused');
+  writeFileSync(snapshotFile, original);
 
   // Marker programs in the checkout and on PATH (including '.') must never run: the hooks start the pinned Node of the snapshot.
   // Git is not among them: the kit check has always called it by name.
@@ -83,7 +94,7 @@ public class Shim { public static void Main() { System.IO.File.WriteAllText(Syst
   assert.equal(existsSync(marker), false, 'a checkout program ran');
 
   // A failing installed hook stays a failure.
-  const activate = path.join(env.HOME, '.ponytail/workflow-kit', version, '.agents/hooks/ponytail-activate.js');
+  const activate = path.join(env.HOME, '.ponytail/workflow-kit', snapshotDirectory(version, checkout), '.agents/hooks/ponytail-activate.js');
   writeFileSync(activate, 'process.exit(7);');
   for (const agent of ['claude', 'codex']) assert.equal((await hook(agent, 'SessionStart', { source: 'resume' })).status, 7, agent);
 });
@@ -169,7 +180,7 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9', PONYTAIL_DEFAULT_MODE: 'full', CLAUDE_PROJECT_DIR: checkout };
   // Hook JSON in, hook JSON out: the same entry Claude and Codex call.
   const call = source => exec(process.execPath, [path.join(checkout, 'scripts/kit-hook.mjs'), 'SessionStart', '--agent', 'claude'], { cwd: checkout, env, input: JSON.stringify({ hook_event_name: 'SessionStart', source, cwd: checkout }), timeout: hookTimeout });
-  const launcher = path.join(home, '.ponytail/workflow-kit', version, 'launch.sh');
+  const launcher = path.join(home, '.ponytail/workflow-kit', snapshotDirectory(version, checkout), 'launch.sh');
   const first = (await call('startup')).stdout;
   assert.match(first, /Ponytail hooks are OFF/);
   assert.match(first, /Impeccable hooks are OFF/);
@@ -194,7 +205,7 @@ test('a removed pinned Node makes SessionStart say the hooks are off, other even
   const installed = spawnSync(node, [installer, 'ponytail', 'install'], { cwd: checkout, env, encoding: 'utf8' });
   assert.equal(installed.status, 0, installed.stderr);
   rmSync(node);
-  const launcher = path.join(home, '.ponytail/workflow-kit', version, windows ? 'launch.cmd' : 'launch.sh');
+  const launcher = path.join(home, '.ponytail/workflow-kit', snapshotDirectory(version, checkout), windows ? 'launch.cmd' : 'launch.sh');
   const launch = event => spawnSync(windows ? 'cmd.exe' : '/bin/sh', windows ? ['/c', launcher, event, 'claude'] : [launcher, event, 'claude'], { env, encoding: 'utf8' });
   const start = launch('activate');
   assert.equal(start.status, 0, start.stderr);
@@ -215,7 +226,7 @@ test('a project without UI files neither warns about nor downloads Impeccable', 
   assert.match(first, /Ponytail hooks are OFF/);
   assert.doesNotMatch(first, /Impeccable/);
   // The background installer ends when its lock is gone; it installs Ponytail and, for this project, nothing else.
-  const installed = path.join(home, '.ponytail/workflow-kit', version), lock = path.join(home, '.ponytail/workflow-kit/.install.lock');
+  const installed = path.join(home, '.ponytail/workflow-kit', snapshotDirectory(version, project)), lock = path.join(home, '.ponytail/workflow-kit/.install.lock');
   for (let wait = 0; (!existsSync(installed) || existsSync(lock)) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
   assert.ok(existsSync(installed), 'Ponytail installed');
   assert.equal(existsSync(path.join(home, '.impeccable')), false, 'no engine download');

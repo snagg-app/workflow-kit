@@ -155,13 +155,13 @@ async function bytesOf(name, entry) {
 }
 
 /**
- * Installs the personal files of a provider below `home`. The provider's `install` names the folder (`home` parts, `directory(version)`), the wanted files
+ * Installs the personal files of a provider below `home`. The provider's `install` names the folder (`home` parts, `directory(version, c)`), the wanted files
  * (`files(c, version)`: name -> { bytes } or { url, sha256 }, optional `mode`) and optional `before(c)` / `after(destination, c)` steps.
  * The folder is published whole and atomically; an existing one is only verified, never replaced.
  */
 export async function install(p, c) {
   const i = p.install, version = c.versions[p.name];
-  const parent = join(c.home, ...i.home), destination = join(parent, i.directory(version));
+  const parent = join(c.home, ...i.home), destination = join(parent, i.directory(version, c));
   c.outside(destination, `${p.label} installation must be outside Git checkouts. Use a personal home outside any checkout before installing or enabling hooks.`);
   i.before?.(c);
   const wanted = i.files(c, version);
