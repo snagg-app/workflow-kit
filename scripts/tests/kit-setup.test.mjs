@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
+import { statusMismatch } from '../project-profile.mjs';
 import { kitCheckout, skipWithoutSubmodules, temporary } from './fixtures.mjs';
 
 /** Every file below `dir` (links by target, the .git folder skipped) with a hash of its content. */
@@ -71,4 +72,15 @@ test('kit setup keeps the own hooks, settings and AGENTS.md of an existing proje
   assert.ok(settings.hooks.SessionStart.some(group => group.hooks.some(handler => handler.id === 'workflow-kit')));
   assert.equal(readFileSync(join(project, 'AGENTS.md'), 'utf8'), 'my rules\n');
   assert.equal(existsSync(join(project, 'CONTRIBUTING.md')), false, 'an existing project gets no starter files');
+});
+
+test('a board with a differently named status is told which name is missing and how to map it', () => {
+  const board = ['Backlog', 'Ready', 'In progress', 'Auto review', 'Human review', 'Done'];
+  assert.equal(statusMismatch([...board.slice(0, 3), 'Automated review', ...board.slice(4)], {}), null);
+  const message = statusMismatch(board, {});
+  assert.match(message, /Missing on the board: "Automated review"/);
+  assert.match(message, /Not expected: "Auto review"/);
+  assert.match(message, /"statuses":\{"automatedReview":"Auto review"\}/);
+  assert.equal(statusMismatch(board, { statuses: { automatedReview: 'Auto review' } }), null, 'the mapped name is accepted');
+  assert.match(statusMismatch(['Ready', 'Backlog', 'In progress', 'Automated review', 'Human review', 'Done'], {}), /order differs/);
 });
