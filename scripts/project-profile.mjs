@@ -1,4 +1,4 @@
-// What a project's .github/workflow-project.json says about its board statuses and the language of the texts board.mjs writes.
+// What a project's .github/workflow-project.json says about its board statuses the language of the texts board.mjs writes and the kit skills it keeps.
 import assert from 'node:assert/strict';
 
 const defaultStatuses = { backlog: 'Backlog', ready: 'Ready', inProgress: 'In progress', automatedReview: 'Automated review', humanReview: 'Human review', done: 'Done' };
@@ -34,4 +34,12 @@ export function textsFor(project) {
   const language = project.language ?? 'en';
   assert.ok(Object.hasOwn(texts, language), `language in .github/workflow-project.json must be one of ${Object.keys(texts).join(', ')}; omit it for "en"`);
   return texts[language];
+}
+
+/** The kit skills the project keeps, from "skills" (a list of names); null keeps all of them. */
+export function activeSkills(project) {
+  if (project.skills === undefined) return null;
+  assert.ok(Array.isArray(project.skills) && project.skills.every(name => typeof name === 'string' && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)),
+    'skills in .github/workflow-project.json must be a list of kit skill names, for example ["tdd", "ponytail"]; omit it to keep all kit skills');
+  return project.skills;
 }
