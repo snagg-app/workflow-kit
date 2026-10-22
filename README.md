@@ -229,9 +229,8 @@ one after the other (30 minutes each; a failure is a note, the merge stands), th
 ```
 
 - The list is read from the merge commit (GitHub contents API; a project without commands touches no git). The commands run with `BRANCH` in a throwaway worktree of that commit (never in the checkout, which may be old), without setup;
-  if that state has the kit gitlink, only `git submodule update --init .vendor/workflow-kit` runs first. Bash is Git for Windows' `bash.exe` on Windows (derived from `git --exec-path`, not the WSL one), `/bin/bash` elsewhere.
-- `kitPush` (list, next to `push` in the project's file, read from the project's `main`) runs the same way, with `BRANCH=main`, after `board.mjs merge`
-  merged a kit PR into `main` and was started with `--cwd <project>/.vendor/workflow-kit`. A kit clone outside a project knows no project: nothing runs.
+  if that state has the kit gitlink, only `git submodule update --init .vendor/workflow-kit` runs first; without a gitlink `.vendor/workflow-kit` becomes a link
+  (Windows junction, else symlink, as in the session hook) to the kit checkout that runs `board.mjs`. Bash is Git for Windows' `bash.exe` on Windows (derived from `git --exec-path`, not the WSL one), `/bin/bash` elsewhere.
 - `awaitApps`, `optionalReviewers` and `updateBranchChecks` are read from `.github/workflow-project.json` on the PR's base branch at each look (GitHub contents API),
   not from the checkout; an unreadable file there is an error, never a fallback to the checkout.
 
