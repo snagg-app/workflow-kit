@@ -41,6 +41,7 @@ export const TABLE = [
   [/^scripts\/versions\.json$|^\.agents\/hooks\/|^\.github\/hooks\/ponytail\.json$/, ['ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
   [/^scripts\/kit\.mjs$/, ['kit-setup.test.mjs']],
   [/^scripts\/kit-hook\.mjs$/,['kit-init-hook.test.mjs', 'ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
+  [/^scripts\/plugin-skills\.mjs$/, ['skill-core.test.mjs']],
   [/^scripts\/(impeccable-release\.mjs|impeccable\/)|^\.vendor\/impeccable$/, ['impeccable-update.test.mjs']],
   [/^scripts\/provider-impeccable\.mjs$/, ['provider.test.mjs', 'impeccable-update.test.mjs', 'impeccable-hooks.test.mjs', 'matt-pocock.test.mjs']],
   [/^scripts\/(provider-matt-pocock|setup-skills|code-review-failure-paths)\.mjs$/, ['matt-pocock.test.mjs', 'setup.test.mjs']],
