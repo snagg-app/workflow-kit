@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fixture, handoffPr, issue, predecessor, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
@@ -38,6 +38,19 @@ function startFixture(t) {
   writeFileSync(file('backlink-comments-1.json'), '[]');
   return { checkout, run, writeIssue, git, file, text, env };
 }
+
+test('start prints the kit hints of the session hook, so an agent without hooks gets them too (#690)', t => {
+  const { checkout, run, writeIssue, file, env } = startFixture(t);
+  writeIssue(issue('Ready'));
+  // The project uses the kit (hook entry), but the shared kit is missing: the hook would say so at session start.
+  mkdirSync(join(checkout, '.claude'));
+  writeFileSync(join(checkout, '.claude/settings.json'), '{"hooks":{"SessionStart":[{"hooks":[{"id":"workflow-kit"}]}]}}');
+  env.WORKFLOW_KIT_DIR = join(dirname(checkout), 'no-such-kit');
+  const result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /shared Workflow Kit checkout .* is missing or incomplete/);
+  assert.equal(readFileSync(file('stored'), 'utf8'), 'In progress');
+});
 
 test('start claims without branch or PR; the same call resumes, a foreign claim blocks and --takeover takes it (#643)', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);

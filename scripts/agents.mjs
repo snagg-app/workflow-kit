@@ -1,7 +1,7 @@
 // The one list of agents the kit serves. A new agent is a new entry; setup, init and update scripts read only this table.
 // skills: where the agent finds skills. agents: where it finds agent definitions; upstreamAgents: where Impeccable ships them.
 // linksShared: the agent reads the shared skills through links (junction or symlink, never committed), not copies.
-// hooks: settings file, PostToolUse matcher and handler shape (shell key for bash handlers, a PowerShell variant, file description).
+// hooks: settings file, PostToolUse matcher and handler shape (shell key for bash handlers, a PowerShell variant, file description); null for an agent without hooks (level 0 of AGENT_RULES: AGENTS.md, skills, board.mjs, kit check).
 import { readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -32,7 +32,7 @@ export const agents = {
 export const providers = Object.values(agents).map(agent => dirname(agent.skills));
 /** Provider folders that hold real skill copies; the others link to them. */
 export const sourceProviders = Object.values(agents).filter(agent => !agent.linksShared).map(agent => dirname(agent.skills));
-export const hookFiles = Object.values(agents).map(agent => agent.hooks.file);
+export const hookFiles = Object.values(agents).filter(agent => agent.hooks).map(agent => agent.hooks.file);
 
 // kind: `start` also checks for Node and clones a missing shared kit; `simple` only hands over. feature: the event exists only for a project with that function.
 const events = [

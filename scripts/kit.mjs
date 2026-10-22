@@ -1,21 +1,29 @@
 // Zweck: `kit setup` stellt den Sollzustand des Kits in einem Projekt her (neu, nach Update, halb kaputt) und nennt am Ende nur die Schritte für Menschen.
-// Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts.
+// Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts. `check` meldet nur den Zustand (kit-check.mjs).
 // Nutzen: Die Einzelskripte (init-project, setup-skills, provider install, install-git-hooks, setup-github) laufen als interne Schritte; hier steht keine eigene Logik dafür.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { agents } from './agents.mjs';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
+import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
 import { activeSkills, projectFeatures } from './project-profile.mjs';
 
 enterCwd();
-if (process.argv[2] !== 'setup' || process.argv.length > 3) {
-  console.error('Usage: node <kit>/scripts/kit.mjs [--cwd PROJECT_DIR] setup');
+if (!['setup', 'check'].includes(process.argv[2]) || process.argv.length > 3) {
+  console.error('Usage: node <kit>/scripts/kit.mjs [--cwd PROJECT_DIR] setup|check');
   process.exit(2);
 }
 const scripts = dirname(fileURLToPath(import.meta.url));
 const root = projectRoot();
+// `check`: the one check behind the hooks and board.mjs, for an agent without hooks. Hints out, exit 1 when there are any.
+if (process.argv[2] === 'check') {
+  const hints = [...kitCheck(root), ...modulesCheck(root)];
+  console.log(hints.length ? hints.join('\n') : 'ok    kit is in order');
+  process.exit(hints.length ? 1 : 0);
+}
 const profile = join(root, '.github/workflow-project.json');
 const output = (result) => `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
 const run = (name, ...args) => spawnSync(process.execPath, [join(scripts, name), ...args], { cwd: root, encoding: 'utf8' });
@@ -71,6 +79,9 @@ if (twice.length) {
   console.log(`\nAlso installed as your plugin: ${twice.map(([name, key]) => `${name} (${key})`).join(', ')}.`);
   console.log(`To leave the project copy out, set in .github/workflow-project.json: ${JSON.stringify({ skills: wanted })}`);
 }
+// An agent without hooks (hooks: null in agents.mjs) gets the check from AGENTS.md instead of an adapter (#690).
+for (const [name, agent] of Object.entries(agents)) if (!agent.hooks)
+  humans.push(`${name} has no hooks: add to the project's AGENTS.md "Start every session with: node .vendor/workflow-kit/scripts/kit.mjs check".`);
 humans.push('Review and trust the project hooks in your agent (/hooks in Claude Code or Codex), then start a new session.');
 humans.push('In GitHub: enable the chosen reviewers, set Project auto-add for the repository, require checks and approval for PRs.');
 console.log(`\nOnly you can do:\n${humans.map((line, index) => `${index + 1}. ${line}`).join('\n')}`);
