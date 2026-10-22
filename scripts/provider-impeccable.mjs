@@ -1,0 +1,82 @@
+// Anbieter Impeccable (pbakaus/impeccable): Skills und Agent-Begleiter aus dem Submodul, Hook-Engine als Release-Binary mit Pruefsumme. Die Engine steht in provider.mjs.
+import assert from 'node:assert/strict';
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { agents, providers } from './agents.mjs';
+import { checkDirectory } from './provider-links.mjs';
+
+const folders = Object.values(agents).map(agent => agent.agents);
+const skills = providers.map(provider => `${provider}/skills/impeccable`);
+const windows = process.platform === 'win32';
+const asset = `impeccable-${windows ? 'windows' : process.platform}-${windows ? 'x64' : process.arch}${windows ? '.exe' : ''}`;
+
+const companionFiles = base => folders.flatMap(directory => existsSync(join(base, directory))
+  ? readdirSync(join(base, directory)).filter(name => /^impeccable[-_.][\w.-]+$/.test(name)).map(name => `${directory}/${name}`) : []);
+
+export default {
+  name: 'impeccable',
+  label: 'Impeccable',
+  source: '.vendor/impeccable',
+
+  build(c, next) {
+    const version = c.versions.impeccable;
+    const copyTracked = (from, to) => {
+      const files = c.git('-C', c.source, 'ls-files', '-z', '--', from).split('\0').filter(Boolean);
+      assert.ok(files.length, `Missing upstream files: ${from}`);
+      for (const file of files) {
+        assert.ok(file.startsWith(`${from}/`) && lstatSync(join(c.source, file)).isFile(), `Unexpected upstream path/link: ${file}`);
+        const target = join(to, file.slice(from.length + 1));
+        mkdirSync(dirname(target), { recursive: true });
+        copyFileSync(join(c.source, file), target);
+        // Match checkout line endings, including Windows command files, for stable regeneration.
+        if (/(?:\.(?:md|json|js|toml|cmd|ya?ml)|\/(?:LICENSE|VERSION|impeccable))$/.test(file)) {
+          let content = c.text(target);
+          if (/\/reference\/(?:extract|harden|optimize)\.md$/.test(file))
+            content = content.split('\n').map(line => line.trimEnd()).join('\n').trimEnd() + '\n';
+          writeFileSync(target, file.endsWith('.cmd') ? content.replaceAll('\n', '\r\n') : content);
+        }
+      }
+    };
+    for (const skill of skills) {
+      assert.equal(c.text(join(c.source, skill, 'scripts/VERSION')).trim(), version,
+        'Upstream engine changed: review VERSION, SHA256SUMS and fixed hook definitions together');
+      // Ignored local binaries/caches must never enter the pinned installation.
+      copyTracked(skill, join(next, skill));
+      // Release archives add these root attribution files to every provider package.
+      for (const file of ['LICENSE', 'NOTICE.md']) writeFileSync(join(next, skill, file), c.text(join(c.source, file)));
+      // Git for Windows may check upstream out as CRLF; the POSIX launcher needs LF.
+      writeFileSync(join(next, skill, 'scripts/impeccable'), c.text(join(next, skill, 'scripts/impeccable')));
+      chmodSync(join(next, skill, 'scripts/impeccable'), 0o755);
+    }
+    for (const agent of Object.values(agents)) copyTracked(agent.upstreamAgents, join(next, agent.agents));
+    // Reject redirected ancestors before inspecting existing companion files.
+    for (const directory of folders) checkDirectory(c.root, join(c.root, directory));
+    const fresh = companionFiles(next), stale = companionFiles(c.root).filter(file => !fresh.includes(file));
+    return {
+      outputs: [...skills, ...fresh].map(file => [file, file]),
+      retire: stale.map(file => join(c.root, file)),
+      message: `Impeccable ${c.revision.slice(0, 7)}: committed Codex and Claude Code skills and companions refreshed.\n`
+        + `Hook engine ${version} is installed by "provider.mjs impeccable install" and needs personal trust.`,
+    };
+  },
+
+  install: {
+    home: ['.impeccable', 'workflow-kit'],
+    directory: version => `engine-${version}`,
+    files(c, version) {
+      assert.match(version, /^\d+\.\d+\.\d+$/);
+      const pins = new Map(readFileSync(join(c.kit, 'scripts/impeccable/SHA256SUMS'), 'utf8').trim().split(/\r?\n/)
+        .map(line => { const [hash, name] = line.trim().split(/\s+/); return [name, hash]; }));
+      const sha256 = pins.get(asset);
+      assert.match(sha256 ?? '', /^[a-f0-9]{64}$/, `No reviewed engine pin for ${asset}`);
+      const base = process.env.IMPECCABLE_DOWNLOAD_BASE ?? 'https://github.com/pbakaus/impeccable/releases/download';
+      return { [windows ? 'impeccable.exe' : 'impeccable']: { url: `${base}/engine-v${version}/${asset}`, sha256, mode: 0o555 } };
+    },
+  },
+
+  // Take over the pinned skill tag and its engine release into the kit's data, then regenerate everything.
+  async update(c) {
+    const { updateImpeccable } = await import('./impeccable-release.mjs'); // only the maintainer's update needs it
+    await updateImpeccable(c.kit);
+  },
+};

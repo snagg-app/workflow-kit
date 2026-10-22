@@ -85,7 +85,7 @@ test('setup never runs a Git from the checkout or the working directory', t => {
   mkdirSync(tools);
   copyFileSync(process.execPath, git);
   chmodSync(git, 0o755);
-  const result = spawnSync(process.execPath, [join(kit, 'scripts/setup-ponytail.mjs')],
+  const result = spawnSync(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'setup'],
     { cwd: root, encoding: 'utf8', env: { ...process.env, PATH: [tools, '.'].join(delimiter) } });
   assert.notEqual(result.status, 0);
   assert.equal(existsSync(join(root, '.workflow-kit')), false, 'Refused before any write');

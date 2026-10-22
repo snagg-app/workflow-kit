@@ -28,7 +28,7 @@ project's own hooks, skills, settings and files. A step that needs the network o
 Impeccable hooks, the GitHub board without a signed-in `gh`) reports `open` instead of failing the run. It ends with the
 steps only a person can do: trusting the hooks and the GitHub switches. The steps are the scripts `init-project`
 (a project without `AGENTS.md` also gets the starter files), `setup-skills`, `install-git-hooks`,
-`install-ponytail-hooks`, `install-impeccable-hooks` and `setup-github`, plus a `.github/workflow-project.json` stub when missing.
+`provider ponytail install`, `provider impeccable install` and `setup-github`, plus a `.github/workflow-project.json` stub when missing.
 
 Skills exist once: the files live in `.agents/skills` (Codex reads them there) and are committed. Claude Code reads
 `.claude/skills`, which holds one link per shared skill (a junction on Windows, which needs no privilege, else a symlink).
@@ -317,7 +317,7 @@ Renovate pull requests from this repository that change `.vendor/*`. It starts o
 `pull_request_target`, so GitHub loads the workflow from `main`: a branch cannot rewrite the
 definition that holds the write token. That is safe only because the job never runs code of the
 branch (see below), and it must stay so. The job runs
-`scripts/update-ponytail.mjs` and `scripts/update-impeccable.mjs` as needed, then the CI
+`scripts/provider.mjs ponytail update` and `scripts/provider.mjs impeccable update` as needed, then the CI
 generators, pushes the result to the Renovate branch and approves the repository CI run for the
 new head: a push with `GITHUB_TOKEN` makes GitHub create the `pull_request` run but hold it as
 `action_required`, and the required check `Workflow Kit checks` stays "expected" until it has run
@@ -339,11 +339,11 @@ fails, approve the held run on the pull request ("Approve and run") or restart i
 `gitIgnoredAuthors`, so Renovate keeps updating the branch. Submodules are not fetched at
 checkout: the job first requires the submodule URLs in the branch's `.gitmodules` to equal
 main's and fails otherwise, so a branch cannot point the generators at another repository.
-`update-ponytail.mjs` keeps its conflict files in `.workflow-kit/ponytail-resolve/` and
+`provider.mjs ponytail update` keeps its conflict files in `.workflow-kit/ponytail-resolve/` and
 refuses to read, write or delete there when any part of that path is a link.
 
 When upstream edits lines our Ponytail adaptations rewrite, the job fails and names the files.
-Run `node scripts/update-ponytail.mjs` on the Renovate branch: it writes the conflicting
+Run `node scripts/provider.mjs ponytail update` on the Renovate branch: it writes the conflicting
 files with markers to `.workflow-kit/ponytail-resolve/`. Resolve the markers there, run the
 command again to port the patch and regenerate the skills, then commit and push. A branch with
 a commit by anyone else is left alone; the same command applies.

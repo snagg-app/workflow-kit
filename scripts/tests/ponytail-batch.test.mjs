@@ -38,14 +38,14 @@ async function fixture(t) {
     'diff --git a/skills/ponytail/SKILL.md b/skills/ponytail/SKILL.md\n'
     + '--- a/skills/ponytail/SKILL.md\n+++ b/skills/ponytail/SKILL.md\n'
     + '@@ -1,3 +1,3 @@\n # ponytail\n-base\n+patched\n Grüße 🎴\n');
-  for (const script of ['setup-ponytail.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs'])
+  for (const script of ['provider.mjs', 'provider-ponytail.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'versions.json'])
     copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
-  const run = () => exec(process.execPath, [join(kit, 'scripts/setup-ponytail.mjs')], { cwd: root });
+  const run = () => exec(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'setup'], { cwd: root });
   return { root, source: join(kit, '.vendor/ponytail'), expected, run };
 }
 const succeeds = result => assert.equal(result.status, 0, result.stderr);
 
-describe('setup-ponytail', { concurrency: true }, () => {
+describe('ponytail setup', { concurrency: true }, () => {
 test('setup writes byte-correct ordinary files for every provider and reruns without changes', async t => {
   const f = await fixture(t); succeeds(await f.run());
   for (const [path, original] of f.expected) {

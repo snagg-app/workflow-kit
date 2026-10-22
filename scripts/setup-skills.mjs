@@ -17,8 +17,8 @@ if (process.argv.includes('--help') || process.argv.includes('-h')) {
 }
 enterCwd();
 const scripts = dirname(fileURLToPath(import.meta.url));
-for (const name of ['setup-matt-pocock.mjs', 'setup-ponytail.mjs', 'setup-impeccable.mjs'])
-  execFileSync(process.execPath, [join(scripts, name)], { stdio: 'inherit' });
+for (const name of ['matt-pocock', 'ponytail', 'impeccable'])
+  execFileSync(process.execPath, [join(scripts, 'provider.mjs'), name, 'setup'], { stdio: 'inherit' });
 const kit = dirname(scripts), root = projectRoot();
 // Kit-owned skills: the canonical copy lives in the kit's .agents/skills.
 for (const skill of ['find-skills', 'spec-review']) {

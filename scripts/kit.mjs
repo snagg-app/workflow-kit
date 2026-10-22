@@ -1,6 +1,6 @@
 // Zweck: `kit setup` stellt den Sollzustand des Kits in einem Projekt her (neu, nach Update, halb kaputt) und nennt am Ende nur die Schritte für Menschen.
 // Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts.
-// Nutzen: Die Einzelskripte (init-project, setup-skills, install-*-hooks, install-git-hooks, setup-github) laufen als interne Schritte; hier steht keine eigene Logik dafür.
+// Nutzen: Die Einzelskripte (init-project, setup-skills, provider install, install-git-hooks, setup-github) laufen als interne Schritte; hier steht keine eigene Logik dafür.
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -36,8 +36,8 @@ step('profile .github/workflow-project.json', true, () => {
 });
 step('skills for Codex and Claude Code', true, () => run('setup-skills.mjs'));
 step('git hooks (.githooks)', true, () => run('install-git-hooks.mjs'));
-step('Ponytail hooks', false, () => run('install-ponytail-hooks.mjs'));
-step('Impeccable hooks', false, () => run('install-impeccable-hooks.mjs'));
+step('Ponytail hooks', false, () => run('provider.mjs', 'ponytail', 'install'));
+step('Impeccable hooks', false, () => run('provider.mjs', 'impeccable', 'install'));
 step('GitHub board and labels', false, () => {
   const git = externalTool('git', root), gh = externalTool('gh', root);
   const remote = spawnSync(git.file, ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8', env: git.env }).stdout.trim();

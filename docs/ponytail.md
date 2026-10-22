@@ -14,7 +14,7 @@ choose one source in the agent's settings.
 ## Hooks
 
 Follow [hook installation and trust](../README.md#hooks).
-`install-ponytail-hooks.mjs` copies generated hooks to
+`provider.mjs ponytail install` copies generated hooks to
 `~/.ponytail/workflow-kit/<version>/`, refusing destinations inside any Git checkout.
 Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 

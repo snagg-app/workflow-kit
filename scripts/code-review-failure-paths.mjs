@@ -1,5 +1,5 @@
 // Kit deviation from upstream `code-review` (#608, docs/matt-pocock.md): an adversarial third axis.
-// Each pair is [upstream text, replacement]; setup-matt-pocock.mjs refuses to generate when upstream moves one.
+// Each pair is [upstream text, replacement]; provider-matt-pocock.mjs refuses to generate when upstream moves one.
 const brief = `**Failure-paths sub-agent prompt** should include:
 
 - The diff command and commit list, and the spec when there is one (it defines what "wrong" means).
