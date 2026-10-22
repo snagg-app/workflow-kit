@@ -29,8 +29,9 @@ const abandoned = (lock, stale) => {
   try { return Date.now() - statSync(lock).mtimeMs > stale; } catch { return true; }
 };
 
-/** Runs `work` while it holds the lock directory. A holder that died (its pid is gone) or hung (older than `stale` ms) is taken over; a live one is waited for up to `wait` ms. */
-export async function withLock(lock, work, { stale = 15 * 60_000, wait = 120_000 } = {}) {
+/** Runs `work` while it holds the lock directory. A holder that died (its pid is gone) or hung (older than `stale` ms) is taken over; a live one is waited for up to `wait` ms
+ * (longer than one 120 s download, so a second run does not give up on the first). */
+export async function withLock(lock, work, { stale = 15 * 60_000, wait = 300_000 } = {}) {
   for (const give = Date.now() + wait; ;) {
     try { mkdirSync(lock); break; } catch (error) {
       if (error.code !== 'EEXIST') throw error;
@@ -59,7 +60,8 @@ export async function guarded(dir, name, work, options) {
     rmSync(log, { force: true });
     return result;
   } catch (error) {
-    writeFileSync(log, `${error.stack ?? error}\n`); // no time in it: a repeated failure leaves the same bytes, the file date says when
+    // No time in the log: a repeated failure leaves the same bytes, the file date says when. A log that cannot be written must not hide the error.
+    try { writeFileSync(log, `${error.stack ?? error}\n`); } catch { /* the error below is the report */ }
     throw error;
   }
 }
