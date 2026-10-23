@@ -1,0 +1,51 @@
+name: Task
+description: A short task. Purpose, benefit, concrete steps and a checkable result.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Does the task need a human decision or action? Then, after creating it, add
+        `## Human input needed` as the first section and set the label
+        `needs-human-input` (who, what is missing, effect, how to answer). Otherwise leave it out.
+  - type: textarea
+    id: purpose
+    attributes:
+      label: Why do we need this?
+      description: Which proven problem does which user or flow have? For bugs, give the reproduction and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: benefit
+    attributes:
+      label: What does it bring us?
+      description: A concrete benefit or avoided harm, without unproven time or cost promises.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What has to be done?
+      description: The complete result and clear limits. What is explicitly not part of it?
+    validations:
+      required: true
+  - type: textarea
+    id: implementation
+    attributes:
+      label: How should it be done?
+      description: Ordered steps with files, symbols, contracts and existing building blocks. Explain affected permissions, data, errors and retries. Mark open decisions as a question with a recommendation.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: How do we know it is done?
+      description: Checkable criteria, the matching test or command or the exact way to check, and the expected result. Name the limits of mocks and live evidence.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies and resumption
+      description: Prerequisites with evidence, next action and owner; otherwise "none known". Status and Priority live in the Project, not here.
+    validations:
+      required: true

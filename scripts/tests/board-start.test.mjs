@@ -52,6 +52,23 @@ test('start prints the kit hints of the session hook, so an agent without hooks 
   assert.equal(readFileSync(file('stored'), 'utf8'), 'In progress');
 });
 
+test('the claim comment follows the profile language, and a claim in either language is read (#759)', t => {
+  const { checkout, run, writeIssue, text } = startFixture(t);
+  writeIssue(issue('Ready'));
+  const profile = join(checkout, '.github/workflow-project.json');
+  const language = JSON.parse(readFileSync(profile, 'utf8')).language;
+  writeFileSync(profile, JSON.stringify({ ...JSON.parse(readFileSync(profile, 'utf8')), language: 'en' }));
+  assert.equal(run('start', '1', '--session', 'S1').status, 0);
+  const english = JSON.parse(text('backlink-comments-1.json')).map(comment => comment.body).join('');
+  assert.match(english, /^Claimed\.\nAgent: claude, Session: S1\nBase: main\n/);
+  assert.notEqual(language, 'en', 'the fixture profile stays German, the other tests rely on it');
+  // The same session resumes from the English claim: no second claim comment.
+  const writes = text('comment-writes');
+  writeIssue({ ...JSON.parse(text('issue.json')), comments: { nodes: [{ createdAt: new Date().toISOString(), url: 'u', body: english }] } });
+  assert.equal(run('start', '1', '--session', 'S1').status, 0);
+  assert.equal(text('comment-writes'), writes);
+});
+
 test('start claims without branch or PR; the same call resumes, a foreign claim blocks and --takeover takes it (#643)', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
 
