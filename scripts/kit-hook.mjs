@@ -6,7 +6,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agents, agentNames } from './agents.mjs';
+import { agents, agentNames, projectDirOf } from './agents.mjs';
 import { hookEvents } from './hooks.mjs';
 import { readVersions } from './versions.mjs';
 import { projectRoot } from './checkout-root.mjs';
@@ -23,7 +23,7 @@ const [event, ...rest] = process.argv.slice(2);
 const agent = rest[rest.indexOf('--agent') + 1];
 
 /** The checkout both the installer and the launcher lookup read the Ponytail files from. */
-const hookProject = () => projectRoot(process.env.CLAUDE_PROJECT_DIR || undefined);
+const hookProject = () => projectRoot(projectDirOf());
 
 const installCommand = provider => `node .vendor/workflow-kit/scripts/provider.mjs ${provider.name} install`;
 
@@ -51,7 +51,7 @@ if (!hookEvents.includes(event) || !agentNames().includes(agent)) {
 const user = [], context = [];
 /** The hook's notices follow the language of the project profile; a bad profile is board.mjs's to report, not the hook's. */
 function texts() {
-  try { return textsFor(readProfile(process.env.CLAUDE_PROJECT_DIR || '.')); } catch { return textsFor({}); }
+  try { return textsFor(readProfile(projectDirOf(agent) || '.')); } catch { return textsFor({}); }
 }
 const say = message => { user.push(message); context.push(message); };
 if (Number(process.versions.node.split('.')[0]) < versions.node) {
@@ -123,13 +123,13 @@ else {
   const raw = await readInput();
   let input = {};
   try { input = JSON.parse(raw) ?? {}; } catch { /* no hook JSON: the environment still names the project */ }
-  const project = process.env.CLAUDE_PROJECT_DIR || '.';
+  const project = projectDirOf(agent) || '.';
   const fresh = !['resume', 'compact', 'fork'].includes(input.source);
   const { fingerprint: where, file: settings } = agents[agent].hooks ?? {};
   if (where) fingerprint(project, input, where, settings);
   let on = Object.fromEntries(featureProviders().map(provider => [provider.name, true])); // a broken profile must not stop the session
   try { on = projectFeatures(project, hookGit); } catch (error) { if (event === 'SessionStart') say(error.message); }
-  // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
+  // A subagent in its own worktree gets the project variable of the session that started it; its own directory is the cwd on stdin.
   const updated = new Set();
   for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean)))
     kitCheck(dir, { ...kitEnvironment(), update: event === 'SessionStart' && input.source !== 'compact', git: hookGit, updated }).messages.forEach(say);
