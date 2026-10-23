@@ -26,7 +26,7 @@ function fixture(t) {
   mkdirSync(root, { recursive: true });
   mkdirSync(join(kit, 'templates'), { recursive: true });
   mkdirSync(join(kit, 'scripts'));
-  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'write-guard.mjs', 'provider-list.mjs', 'provider-matt-pocock.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'code-review-failure-paths.mjs', 'agents.mjs', 'hooks.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'run-program.mjs', 'kit-entry.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'write-guard.mjs', 'provider-list.mjs', 'provider-matt-pocock.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'code-review-failure-paths.mjs', 'agents.mjs', 'hooks.mjs', 'hook-commands.json', 'versions.json', 'project-profile.mjs', 'git-tool.mjs', 'run-program.mjs', 'kit-entry.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   copyFileSync(new URL('../../templates/.ignore', import.meta.url), join(kit, 'templates/.ignore'));
   write(join(kit, 'AGENT_RULES.md'), '# rules\n');
   const run = (...args) => spawnSync(process.execPath, [join(kit, 'scripts/init-project.mjs'), ...args], { cwd: root, encoding: 'utf8' });
@@ -211,7 +211,7 @@ test('.vendor/workflow-kit becomes a link to the shared kit; reruns change nothi
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
   assert.ok(existsSync(other));
   // A kit inside the project it configures would link the project to itself.
-  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'write-guard.mjs', 'provider-list.mjs', 'provider-matt-pocock.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'code-review-failure-paths.mjs', 'agents.mjs', 'hooks.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'run-program.mjs', 'kit-entry.mjs']) {
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'write-guard.mjs', 'provider-list.mjs', 'provider-matt-pocock.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'code-review-failure-paths.mjs', 'agents.mjs', 'hooks.mjs', 'hook-commands.json', 'versions.json', 'project-profile.mjs', 'git-tool.mjs', 'run-program.mjs', 'kit-entry.mjs']) {
     mkdirSync(join(f.root, 'inner/scripts'), { recursive: true });
     copyFileSync(new URL(`../${script}`, import.meta.url), join(f.root, 'inner/scripts', script));
   }
