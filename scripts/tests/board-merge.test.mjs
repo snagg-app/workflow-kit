@@ -518,3 +518,16 @@ test('merge deletes the whole folder of the agent worktree of the merged branch,
   assert.equal(existsSync(other), true, 'another worktree stays');
   assert.doesNotMatch(git(checkout, 'worktree', 'list'), /agent-1/);
 });
+
+test('merge keeps a worktree of the merged branch outside the agent folder of this project', t => {
+  const { checkout, run, show } = mergeFixture(t);
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
+  git(checkout, 'init', '-q', '-b', 'main');
+  git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'start');
+  const foreign = join(dirname(checkout), 'elsewhere/.claude/worktrees/x');
+  git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic', foreign);
+  show();
+  const merged = run('merge', '7');
+  assert.equal(merged.status, 0, merged.stdout + merged.stderr);
+  assert.equal(existsSync(foreign), true, 'a folder of another place stays');
+});

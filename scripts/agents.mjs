@@ -5,6 +5,7 @@
 // projectEnv: the variable that names the project folder for the agent's hooks (absent: the hook runs in the project folder, ".").
 // label: the name messages use. sessionEnv: the variable that names the agent's session (claims, #789).
 // sessionFromDirectory: a pattern on the working directory whose first group is the session, for an agent whose worktrees carry it (#810).
+// worktrees: the folder (below the project) whose subfolders are the agent's worktrees; the merge deletes those (#859).
 // detect: project paths that show a project uses this agent (kit setup writes hooks only for detected agents; none detected: for all).
 // localSettings: the agent's personal settings file (kept out of Git). plugins: its plugin list under the home directory (#815).
 // hooks: settings file, trust: the command a human uses to trust the hooks, PostToolUse matcher and handler shape (shell key for bash handlers, a PowerShell variant, file description; description: the settings file takes a description line, its text comes from the provider; fingerprint: where a session keeps the settings fingerprint, absent for an agent that reloads hooks itself); null for an agent without hooks (level 0 of AGENT_RULES: AGENTS.md, skills, board.mjs, kit check).
@@ -30,6 +31,7 @@ export const agents = {
     label: 'Claude Code',
     projectEnv: 'CLAUDE_PROJECT_DIR',
     sessionFromDirectory: /[\\/]agent-(\w+)(?:[\\/]|$)/,
+    worktrees: '.claude/worktrees',
     sessionEnv: 'CLAUDE_CODE_SESSION_ID',
     detect: ['.claude'],
     skills: '.claude/skills',

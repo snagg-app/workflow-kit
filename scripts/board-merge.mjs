@@ -1,9 +1,10 @@
 // `merge PR [--stack]`: the merge gate, the head-bound merge, the branch update and what follows a merge (branch delete, push commands).
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { agentNames, agents } from './agents.mjs';
 import { readProfileAt, textsFor } from './project-profile.mjs';
 import { SonarOtherPr } from './sonar.mjs';
 import { shared } from './board-args.mjs';
@@ -70,16 +71,18 @@ function deleteHeadBranch(pr) {
 }
 
 /**
- * Delete the folder of an agent worktree (under `.claude/worktrees`) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
+ * Delete the folder of an agent worktree (under an agent's `worktrees` folder of the agent table) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
  * (node_modules, .vendor, links). `rmSync` unlinks a junction or symlink without entering it, so a link's target stays. Never the folder this run works in. Returns the line to report, or nothing.
  */
 function removeAgentWorktree(branch) {
   if (!existsSync(join(projectDirectory, '.git')) || (statSync(join(projectDirectory, '.git')).isDirectory() && !existsSync(join(projectDirectory, '.git/HEAD')))) return;
   try {
     const here = process.cwd().replaceAll('\\', '/').toLowerCase();
+    const root = realpathSync.native(projectDirectory).replaceAll('\\', '/').replace(/\/+$/, '').toLowerCase(); // Git prints the resolved path
     for (const block of gitAt(projectDirectory, 'worktree', 'list', '--porcelain').split(/\r?\n\r?\n/)) {
       const path = /^worktree (.+)$/m.exec(block)?.[1];
-      if (!path || !block.includes(`\nbranch refs/heads/${branch}`) || !/\/\.claude\/worktrees\/[^/]+$/.test(path.replaceAll('\\', '/'))) continue;
+      const parent = path?.replaceAll('\\', '/').replace(/\/[^/]+$/, '').toLowerCase();
+      if (!path || !block.includes(`\nbranch refs/heads/${branch}`) || !agentNames().some(agent => agents[agent].worktrees && parent === `${root}/${agents[agent].worktrees.toLowerCase()}`)) continue;
       const own = path.replaceAll('\\', '/').toLowerCase();
       if (here === own || here.startsWith(`${own}/`)) return `worktree kept: ${path} is the folder of this run`;
       rmSync(path, { recursive: true, force: true });
