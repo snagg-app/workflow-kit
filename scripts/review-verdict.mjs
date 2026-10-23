@@ -8,19 +8,10 @@ export const isBot = user => user?.type === 'Bot';
 // "optionalReviewers" lists bot logins or app slugs whose traces are shown but never awaited, stalled or counted as red
 // (a review bot on a free plan that is rate limited most of the time). Their open threads and change requests still block; `handoff` dismisses a change request once all threads are resolved.
 export const reviewerKey = name => name?.trim().toLowerCase().replace(/^(@|app\/)/, '').replace(/\[bot\]$/, '');
-// Read on use, so a malformed list is an ERROR of the review commands, not a crash of every command.
-export const optionalReviewers = settings => {
-  const list = settings.optionalReviewers === undefined ? [] : settings.optionalReviewers; // only a missing field is allowed; null is malformed
-  assert.ok(Array.isArray(list) && list.every(name => typeof name === 'string' && name.trim()),
-    'optionalReviewers must be a list of non-empty bot logins or app slugs');
-  return new Set(list.map(reviewerKey));
-};
+// The lists are checked where the profile is read (project-profile.mjs); `settings` is its view, or a test's plain object.
+export const optionalReviewers = settings => new Set((settings.optionalReviewers ?? []).map(reviewerKey));
 // "updateBranchChecks" lists checks whose failure only asks for the base to be merged into the PR branch (#383, e.g. a retarget restart check): `merge` does that itself.
-export const updateBranchChecks = settings => {
-  const list = settings.updateBranchChecks === undefined ? [] : settings.updateBranchChecks;
-  assert.ok(Array.isArray(list) && list.every(name => typeof name === 'string' && name.trim()), 'updateBranchChecks must be a list of non-empty check names');
-  return new Set(list);
-};
+export const updateBranchChecks = settings => new Set(settings.updateBranchChecks ?? []);
 export const filesText = files => files.slice(0, 10).join(', ') + (files.length > 10 ? `, and ${files.length - 10} more` : '');
 
 const passed = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);

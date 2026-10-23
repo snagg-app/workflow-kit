@@ -76,8 +76,7 @@ export function createCommon(env) {
   const statusName = name => String(name).toLowerCase() === 'auto review' ? statuses.automatedReview : name;
   const projectStatus = issue => statusName(projectItem(issue)?.status?.name);
   // "specLabel" in the project file (default "spec") marks a spec. Only a human closes a spec or sets it to Done (AGENT_RULES.md, Hard rules).
-  const specLabel = project.specLabel === undefined ? 'spec' : project.specLabel;
-  assert.ok(typeof specLabel === 'string' && specLabel.trim(), 'specLabel in .github/workflow-project.json must be a label name; omit the field for "spec"');
+  const { specLabel } = project;
   function isSpec(issue) {
     const labels = issue.labels;
     if (!labels) return false;
@@ -133,7 +132,7 @@ export function createCommon(env) {
   // Reviewers run unreliably, so only traces on the current head count (docs/CONTRIBUTING.md#review-loop).
   // GitHub charges a query by its connections: each of the up to 100 review threads and check suites counts one more. 30 suites keep the whole read at 1 point instead of 2; a longer list is read again at 100.
   const prQuery = suites => `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
-  number state isDraft createdAt headRefName headRefOid baseRefName mergeStateStatus reviewDecision isCrossRepository headRepository{nameWithOwner} body${project.selfReview === undefined ? '' : ' bodyHTML'}
+  number state isDraft createdAt headRefName headRefOid baseRefName mergeStateStatus reviewDecision isCrossRepository headRepository{nameWithOwner} body${project.selfReview.length ? ' bodyHTML' : ''}
   readyEvents:timelineItems(last:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}
   firstReadyEvents:timelineItems(first:1,itemTypes:[READY_FOR_REVIEW_EVENT]){nodes{...on ReadyForReviewEvent{createdAt}}}
   convertEvents:timelineItems(last:1,itemTypes:[CONVERT_TO_DRAFT_EVENT]){nodes{...on ConvertToDraftEvent{createdAt}}}

@@ -3,13 +3,13 @@
 // Vorlage und Labels stehen im Profil des Projekts ("boardTemplate", "labels"); ohne sie gelten das Board des Kits und die sieben Standard-Labels.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { dirname, join, sep } from 'node:path';
 import { externalTool } from './checkout-root.mjs';
-import { boardTemplate, projectLabels, statusMismatch } from './project-profile.mjs';
+import { boardTemplate, projectLabels, readProfile, statusMismatch } from './project-profile.mjs';
 
-const kitProfile = new URL('../.github/workflow-project.json', import.meta.url);
-const readJson = path => JSON.parse(readFileSync(path, 'utf8'));
+const kitRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /** OWNER/REPO of the `origin` remote, or undefined when it is no GitHub remote. */
 function originRepository(root) {
@@ -27,7 +27,7 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
   const byHand = repo !== undefined;
   repo ??= originRepository(root);
   if (!repo) return { status: 1, stderr: 'no GitHub remote "origin"' };
-  const saved = existsSync(marker) ? readJson(marker) : null;
+  const saved = existsSync(marker) ? readProfile(root) : null;
   if (!byHand && saved?.repository?.toLowerCase() === repo.toLowerCase() && saved.number && saved.id)
     return { status: 0, note: `already bound to project #${saved.number}; run setup-github.mjs ${repo} to redo it` };
   try { github.run(['auth', 'status'], { stdio: 'pipe' }); } catch { return { status: 1, stderr: 'gh is not signed in' }; }
@@ -45,14 +45,14 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
   assert.ok(['ADMIN', 'MAINTAIN', 'WRITE'].includes(meta.viewerPermission), 'Repository write permission required');
   const number = requestedNumber ?? saved?.number;
   if (number) assert.match(String(number), /^\d+$/, 'Recorded project number must be numeric');
-  const template = number ? undefined : boardTemplate(saved ?? {}, kitProject ?? readJson(kitProfile));
+  const template = number ? undefined : boardTemplate(saved ?? {}, kitProject ?? readProfile(kitRoot));
   const project = number
     ? JSON.parse(gh('project', 'view', String(number), '--owner', owner, '--format', 'json'))
     : JSON.parse(gh('project', 'copy', String(template.number), '--source-owner', template.owner, '--target-owner', owner, '--title', name, '--format', 'json'));
   const saveProject = () => {
     mkdirSync(directory, { recursive: true });
     // Keep project-owned settings such as "start"; only the board binding is rewritten.
-    writeFileSync(marker, JSON.stringify({ ...saved, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
+    writeFileSync(marker, JSON.stringify({ ...saved?.raw, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
   };
   // Retain newly copied boards on failure so retry cannot create duplicates.
   if (!number) saveProject();

@@ -1,7 +1,7 @@
 // Zweck: `kit setup` stellt den Sollzustand des Kits in einem Projekt her (neu, nach Update, halb kaputt) und nennt am Ende nur die Schritte für Menschen.
 // Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts. `check` meldet nur den Zustand (kit-check.mjs).
 // Nutzen: Die Einzelskripte (init-project, setup-skills, provider install, install-git-hooks, setup-github) laufen als Funktionen; hier steht keine eigene Logik dafür.
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents } from './agents.mjs';
@@ -12,7 +12,7 @@ import { initProject } from './init-project.mjs';
 import { installGitHooks } from './install-git-hooks.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
-import { activeSkills, projectFeatures } from './project-profile.mjs';
+import { activeSkills, projectFeatures, readProfile } from './project-profile.mjs';
 import { featureProviders } from './provider-list.mjs';
 import { context, install } from './provider.mjs';
 import { setupSkills } from './setup-skills.mjs';
@@ -87,7 +87,7 @@ if (failed) process.exit(1);
 const installed = existsSync(join(root, '.agents/skills')) ? readdirSync(join(root, '.agents/skills')) : [];
 const twice = [...pluginSkills()].filter(([name]) => installed.includes(name));
 if (twice.length) {
-  const wanted = (activeSkills(JSON.parse(readFileSync(profile, 'utf8'))) ?? installed).filter(name => !twice.some(([plugin]) => plugin === name));
+  const wanted = (activeSkills(readProfile(root)) ?? installed).filter(name => !twice.some(([plugin]) => plugin === name));
   console.log(`\nAlso installed as your plugin: ${twice.map(([name, key]) => `${name} (${key})`).join(', ')}.`);
   console.log(`To leave the project copy out, set in .github/workflow-project.json: ${JSON.stringify({ skills: wanted })}`);
 }

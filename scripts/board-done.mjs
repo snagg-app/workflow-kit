@@ -106,7 +106,6 @@ export function createDone(env) {
     try {
       useBaseSettings({ baseRefName: pull.base.ref });
       gate = baseSettings();
-      assert.ok(gate.doneBaseMerge === undefined || ['always', 'overlap'].includes(gate.doneBaseMerge),'doneBaseMerge must be always or overlap; omit it for always');
     } catch (error) { return failed(`cannot read the base-merge policy: ${error.message}`); }
     // An untested head applies the target base's policy (#558, #579). A conflict is aborted, the branch stays as it was.
     // #656: a head the PR does not show yet is pushed even when its tested marker exists (a run that ended after the tests).
