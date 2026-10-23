@@ -49,10 +49,14 @@ if (!hookEvents.includes(event) || !agentNames.includes(agent)) {
 }
 
 const user = [], context = [];
+/** The hook's notices follow the language of the project profile; a bad profile is board.mjs's to report, not the hook's. */
+function texts() {
+  try { return textsFor(readProfile(process.env.CLAUDE_PROJECT_DIR || '.')); } catch { return textsFor({}); }
+}
 const say = message => { user.push(message); context.push(message); };
 if (Number(process.versions.node.split('.')[0]) < versions.node) {
   // Only SessionStart may speak: the other events do not accept this output.
-  if (event === 'SessionStart') say(`Node ${versions.node} or newer is needed for the Workflow Kit hooks (found ${process.versions.node}); Ponytail, Impeccable and the kit check are off until Node is updated.`);
+  if (event === 'SessionStart') say(texts().nodeOld(versions.node, process.versions.node));
   emit();
   process.exit(0);
 }
@@ -75,11 +79,7 @@ function fingerprint(dir, input, { configEnv, configDir }, settings) {
     const seen = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
     let now = '';
     for (const ref of ['@{upstream}', 'origin/HEAD']) if ((now = git(dir, 'rev-parse', '-q', '--verify', `${ref}:${settings}`).out)) break;
-    if (seen && now && now !== seen) {
-      let language = readProfile(dir);
-      try { textsFor(language); } catch { language = {}; } // a bad profile is board.mjs's to report, not the hook's
-      context.push(textsFor(language).hooksChanged);
-    };
+    if (seen && now && now !== seen) context.push(texts().hooksChanged);
   } else if (input.source !== 'compact') {
     try {
       mkdirSync(path.dirname(file), { recursive: true });
@@ -154,9 +154,9 @@ else {
       if (parsed.hookSpecificOutput?.additionalContext) context.push(parsed.hookSpecificOutput.additionalContext);
     } catch { if (text) context.push(text); }
   } else if (event === 'SessionStart' && on.ponytail) {
-    say('Ponytail hooks are OFF. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs ponytail install (maintainer pre-authorized, writes no trust).');
+    say(texts().hooksOff('Ponytail', 'node .vendor/workflow-kit/scripts/provider.mjs ponytail install'));
   }
   if (event === 'SessionStart' && fresh && on.impeccable && !engine)
-    say('Impeccable hooks are OFF, UI checks do not run. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs impeccable install (maintainer pre-authorized, writes no trust).');
+    say(texts().hooksOff('Impeccable', 'node .vendor/workflow-kit/scripts/provider.mjs impeccable install'));
   emit();
 }

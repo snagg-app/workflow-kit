@@ -48,7 +48,10 @@ export function hookAgents(root) {
 }
 export const hookFiles = Object.values(agents).filter(agent => agent.hooks).map(agent => agent.hooks.file);
 
-// kind: `start` also checks for Node and clones a missing shared kit; `simple` only hands over. feature: the event exists only for a project with that function.
+/** The project's copy of kit-entry.mjs (written by `kit setup`); hook-commands.json names the same path. */
+export const entryFile = '.agents/workflow-kit-hook.mjs';
+
+// kind: `start` also reports a missing Node (the entry clones a missing shared kit); `simple` only hands over. feature: the event exists only for a project with that function.
 const events = [
   { event: 'PostToolUse', kind: 'simple', timeout: 120, matcher: true, statusMessage: true, feature: 'impeccable' },
   { event: 'Stop', kind: 'simple', timeout: 120, statusMessage: true, feature: 'impeccable' },
@@ -62,7 +65,7 @@ export const hookEvents = events.map(({ event }) => event);
 /** The hook settings the kit contributes to one agent's settings file; `on` names the functions the project uses (projectFeatures). */
 export function hookSettings(name, on = { impeccable: true, ponytail: true }) {
   const commands = JSON.parse(readFileSync(new URL('./hook-commands.json', import.meta.url), 'utf8'));
-  const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name);
+  const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile);
   const hooks = {};
   for (const { event, kind, timeout, matcher, statusMessage, feature } of events) {
     if (feature && !on[feature]) continue;
