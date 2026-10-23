@@ -69,6 +69,13 @@ export function textsFor(project) {
   return texts[language];
 }
 
+/** The profile as GitHub has it on `ref` (the repository's default branch without one): the single read of a profile at a branch or commit. `rest` is the github adapter's. */
+export function readProfileAt(rest, repository, ref) {
+  const file = rest(`repos/${repository}/contents/.github/workflow-project.json${ref === undefined ? '' : `?ref=${encodeURIComponent(ref)}`}`);
+  assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${repository}${ref === undefined ? '' : ` on ${ref}`} is unreadable`);
+  return JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+}
+
 /** The profile of a project directory ({} without a readable file). */
 export function readProfile(root) {
   try { return JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8')); } catch { return {}; }

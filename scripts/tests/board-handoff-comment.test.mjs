@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 import { handoffFixture, handoffComment, handoffPr, issue, test } from './board-fixture.mjs';
 
 
@@ -127,14 +127,7 @@ test('handoff blocks on open Sonar issues behind a passed quality gate and never
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify({ ...base, commits: { nodes: [{ commit: { ...commit,
     statusCheckRollup: { contexts: { totalCount: 2, nodes: [...commit.statusCheckRollup.contexts.nodes, sonar] } } } }] } }));
   writeFileSync(join(checkout, 'handoff-fixture'), '');
-  // Stands in for the Sonar API in every node process of the run, the board's request child included.
-  writeFileSync(join(checkout, 'sonar-mock.cjs'), `const fs = require('node:fs');
-globalThis.fetch = async (url, init) => {
-  fs.appendFileSync('sonar-requests', JSON.stringify([String(url), init.headers.Authorization]) + '\\n');
-  const { status, total, issues } = JSON.parse(fs.readFileSync('sonar.json', 'utf8'));
-  return { ok: status === 200, status, text: async () => JSON.stringify({ total, issues }) };
-};`);
-  env.NODE_OPTIONS = `--require "${join(checkout, 'sonar-mock.cjs').replaceAll(sep, '/')}"`;
+  // The Sonar API answers from sonar.json (tests/fake-sonar.mjs, the test variant of sonar.mjs).
   env.SONAR_TOKEN = 'secret-token';
   const answer = (status, total, issues = []) => writeFileSync(join(checkout, 'sonar.json'), JSON.stringify({ status, total, issues }));
   const finding = (rule, file, line, message) => ({ rule, component: `test_example:${file}`, line, message });

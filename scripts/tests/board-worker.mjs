@@ -7,12 +7,14 @@ import { syncBuiltinESMExports } from 'node:module';
 import { format } from 'node:util';
 import { workerData } from 'node:worker_threads';
 import { useGhAdapter } from '../github.mjs';
+import { useSonarAdapter } from '../sonar.mjs';
 import { fakeGh } from './fake-gh.mjs';
+import { fakeSonar } from './fake-sonar.mjs';
 
 const { requests, results, done } = workerData;
 const boardUrl = new URL('../board.mjs', import.meta.url).href;
 
-// board.mjs imports execFileSync from node:child_process: only calls of `gh` are faked, other programs (the Sonar request) run for real.
+// board.mjs imports execFileSync from node:child_process: only calls of `gh` are faked, other programs run for real.
 // Their stderr would go to this process's file descriptor, past the captured result; it is routed into the result like board.mjs's own output.
 const realSpawnSync = childProcess.spawnSync;
 function realExecFileSync(file, args, options) {
@@ -41,6 +43,7 @@ const noteAffectedTests = args => {
 };
 // Every `gh` call of board.mjs goes through github.mjs, which takes the fake as its test variant.
 useGhAdapter(echoingFakeGh);
+useSonarAdapter(fakeSonar);
 childProcess.execFileSync = (file, args, options) => file === process.execPath && /affected-tests\.mjs$/.test(args[0]) ? noteAffectedTests(args)
   : /(^|[\\/])git(\.exe)?$/.test(file) ? realExecFileSync('git', args, { ...options, env: { ...options?.env, PATH: hostPath } })
     : realExecFileSync(file, args, options);
