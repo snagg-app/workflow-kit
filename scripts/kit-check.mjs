@@ -4,6 +4,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { hookFiles } from './agents.mjs';
 import { fileURLToPath } from 'node:url';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
@@ -28,7 +29,7 @@ let git = processGit;
 const useGit = run => { git = run ? (_dir, ...args) => { try { return { ok: true, out: run(...args) }; } catch { return { ok: false, out: '' }; } } : processGit; };
 const isDirectory = dir => existsSync(dir) && statSync(dir).isDirectory();
 const real = file => { try { return realpathSync.native(file); } catch { return ''; } };
-const mentionsKit = root => ['.claude/settings.json', '.codex/hooks.json'].some(file => {
+const mentionsKit = root => hookFiles.some(file => {
   try { return /"id":\s*"workflow-kit"/.test(readFileSync(path.join(root, file), 'utf8')); } catch { return false; }
 });
 
