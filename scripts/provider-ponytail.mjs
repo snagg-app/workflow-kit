@@ -53,6 +53,7 @@ export default {
   install: {
     home: ['.ponytail', 'workflow-kit'],
     directory: (version, c) => snapshotDirectory(version, c.root),
+    launcher: process.platform === 'win32' ? 'launch.cmd' : 'launch.sh', // the hook starts this file
     // The launchers pin the Node that runs the installer, which must be personal trusted code too.
     before: c => c.outside(path.dirname(realpathSync(process.execPath)), 'Run the installer with a Node installed outside Git checkouts.'),
     files: c => Object.fromEntries(sources(c.root).map(([file, bytes]) => [file, { bytes }])),

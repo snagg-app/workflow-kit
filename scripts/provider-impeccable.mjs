@@ -10,6 +10,8 @@ const skills = providers.map(provider => `${provider}/skills/impeccable`);
 const windows = process.platform === 'win32';
 const asset = `impeccable-${windows ? 'windows' : process.platform}-${windows ? 'x64' : process.arch}${windows ? '.exe' : ''}`;
 
+const engineFile = windows ? 'impeccable.exe' : 'impeccable';
+
 const filesBelow = (base, directory = '') => readdirSync(join(base, directory), { withFileTypes: true })
   .flatMap(entry => entry.isDirectory() ? filesBelow(base, `${directory}${entry.name}/`) : [`${directory}${entry.name}`]).sort();
 
@@ -73,6 +75,7 @@ export default {
   install: {
     home: ['.impeccable', 'workflow-kit'],
     directory: version => `engine-${version}`,
+    launcher: engineFile, // the engine itself: the hook runs it
     files(c, version) {
       assert.match(version, /^\d+\.\d+\.\d+$/);
       const pins = new Map(readFileSync(join(c.kit, 'scripts/impeccable/SHA256SUMS'), 'utf8').trim().split(/\r?\n/)
@@ -80,7 +83,7 @@ export default {
       const sha256 = pins.get(asset);
       assert.match(sha256 ?? '', /^[a-f0-9]{64}$/, `No reviewed engine pin for ${asset}`);
       const base = process.env.IMPECCABLE_DOWNLOAD_BASE ?? 'https://github.com/pbakaus/impeccable/releases/download';
-      return { [windows ? 'impeccable.exe' : 'impeccable']: { url: `${base}/engine-v${version}/${asset}`, sha256, mode: 0o555 } };
+      return { [engineFile]: { url: `${base}/engine-v${version}/${asset}`, sha256, mode: 0o555 } };
     },
   },
 

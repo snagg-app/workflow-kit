@@ -5,20 +5,10 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { hookFiles } from './agents.mjs';
+import { locked } from './lock.mjs';
 import { fileURLToPath } from 'node:url';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
-
-/** Runs `work` under an atomic lock directory; a holder that crashed is taken over after `stale` ms. Another live holder: skipped, not waited for. */
-function locked(lock, stale, work) {
-  for (let attempt = 0;; attempt++) {
-    try { mkdirSync(lock); break; } catch (error) {
-      if (error.code !== 'EEXIST' || attempt || Date.now() - statSync(lock).mtimeMs < stale) return;
-      rmSync(lock, { recursive: true, force: true });
-    }
-  }
-  try { work(); } finally { rmSync(lock, { recursive: true, force: true }); }
-}
 
 const processGit = (dir, ...args) => {
   const result = spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8', windowsHide: true });

@@ -2,14 +2,17 @@
 // Aufruf: node scripts/kit-hook.mjs <Event> --agent <claude|codex>; Hook-JSON auf stdin, Antwort-JSON auf stdout, Exit 0.
 // Nutzen: Die Agent-Einstellungen enthalten nur noch diesen Aufruf; Versionen stehen in versions.json.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents, agentNames, hookEvents } from './agents.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
-import { snapshotDirectory } from './provider-ponytail.mjs';
+import { locked } from './lock.mjs';
+import { locate, markUsed } from './provider.mjs';
+import impeccableProvider from './provider-impeccable.mjs';
+import ponytailProvider from './provider-ponytail.mjs';
 import { projectFeatures, readProfile, textsFor } from './project-profile.mjs';
 
 const self = fileURLToPath(import.meta.url);
@@ -19,23 +22,12 @@ const windows = process.platform === 'win32';
 const [event, ...rest] = process.argv.slice(2);
 const agent = rest[rest.indexOf('--agent') + 1];
 
-/** Runs `work` under an atomic lock directory; a holder that crashed is taken over after `stale` ms. Another live holder: skipped, not waited for. */
-function locked(lock, stale, work) {
-  for (let attempt = 0;; attempt++) {
-    try { mkdirSync(lock); break; } catch (error) {
-      if (error.code !== 'EEXIST' || attempt || Date.now() - statSync(lock).mtimeMs < stale) return;
-      rmSync(lock, { recursive: true, force: true });
-    }
-  }
-  try { work(); } finally { rmSync(lock, { recursive: true, force: true }); }
-}
-
 /** The checkout both the installer and the launcher lookup read the Ponytail files from. */
 const hookProject = () => projectRoot(process.env.CLAUDE_PROJECT_DIR || undefined);
 
 /** One installer run per machine, for the functions the project uses. */
 function install(names) {
-  const home = path.join(homedir(), '.ponytail', 'workflow-kit');
+  const home = path.join(homedir(), ...ponytailProvider.install.home);
   mkdirSync(home, { recursive: true });
   locked(path.join(home, '.install.lock'), 15 * 60_000, () => {
     const log = openSync(path.join(home, '.install.log'), 'w');
@@ -96,18 +88,26 @@ function fingerprint(dir, input, { configEnv, configDir }, settings) {
   }
 }
 
+/** Where a provider's installation lies (asked of the provider, never rebuilt here); a complete one is marked as used now, which keeps it from the 30-day cleanup. */
+function installed(provider) {
+  try {
+    const where = locate(provider, { home: homedir(), versions, get root() { return hookProject(); } });
+    if (!where.complete) return null;
+    markUsed(where.directory);
+    return where.entry;
+  } catch { return null; } // e.g. committed sources missing: the same as not installed
+}
+
 /** The installed snapshots are personal and pinned to the Node that installed them, never a PATH lookup. */
 function launcher(action, ...extra) {
-  let directory;
-  try { directory = snapshotDirectory(versions.ponytail, hookProject()); } catch { return null; } // the installer names the snapshot the same way
-  const file = path.join(homedir(), '.ponytail', 'workflow-kit', directory, windows ? 'launch.cmd' : 'launch.sh');
-  if (!existsSync(file)) return null;
+  const file = installed(ponytailProvider);
+  if (!file) return null;
   const args = [action, agent, ...extra];
   return windows
     ? { file: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `""${file}" ${args.join(' ')}"`], options: { windowsVerbatimArguments: true } }
     : { file: '/bin/sh', args: [file, ...args], options: {} };
 }
-const engine = path.join(homedir(), '.impeccable', 'workflow-kit', `engine-${versions.impeccable}`, windows ? 'impeccable.exe' : 'impeccable');
+const engine = installed(impeccableProvider);
 
 async function readInput() {
   if (process.stdin.isTTY) return '';
@@ -126,7 +126,7 @@ function passThrough(command) {
 }
 
 if (event === 'UserPromptSubmit') passThrough(launcher('mode-tracker'));
-else if (event === 'PostToolUse' || event === 'Stop') passThrough(existsSync(engine) && { file: engine, args: ['hook'], options: {} });
+else if (event === 'PostToolUse' || event === 'Stop') passThrough(engine && { file: engine, args: ['hook'], options: {} });
 else {
   const raw = await readInput();
   let input = {};
@@ -156,7 +156,7 @@ else {
   } else if (event === 'SessionStart' && on.ponytail) {
     say('Ponytail hooks are OFF. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs ponytail install (maintainer pre-authorized, writes no trust).');
   }
-  if (event === 'SessionStart' && fresh && on.impeccable && !existsSync(engine))
+  if (event === 'SessionStart' && fresh && on.impeccable && !engine)
     say('Impeccable hooks are OFF, UI checks do not run. They install themselves in the background at session start: tell the user to restart the session once and trust the hooks. If they are still OFF after that, node is missing from PATH or the install failed; then run node .vendor/workflow-kit/scripts/provider.mjs impeccable install (maintainer pre-authorized, writes no trust).');
   emit();
 }
