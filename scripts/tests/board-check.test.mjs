@@ -15,7 +15,8 @@ test('board check exits 0 only for startable issues: 1 blocked, 2 unknown (#593)
   assert.equal(check('Ready', [predecessor('OPEN', null)]), 1);
   assert.equal(check('Ready', [predecessor('CLOSED', 'NOT_PLANNED')]), 1);
   assert.equal(check('Backlog', []), 1);
-  for (const status of ['Auto review', 'Automated review']) assert.equal(check(status, []), 0, status);
+  assert.equal(check('Automated review', []), 0);
+  assert.equal(check('Auto review', []), 2, 'Auto review is no alias');
   assert.equal(check('Automatic review', []), 2, 'An unrelated status remains unknown');
   const missing = issue();
   missing.projectItems.nodes[0].status = null;
@@ -640,8 +641,6 @@ test('check of a new issue is BLOCKED with "finish #N first" while the own sessi
   assert.equal(blocked.status, 1, blocked.stdout);
   assert.match(blocked.stdout, /^- finish #5 first/m);
   assert.ok(queries().some(query => query.includes('search(') && query.includes('closedByPullRequestsReferences(first:10){nodes{state body ')), 'the search asks for the PR bodies, where the claims stand');
-  search(own('Auto review'));
-  assert.match(run('check', '1', '--session', 'S1').stdout, /^- finish #5 first/m, 'The alias keeps the session claim gate');
   const other = run('check', '1', '--session', 'S2');
   assert.equal(other.status, 0, `the claim of another session is not mine: ${other.stdout}`);
   search(own('Human review'));

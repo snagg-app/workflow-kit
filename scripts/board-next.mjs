@@ -89,7 +89,7 @@ function next() {
   if (abandoned.length) notes.push(`Stale or conflicting work, a new session may take it over (start ISSUE --session ID):\n${cut(abandoned.map(issue => work(issue,
     conflicting(issue) ? 'merge conflicts' : `no activity for ${ago(idleMs(issue))}`))).join('\n')}\n`);
   notes.push(...cut(startable.map(line)));
-  notes.push(startable.length ? 'Run board.mjs start ISSUE to take one.' : 'No Ready issue whose blockers are all completed.');
+  notes.push(startable.length ? 'Run board.mjs start ISSUE to take one.' : `No ${statuses.ready} issue whose blockers are all completed.`);
   if (stackable.length) notes.push('\nReady and stackable on an open PR (start ISSUE says STACKABLE; see docs/CONTRIBUTING.md#stacked-pull-requests):');
   notes.push(...cut(stackable.map(issue => `${line(issue)}\n  - base PR #${issue.base.number} (${issue.base.state === 'MERGED' ? `merged into ${issue.base.baseRefName}` : `branch ${issue.base.headRefName}`})`)));
   if (held.length) notes.push('\nReady but not startable:');
