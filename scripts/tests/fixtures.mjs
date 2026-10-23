@@ -34,7 +34,8 @@ export async function installersDone(home, timeout, installed = () => true) {
 /** A temporary directory that is removed with the test. */
 export function temporary(t, name) {
   const path = mkdtempSync(join(tmpdir(), name));
-  t.after(() => rmSync(path, { recursive: true, force: true }));
+  // A detached hook installer may still have its working directory in here for a moment; Windows refuses to remove it until it ends.
+  t.after(() => rmSync(path, { recursive: true, force: true, maxRetries: 50, retryDelay: 200 }));
   return path;
 }
 
