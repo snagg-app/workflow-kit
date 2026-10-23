@@ -77,7 +77,7 @@ of your own), or leave them unused.
 
 The kit owns every hook handler with the id `workflow-kit` (keep personal hooks elsewhere), and upstream skills, agents and
 commands by name. Generated discovery files are ordinary committed files in
-`.agents`, `.claude/skills/impeccable` and `.claude/agents`, plus `.codex/agents`; the other Claude Code skills are local links to `.agents/skills`. Equal files stay untouched; changed
+`.agents`, `.claude/skills/impeccable` and `.claude/agents`, plus `.codex/agents`; of `.claude/skills/impeccable` only the files that differ from `.agents/skills/impeccable` are committed (setup copies the others; a generated `.gitignore` in that folder names them), and `impeccable_*.toml` is committed only in `.codex/agents`; the other Claude Code skills are local links to `.agents/skills`. Equal files stay untouched; changed
 content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
 A fresh clone/worktree discovers the committed files without generation or dependency

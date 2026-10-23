@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync,readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,8 +48,10 @@ function fixture(t) {
     if (file.endsWith('/SHA256SUMS')) text = 'not-a-reviewed-checksum\n';
     writeFileSync(path, text);
   }
-  for (const provider of providers)
+  for (const provider of providers) {
+    mkdirSync(join(root, provider, 'skills/impeccable/scripts'), { recursive: true }); // Claude Code's copy is not committed, a clone lacks it (#761)
     writeFileSync(join(root, provider, 'skills/impeccable/scripts/VERSION'), '0.1.5\n');
+  }
   for (const directory of ['.codex/agents', '.claude/agents']) {
     const file = readdirSync(join(root, directory)).find(name => name.startsWith('impeccable'));
     assert.ok(file, `Existing companion in ${directory}`);
