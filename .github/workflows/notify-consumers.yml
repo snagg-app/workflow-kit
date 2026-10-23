@@ -1,7 +1,7 @@
 name: Notify consumers
 # A push to main sends a kit-main event to every repository in .github/kit-consumers.json,
 # so each can open its kit pin PR.
-# VAULTDEX_DISPATCH_TOKEN: fine-grained, the consumers only, Contents read and write
+# KIT_DISPATCH_TOKEN: fine-grained, the consumers only, Contents read and write
 # (secret name kept: renaming needs a repository admin). Without the secret the run fails visibly.
 on:
   push:
@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - env:
-          GH_TOKEN: ${{ secrets.VAULTDEX_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ secrets.KIT_DISPATCH_TOKEN }}
         run: |
           repos=$(jq -r '.[]' .github/kit-consumers.json)
           for repo in $repos; do
