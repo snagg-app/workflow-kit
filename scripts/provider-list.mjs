@@ -1,6 +1,7 @@
 // The list of skill providers. A fourth provider is its own provider-<name>.mjs and one line here; every other script asks this list.
 // A provider names: `skills` (names, or `root => names` for the skills the project has after setup), `perAgent: true` (every agent keeps its own copy),
 // `feature` ({ default, auto?, hint? }: its switch in .github/workflow-project.json, named like the provider; absent: no switch).
+// `hooks` ({ Event: { run(h), kind?, timeout?, matcher?, statusMessage? } }: the hook events it answers; with `kind` it owns the event's settings) and `hookDescription`: hooks.mjs and kit-hook.mjs read both from here.
 import mattPocock from './provider-matt-pocock.mjs';
 import ponytail from './provider-ponytail.mjs';
 import impeccable from './provider-impeccable.mjs';

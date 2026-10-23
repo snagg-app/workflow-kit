@@ -6,20 +6,18 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agents, agentNames, hookEvents } from './agents.mjs';
+import { agents, agentNames } from './agents.mjs';
+import { hookEvents } from './hooks.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { locate, markUsed } from './provider.mjs';
-import { featureProviders } from './provider-list.mjs';
-import impeccableProvider from './provider-impeccable.mjs';
-import ponytailProvider from './provider-ponytail.mjs';
+import { featureProviders, providerList, providerNamed } from './provider-list.mjs';
 import { projectFeatures, readProfile, textsFor } from './project-profile.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const scripts = path.dirname(self);
 const versions = JSON.parse(readFileSync(path.join(scripts, 'versions.json'), 'utf8'));
-const windows = process.platform === 'win32';
 const [event, ...rest] = process.argv.slice(2);
 const agent = rest[rest.indexOf('--agent') + 1];
 
@@ -30,15 +28,16 @@ const installCommand = provider => `node .vendor/workflow-kit/scripts/provider.m
 
 /** Runs the installers for the functions the project uses; provider.mjs locks each one per machine, so two sessions install once. */
 function install(names) {
-  const home = path.join(homedir(), ...ponytailProvider.install.home);
-  mkdirSync(home, { recursive: true });
-  const log = openSync(path.join(home, '.install.log'), 'a');
-  try {
-    // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
-    for (const name of names)
+  // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
+  for (const name of names) {
+    const home = path.join(homedir(), ...providerNamed(name).install.home);
+    mkdirSync(home, { recursive: true });
+    const log = openSync(path.join(home, '.install.log'), 'a');
+    try {
       spawnSync(process.execPath, [path.join(scripts, 'provider.mjs'), name, 'install'], { cwd: hookProject(), stdio: ['ignore', log, log], timeout: 300_000 });
-  } finally {
-    closeSync(log);
+    } finally {
+      closeSync(log);
+    }
   }
 }
 
@@ -98,17 +97,6 @@ function installed(provider) {
   } catch { return null; } // e.g. committed sources missing: the same as not installed
 }
 
-/** The installed snapshots are personal and pinned to the Node that installed them, never a PATH lookup. */
-function launcher(action, ...extra) {
-  const file = installed(ponytailProvider);
-  if (!file) return null;
-  const args = [action, agent, ...extra];
-  return windows
-    ? { file: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `""${file}" ${args.join(' ')}"`], options: { windowsVerbatimArguments: true } }
-    : { file: '/bin/sh', args: [file, ...args], options: {} };
-}
-const engine = installed(impeccableProvider);
-
 async function readInput() {
   if (process.stdin.isTTY) return '';
   return new Promise(resolve => {
@@ -125,8 +113,11 @@ function passThrough(command) {
   if (command) process.exitCode = spawnSync(command.file, command.args, { ...command.options, stdio: 'inherit', windowsHide: true }).status ?? 0;
 }
 
-if (event === 'UserPromptSubmit') passThrough(launcher('mode-tracker'));
-else if (event === 'PostToolUse' || event === 'Stop') passThrough(engine && { file: engine, args: ['hook'], options: {} });
+// The providers name their handlers (provider-<name>.mjs); this module only hands them what they need and dispatches.
+const owners = providerList().filter(provider => provider.hooks?.[event]);
+const hook = { agent, event, say, user, context, texts, installed, installCommand, passThrough };
+const simple = owners.filter(provider => provider.hooks[event].kind === 'simple');
+if (simple.length) simple.forEach(provider => provider.hooks[event].run(hook));
 else {
   const raw = await readInput();
   let input = {};
@@ -143,20 +134,6 @@ else {
     modulesCheck(project, { git: hookGit }).forEach(say);
     if (fresh) spawn(process.execPath, [self, '--install', ...Object.keys(on).filter(name => on[name])], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   }
-  const ponytail = on.ponytail && launcher(event === 'SessionStart' ? 'activate' : 'subagent', ...(event === 'SessionStart' && !fresh ? ['continue'] : []));
-  if (ponytail) {
-    const child = spawnSync(ponytail.file, ponytail.args, { ...ponytail.options, input: raw, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true });
-    process.exitCode = child.status ?? 0;
-    const text = (child.stdout ?? '').trim();
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed.systemMessage) user.push(parsed.systemMessage);
-      if (parsed.hookSpecificOutput?.additionalContext) context.push(parsed.hookSpecificOutput.additionalContext);
-    } catch { if (text) context.push(text); }
-  } else if (event === 'SessionStart' && on.ponytail) {
-    say(texts().hooksOff(ponytailProvider.label, installCommand(ponytailProvider)));
-  }
-  if (event === 'SessionStart' && fresh && on.impeccable && !engine)
-    say(texts().hooksOff(impeccableProvider.label, installCommand(impeccableProvider)));
+  for (const provider of owners) if (on[provider.name]) provider.hooks[event].run({ ...hook, raw, fresh });
   emit();
 }

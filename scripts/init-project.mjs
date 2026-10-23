@@ -6,7 +6,8 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
-import { agents, entryFile, hookAgents, hookSettings } from './agents.mjs';
+import { agents, entryFile, hookAgents } from './agents.mjs';
+import { hookSettings } from './hooks.mjs';
 import { linkKit } from './kit-check.mjs';
 import { checkDirectory } from './provider-links.mjs';
 import { ownSkills } from './provider-list.mjs';

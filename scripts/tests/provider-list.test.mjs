@@ -22,3 +22,10 @@ test('the profile switches are exactly the providers with a feature', t => {
   writeFileSync(join(root, '.github/workflow-project.json'), '{"impeccable": false}');
   assert.deepEqual(Object.keys(projectFeatures(root)).sort(), featureProviders().map(provider => provider.name).sort());
 });
+
+test('the hook events come from the providers, and every named handler is callable (#795)', async () => {
+  const { hookEvents } = await import('../hooks.mjs');
+  const named = providerList().flatMap(provider => Object.entries(provider.hooks ?? {}));
+  assert.ok(named.length && named.every(([, hook]) => typeof hook.run === 'function'));
+  for (const [event] of named) assert.ok(hookEvents.includes(event), `${event} is a hook event`);
+});

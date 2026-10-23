@@ -4,7 +4,8 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
-import { entryFile, hookSettings } from '../agents.mjs';
+import { entryFile } from '../agents.mjs';
+import { hookSettings } from '../hooks.mjs';
 import { rename } from '../provider-links.mjs';
 import { isolatedGit, run as spawn, temporary } from './fixtures.mjs';
 

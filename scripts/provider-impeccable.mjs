@@ -53,7 +53,10 @@ const filesBelow = (base, directory = '') => readdirSync(join(base, directory), 
 const companionFiles =base => folders.flatMap(directory => existsSync(join(base, directory))
   ? readdirSync(join(base, directory)).filter(name => /^impeccable[-_.][\w.-]+$/.test(name)).map(name => `${directory}/${name}`) : []);
 
-export default {
+/** PostToolUse and Stop: the installed engine answers on the hook's own stdin/stdout (`h` is the hook context of kit-hook.mjs). */
+const engine = h => h.passThrough((file => file && { file, args: ['hook'], options: {} })(h.installed(self)));
+
+const self = {
   name: 'impeccable',
   label: 'Impeccable',
   source: '.vendor/impeccable',
@@ -61,6 +64,13 @@ export default {
   skills: ['impeccable'],
   perAgent: true,
   feature: { default: 'auto', auto: hasUi, hint: ' (on when the project has UI files)' },
+  // The hook events this provider answers; an entry with `kind` also owns the event's settings (hooks.mjs).
+  hookDescription: 'Impeccable design detector: immediate-tier checks after Edit/Write on UI files, full-rule deep pass on Stop.',
+  hooks: {
+    PostToolUse: { kind: 'simple', timeout: 120, matcher: true, statusMessage: 'Impeccable UI check (verified user installation)', run: engine },
+    Stop: { kind: 'simple', timeout: 120, statusMessage: 'Impeccable UI check (verified user installation)', run: engine },
+    SessionStart: { run: h => { if (!h.installed(self) && h.fresh) h.say(h.texts().hooksOff(self.label, h.installCommand(self))); } },
+  },
 
   build(c, next) {
     const version = c.versions.impeccable;
@@ -132,3 +142,5 @@ export default {
     await updateImpeccable(c.kit);
   },
 };
+
+export default self;
