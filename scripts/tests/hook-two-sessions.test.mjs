@@ -1,4 +1,4 @@
-// Zweck: Zwei Sessions starten gleichzeitig (SessionStart) gegen einen fehlenden Snapshot; die Sperre des Hook-Moduls laesst nur eine Installation zu (#750).
+// Zweck: Zwei Sessions starten gleichzeitig (SessionStart) gegen einen fehlenden Snapshot; die Sperre der Engine (provider.mjs) laesst nur eine Installation zu (#750).
 // Nutzen: Der Test geht durch den echten Hook-Einstieg und zaehlt Downloads an einem lokalen Ziel; die Engine selbst testet provider.test.mjs.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -36,7 +36,7 @@ test('two SessionStart hooks at the same time install Impeccable once, and the n
     { cwd: checkout, env, input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', cwd: checkout }), timeout: hookTimeout });
   const engineHome = path.join(home, '.impeccable/workflow-kit');
   const engine = path.join(engineHome, `engine-${version}`, windows ? 'impeccable.exe' : 'impeccable');
-  const lock = path.join(home, '.ponytail/workflow-kit/.install.lock');
+  const lock = path.join(engineHome, '.impeccable.lock');
   await Promise.all([call(), call()]);
   for (let wait = 0; (!existsSync(engine) || existsSync(lock)) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
   const log = path.join(home, '.ponytail/workflow-kit/.install.log');
