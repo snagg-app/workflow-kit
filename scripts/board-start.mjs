@@ -1,7 +1,7 @@
 // `start ISSUE`: claim, branch and Draft PR.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { detectAgent } from './agents.mjs';
@@ -71,7 +71,7 @@ export function createStart(env) {
     assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
     // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
     [...kitCheck(projectDirectory, { git }), ...modulesCheck(projectDirectory, { git })].forEach(progress);
-    // One checkout-wide setting each, so a kit commit never rides along with a project push and a branch switch follows the kit pin.
+    // One checkout-wide setting each, so a commit in a submodule never rides along with a project push and a branch switch follows the submodule pins.
     if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);
     const issue = readIssue();
     assert.ok(!isSpec(issue), specRefusal(number, 'start is refused; agents leave specs untouched'));
@@ -142,7 +142,6 @@ export function createStart(env) {
         assert.equal(claimField.exec(posted?.body ?? '')?.[2], session, 'Claim comment read-back differs');
       }
     }
-    if (existsSync(modules) && readFileSync(modules, 'utf8').includes('.vendor/workflow-kit')) git('submodule', 'update', '--init', '.vendor/workflow-kit');
     const final = readIssue();
     assert.equal(projectItem(final)?.status?.name, statuses.inProgress, `${statuses.inProgress} status read-back differs`);
     assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');

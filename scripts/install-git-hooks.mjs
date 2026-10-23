@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { externalTool, projectRoot } from './checkout-root.mjs';
 
-// Explicit setup, per clone: copies the project's .githooks (plus the kit's post-checkout kit sync) into the clone's
+// Explicit setup, per clone: copies the project's .githooks into the clone's
 // Git directory and points core.hooksPath there, so a checked-out branch cannot replace the hooks Git runs (#194).
 // Only a rerun updates the copy. Automatic hooks never run this file. --check only reports.
 const root = projectRoot();
@@ -140,9 +140,8 @@ for (const file of worktreeFiles) {
 }
 
 // The copy is the trusted part: replaced on every explicit run, so removed hooks disappear too.
-// Symlinks stay out. A project post-checkout of its own wins over the kit's.
+// Symlinks stay out.
 if (ready) {
-  const hook = join(hooksDir, 'post-checkout');
   if (check) {
     // Shared by every worktree of the clone: a copy that already matches has nothing open (#730).
     const files = base => !existsSync(base) ? {} : Object.fromEntries(readdirSync(base, { recursive: true, withFileTypes: true })
@@ -152,7 +151,6 @@ if (ready) {
     const executable = process.platform === 'win32' || !existsSync(hooksDir)
       || readdirSync(hooksDir, { withFileTypes: true }).every(entry => !entry.isFile() || (statSync(join(hooksDir, entry.name)).mode & 0o111) === 0o111);
     const wanted = files(join(root, '.githooks')), installed = files(hooksDir);
-    wanted[`${sep}post-checkout`] ??= readFileSync(new URL('./git-hooks/post-checkout', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
     if (executable && JSON.stringify(Object.entries(wanted).sort()) === JSON.stringify(Object.entries(installed).sort()))
       console.log(`hooks: ${hooksValue} is current`);
     else console.log(`hooks: would copy .githooks into ${hooksValue}`);
@@ -160,11 +158,7 @@ if (ready) {
     rmSync(hooksDir, { recursive: true, force: true });
     mkdirSync(hooksDir, { recursive: true });
     cpSync(join(root, '.githooks'), hooksDir, { recursive: true, filter: source => !lstatSync(source).isSymbolicLink() });
-    const kitHook = readFileSync(new URL('./git-hooks/post-checkout', import.meta.url), 'utf8').replaceAll('\r\n', '\n');
-    if (!existsSync(hook)) writeFileSync(hook, kitHook);
-    else if (readFileSync(hook, 'utf8') !== kitHook)
-      console.log('hooks: kept the project post-checkout; integrate scripts/git-hooks/post-checkout there by hand');
     for (const name of readdirSync(hooksDir)) if (lstatSync(join(hooksDir, name)).isFile()) chmodSync(join(hooksDir, name), 0o755);
-    console.log(`hooks: copied .githooks (and the kit post-checkout) into ${hooksValue}; rerun after changing a hook`);
+    console.log(`hooks: copied .githooks into ${hooksValue}; rerun after changing a hook`);
   }
 }
