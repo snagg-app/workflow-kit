@@ -198,7 +198,7 @@ export function createHandoff(env) {
     return finishedPr(Number(state.value), 'handoff', expectedHead, ({ comments, pr }) => {
       const reasons = [];
       const comment = findHandoffComment(comments, viewer, pr.headRefOid);
-      if (!comment) reasons.push(`no handoff comment for head ${pr.headRefOid.slice(0, 7)} on PR #${state.value}: write FILE (${texts.resultHint}, then "### Retro" with one list line per finding, or "- ${texts.noFindings}"; README: Handoff comment) and run board.mjs done ${number} FILE`);
+      if (!comment) reasons.push(texts.noHandoff(pr.headRefOid.slice(0, 7), state.value, number));
       if (!partial && !connectedIssues(pr).has(issueId)) reasons.push(`PR #${state.value} is not natively linked to issue #${number}`);
       return reasons;
     }, prior);
