@@ -55,23 +55,17 @@ function headSetAt(pr, log) {
  * reviewList, reactions, inline, threads; a field is read where the rules need it, in this order. `settings`: the PR base's awaitApps, optionalReviewers,
  * updateBranchChecks. `options`: stallMinutes, now, graceMinutes, dismissStale. `dismissals` are the stale change requests the caller is to dismiss.
  */
-export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, dismissStale = false }) {
-  const { pr } = facts;
-  const optional = optionalReviewers(settings); // a malformed "optionalReviewers" fails here, whatever the head looks like
-  const isOptional = name => optional.has(reviewerKey(name));
-  const isOptionalCheck = check => isOptional(check.checkSuite?.app?.slug ?? check.creator?.login);
-  const baseChecks = updateBranchChecks(settings), baseReasons = new Set();
-  const lines = [`#${pr.number} ${pr.state} head ${pr.headRefOid.slice(0, 7)}`];
-  // Closed without merge ends the wait but is never a delivery.
-  if (pr.state !== 'OPEN') return { done: true, failed: pr.state === 'CLOSED', reasons: ['PR closed without merge'], lines, pr };
-  const { commit } = pr.commits.nodes[0];
-  const pushed = headPushed(pr);
-  const after = time => Date.parse(time) >= pushed;
-  const pushes = () => facts.pushLog;
-  const stalled = since => now - since > stallMinutes * 60_000; // false for Infinity
-  const waiting = [];
-  let failed = false;
-  const reasons = []; // short causes for the FAILED line; the detail lines stay in `lines`
+
+// The checks of one head: which job counts (the newest executed run), which suite is awaited.
+  const runOf = check => check.checkSuite?.workflowRun?.databaseId ?? check.checkSuite?.databaseId;
+  const jobKey = check => JSON.stringify([check.checkSuite?.app?.slug, check.checkSuite?.workflowRun?.workflow?.id, check.name]);
+  const orderable = check => check.__typename === 'CheckRun' && Number.isSafeInteger(runOf(check));
+
+/** Checks the head's jobs and returns the live ones. */
+function judgeChecks(ctx, s) {
+  const { pr, settings, commit, isOptionalCheck } = ctx;
+  const { lines, waiting, reasons, baseReasons } = s;
+  const baseChecks = updateBranchChecks(settings);
   const contexts = commit.statusCheckRollup?.contexts ?? { totalCount: 0, nodes: [] };
   assert.equal(contexts.nodes.length, contexts.totalCount, 'Not every check is readable');
   // The usual Draft-then-Ready sequence starts a second workflow run on the same commit and cancels the first, so the
@@ -79,9 +73,6 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
   // never by another job of its own run: two jobs of one run that share a display name both count, and so does a
   // newest run that is cancelled. The workflow is told apart by its id (two files can share a display name). A check
   // without a run or suite id cannot be ordered and stays as it is.
-  const runOf = check => check.checkSuite?.workflowRun?.databaseId ?? check.checkSuite?.databaseId;
-  const jobKey = check => JSON.stringify([check.checkSuite?.app?.slug, check.checkSuite?.workflowRun?.workflow?.id, check.name]);
-  const orderable = check => check.__typename === 'CheckRun' && Number.isSafeInteger(runOf(check));
   // A SKIPPED run executed nothing, so it proves nothing and replaces nothing: a job's verdict is that of its newest run that
   // is not SKIPPED (a cancelled or failed earlier run stays the verdict, a real retry decides). Only a job whose runs were
   // all SKIPPED counts as skipped, which is how an optional job looks.
@@ -107,7 +98,7 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
     if (pending) { waiting.push({ text: `check ${label}`, since: Infinity }); continue; }
     const result = check.conclusion ?? check.state;
     if (!passed.has(result)) {
-      failed = true;
+      s.failed = true;
       const asks = baseChecks.has(label);
       reasons.push(`check ${label} ${result}${asks ? ` asks for the base: run board.mjs merge ${pr.number} or merge the base and push` : ''}`);
       if (asks) baseReasons.add(reasons.at(-1));
@@ -116,6 +107,12 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
     lines.push(`check ${label}: ${result}${check.title || check.description ? ` (${check.title || check.description})` : ''}`);
   }
   if (contexts.nodes.every(isOptionalCheck)) waiting.push({ text: 'first CI check', since: Infinity });
+  return { contexts, live };
+}
+
+/** Suites without runs: a workflow that is about to report, or that failed to start. */
+function judgeSuites({ settings, commit, isOptional }, s) {
+  const { lines, waiting, reasons } = s;
   // An Actions suite without runs is a triggered workflow about to report. Other apps (Sonar, CodeRabbit,
   // Renovate …) open a suite on every push and often never run it, so they count only when the project
   // lists them in "awaitApps" (analyzers such as SonarCloud create their run only when finished). Both may stall.
@@ -140,11 +137,16 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
     if (suite.status !== 'COMPLETED') waiting.push({ text: `check suite ${suite.app.slug}${empty(suite) ? ' without runs' : ' still running'}`, since: empty(suite) ? Date.parse(suite.createdAt) : Infinity });
     // A workflow that fails to start (STARTUP_FAILURE) completes its suite without any run to show it.
     else if (!passed.has(suite.conclusion)) {
-      failed = true;
+      s.failed = true;
       reasons.push(`check suite ${suite.app.slug} ${suite.conclusion}`);
       lines.push(`check suite ${suite.app.slug}: ${suite.conclusion}`);
     }
   }
+}
+
+/** Information only: the correction cap and the base movement. */
+function judgeProgress({ pr, facts }, { lines }) {
+  const pushes = () => facts.pushLog;
   // The review loop stops pushing after two corrections (docs/CONTRIBUTING.md#review-loop); nothing enforces it, so say where the PR stands.
   // It is read before the red verdict, because a red head is when the next correction is weighed.
   try {
@@ -167,9 +169,15 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
   } catch (error) {
     lines.push(`note: base movement unreadable (${error.message})`);
   }
+}
+
+/** Blockers that need no review read: Draft, a missing CI run, merge conflicts. */
+function judgeBlockers({ pr, facts, now, contexts, isOptionalCheck }, s) {
+  const { lines, reasons } = s;
+  const pushes = () => facts.pushLog;
   // A Draft skips the guarded CI jobs, so its green checks prove nothing: never DONE, whatever the checks say.
   if (pr.isDraft) {
-    failed = true;
+    s.failed = true;
     reasons.push('PR is still Draft');
     lines.push(`blocker: PR is still Draft; run board.mjs done ISSUE`);
   }
@@ -178,7 +186,7 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
   // Nothing is dispatched: that costs Actions minutes, a person decides.
   if (!pr.isDraft && pr.mergeStateStatus === 'UNKNOWN' && contexts.nodes.every(isOptionalCheck) && now - headSetAt(pr, pushes()) > 10 * 60_000) {
     if (!facts.headRuns.some(run => ['pull_request', 'workflow_dispatch'].includes(run.event))) {
-      failed = true;
+      s.failed = true;
       reasons.push('no CI run on the head');
       lines.push(`blocker: no pull_request run on the head 10 minutes after the push and the merge state is UNKNOWN; ${facts.stackOrderText
         ? `probably a conflict in a layer of the native stack locks it: ${facts.stackOrderText}`
@@ -188,12 +196,14 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
   // Conflicts start no workflow, so the wait would never end; the fix is merging the base now.
   // UNKNOWN (GitHub computes the state late after a push) or BEHIND are no conflict.
   if (pr.mergeStateStatus === 'DIRTY' && !pr.isDraft) {
-    failed = true;
+    s.failed = true;
     reasons.push('merge conflicts');
     lines.push(facts.conflictLine);
   }
-  // A known CI failure or conflict is the verdict; later review reads must not turn it into ERROR.
-  if (failed) return { done: true, failed, reasons, lines, pr, baseOnly: reasons.every(reason => baseReasons.has(reason)) };
+}
+
+/** A skip while Draft says nothing about the Ready head: wait for the run after Ready. */
+function judgeDraftSkips({ pr, now, contexts, isOptionalCheck }, { lines, waiting }) {
   // A pull_request run skipped while the PR was still Draft (the usual `!draft` job guard) executed nothing, so it says
   // nothing about the Ready head. Ready normally starts a fresh run; until the workflow has an executed run created after
   // Ready, its path is missing, not green. An executed Draft run does not exempt the workflow (an unguarded job next to a
@@ -239,7 +249,11 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
     if (now - readyEvent > 10 * 60_000) lines.push(`note: ${text}; its workflow does not start on Ready`);
     else waiting.push({ text, since: Infinity });
   }
-  // The quality gate judges new conditions only, so a green SonarCloud check can sit on open issues. Count them once the analysis is final; a skipped check ran no analysis.
+}
+
+/** Open Sonar issues and failure notices of the head. */
+function judgeSonar({ pr, facts, live, after }, s) {
+  const { lines, reasons } = s;
   const { comments } = facts;
   const short = pr.headRefOid.slice(0, 7);
   for (const check of live.filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && check.conclusion !== 'SKIPPED')) {
@@ -252,7 +266,7 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
     }
     lines.push(`sonar: ${open} open issue${open === 1 ? '' : 's'}`, ...findings);
     if (open) {
-      failed = true;
+      s.failed = true;
       reasons.push(`${open} open Sonar issue${open === 1 ? '' : 's'}`);
       lines.push(`blocker: ${reasons.at(-1)} on this head; fix them or justify each as a false positive`);
     }
@@ -265,6 +279,13 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
       lines.push(`sonar: failure notice ${notice.html_url} came after the green check of head ${short}; it names no revision (likely an older commit), the green check stands`);
     }
   }
+}
+
+/** Bot traces: running summaries, 👀 reactions, review requests and the grace for reviewers that have not started. */
+function judgeBotTraces({ pr, facts, live, now, graceMinutes, pushed, after, isOptional, isOptionalCheck }, { lines, waiting }) {
+  const { comments } = facts;
+  const short = pr.headRefOid.slice(0, 7);
+  const pushes = () => facts.pushLog;
   const { reviewList, reactions } = facts;
   // Inline review comments and thread replies carry findings too.
   const { inline } = facts;
@@ -334,6 +355,12 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
       waiting.push({ text: `reviewers may still start until ${new Date(graceFrom + graceMinutes * 60_000).toISOString()}`, since: Infinity });
     }
   }
+}
+
+/** Reviews, comments, threads and change requests of the head; returns the stale change requests to dismiss. */
+function reportReview({ pr, facts, after, isOptional, dismissStale }, { lines }) {
+  const { comments, reviewList, inline } = facts;
+  const short = pr.headRefOid.slice(0, 7);
   for (const review of reviewList.filter(review => review.commit_id === pr.headRefOid)) lines.push(`review ${login(review.user)} ${review.state} ${review.html_url}`);
   for (const comment of comments.filter(comment => after(comment.updated_at))) lines.push(`comment ${login(comment.user)} ${comment.html_url}`);
   for (const comment of inline.filter(comment => after(comment.updated_at))) lines.push(`inline ${login(comment.user)} ${comment.html_url}`);
@@ -353,10 +380,43 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
       lines.push(`dismissed stale change request by ${login(review.author)}: all threads are resolved`);
     } else lines.push(`blocker: changes requested by ${login(review.author)}`);
   }
+  return { threads, dismissals };
+}
+
+/**
+ * The verdict for one look at the PR head: { done, failed, reasons, lines, pr, baseOnly?, comments?, threads?, dismissals? }.
+ * `facts` (review-facts.mjs): pr, pushLog, baseMovement, headRuns, stackOrderText, conflictLine, comments, sonar (check -> { total, lines } or { error }),
+ * reviewList, reactions, inline, threads; a field is read where the rules need it, in this order. `settings`: the PR base's awaitApps, optionalReviewers,
+ * updateBranchChecks. `options`: stallMinutes, now, graceMinutes, dismissStale. `dismissals` are the stale change requests the caller is to dismiss.
+ * The groups above add their findings to one state (lines, waiting, reasons, failed); the verdict is made here, in one place.
+ */
+export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, dismissStale = false }) {
+  const { pr } = facts;
+  const optional = optionalReviewers(settings); // a malformed "optionalReviewers" fails here, whatever the head looks like
+  const isOptional = name => optional.has(reviewerKey(name));
+  const lines = [`#${pr.number} ${pr.state} head ${pr.headRefOid.slice(0, 7)}`];
+  // Closed without merge ends the wait but is never a delivery.
+  if (pr.state !== 'OPEN') return { done: true, failed: pr.state === 'CLOSED', reasons: ['PR closed without merge'], lines, pr };
+  const pushed = headPushed(pr);
+  const ctx = { facts, settings, pr, now, graceMinutes, dismissStale, pushed, isOptional, commit: pr.commits.nodes[0].commit,
+    isOptionalCheck: check => isOptional(check.checkSuite?.app?.slug ?? check.creator?.login),
+    after: time => Date.parse(time) >= pushed };
+  const s = { lines, waiting: [], reasons: [], baseReasons: new Set(), failed: false }; // reasons: short causes for the FAILED line; the detail lines stay in `lines`
+  const stalled = since => now - since > stallMinutes * 60_000; // false for Infinity
+  Object.assign(ctx, judgeChecks(ctx, s));
+  judgeSuites(ctx, s);
+  judgeProgress(ctx, s);
+  judgeBlockers(ctx, s);
+  // A known CI failure or conflict is the verdict; later review reads must not turn it into ERROR.
+  if (s.failed) return { done: true, failed: true, reasons: s.reasons, lines, pr, baseOnly: s.reasons.every(reason => s.baseReasons.has(reason)) };
+  judgeDraftSkips(ctx, s);
+  judgeSonar(ctx, s);
+  judgeBotTraces(ctx, s);
+  const { threads, dismissals } = reportReview(ctx, s);
   // ponytail: one fixed "usual duration" for every reviewer; replace when earlier review durations are readable.
-  for (const entry of waiting.filter(entry => stalled(entry.since))) lines.push(`stalled: ${entry.text}`);
-  const pending = waiting.filter(entry => !stalled(entry.since));
+  for (const entry of s.waiting.filter(entry => stalled(entry.since))) lines.push(`stalled: ${entry.text}`);
+  const pending = s.waiting.filter(entry => !stalled(entry.since));
   for (const entry of pending) lines.push(`waiting: ${entry.text}`);
   // A known failure ends the wait at once: the fix starts now, whatever else is still running.
-  return { done: failed || !pending.length, failed, reasons, lines, pr, comments, threads, dismissals };
+  return { done: s.failed || !pending.length, failed: s.failed, reasons: s.reasons, lines, pr, comments: facts.comments, threads, dismissals };
 }
