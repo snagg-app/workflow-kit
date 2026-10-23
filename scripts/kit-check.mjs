@@ -4,7 +4,7 @@
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { hookFiles } from './agents.mjs';
-import { asking, gitIn } from './git-tool.mjs';
+import { asking, gitIn, patient } from './git-tool.mjs';
 import { locked } from './lock.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -116,7 +116,7 @@ const state = { updated: false };
  * `kit`: the kit checkout that runs (`kit setup`), instead of the shared one found next to the project.
  * `git`: a runner `(dir, ...args) => output` that throws on failure (gitIn); the default is the kit's safe one, the hook and board.mjs pass theirs.
  */
-export function kitCheck(dir, { update = false, git: run = gitIn({}, dir), kit: shared } = {}) {
+export function kitCheck(dir, { update = false, git: run = gitIn(patient, dir), kit: shared } = {}) {
   const git = asking(run), messages = [], say = message => messages.push(message);
   const fresh = Number(process.env.KIT_HOOK_FRESH_SECONDS ?? 600) * 1000;
   const [gitDir, head] = git(dir, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');

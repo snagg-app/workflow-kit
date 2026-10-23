@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents, agentNames, hookEvents } from './agents.mjs';
 import { projectRoot } from './checkout-root.mjs';
-import { asking, gitIn } from './git-tool.mjs';
+import { asking, gitIn, patient } from './git-tool.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { locked } from './lock.mjs';
 import { locate, markUsed } from './provider.mjs';
@@ -57,9 +57,8 @@ if (Number(process.versions.node.split('.')[0]) < versions.node) {
   process.exit(0);
 }
 
-// The hook runs in the project folder, so its git is looked up outside that checkout (#758). Never prompt, never wait long:
-// the host kills the whole hook after 120 seconds.
-const hookGit = gitIn({ timeout: 40_000, env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } });
+// The hook runs in the project folder, so its git is looked up outside that checkout (#758).
+const hookGit = gitIn(patient);
 const git = asking(hookGit);
 function emit() {
   if (!user.length && !context.length) return;

@@ -20,6 +20,9 @@ export function gitIn({ timeout, env } = {}, ...paths) {
   };
 }
 
+/** For a check that may pull: never prompt, never wait long (the host kills a hook after 120 seconds). */
+export const patient = { timeout: 40_000, env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } };
+
 /** The same runner for callers that only ask: `{ ok, out }`, no throw (git missing, not a repository, failed command). */
 export const asking = git => (dir, ...args) => {
   try { return { ok: true, out: git(dir, ...args) }; } catch { return { ok: false, out: '' }; }
