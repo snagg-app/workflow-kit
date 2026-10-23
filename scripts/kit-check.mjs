@@ -74,31 +74,37 @@ function updateKit(kit, say) {
   });
 }
 
-/** Link `.vendor/workflow-kit` of one checkout to the shared kit (a Windows junction, else a symlink), then update the kit; report what needs a human. */
-function checkKit(dir, update, say, state) {
+/** The one repair of `.vendor/workflow-kit` (hook and `kit setup`): a link (Windows junction, else symlink) to the shared kit. Returns '' when in order, else what needs a human. */
+export function linkKit(root, kit) {
+  const link = path.join(root, '.vendor/workflow-kit'), entry = lstatSync(link, { throwIfNoEntry: false });
+  if (entry && !entry.isSymbolicLink())
+    return `${root}: .vendor/workflow-kit is a folder or submodule, not a link to the shared kit. Delete it (git rm -f for a submodule), then: node ${path.join(kit, 'scripts/init-project.mjs')} --existing --cwd ${root}`;
+  if (!existsSync(path.join(kit, 'AGENT_RULES.md')))
+    return `${root}: the shared Workflow Kit checkout ${kit} is missing or incomplete. Clone it: git clone https://github.com/snagg-app/workflow-kit.git ${kit}`;
+  if (real(link) === real(kit)) return '';
+  try {
+    rmSync(link, { force: true });
+    mkdirSync(path.dirname(link), { recursive: true });
+    symlinkSync(kit, link, 'junction');
+  } catch (error) { return real(link) === real(kit) /* a parallel session linked it first */ ? '' : `${root}: could not link .vendor/workflow-kit to ${kit} (${error.code ?? error.message}).`; }
+  return '';
+}
+
+/** Check one checkout: link it to the shared kit, then update the kit; report what needs a human. */
+function checkKit(dir, update, say, state, shared) {
   const top = git(dir, 'rev-parse', '--show-toplevel');
   if (!top.ok || !top.out) {
     if (isDirectory(path.join(dir, '.vendor/workflow-kit')))
       say(`${dir}: Workflow Kit not checked: git did not find the project repository (is git on PATH?).`);
     return;
   }
-  const root = top.out, link = path.join(root, '.vendor/workflow-kit');
+  const root = top.out;
   followBase(root, say);
-  const entry = lstatSync(link, { throwIfNoEntry: false });
+  const entry = lstatSync(path.join(root, '.vendor/workflow-kit'), { throwIfNoEntry: false });
   // The kit's own repository runs its own scripts; a project without any kit hook is none of our business.
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
-  const kit = sharedKit(root);
-  if (entry && !entry.isSymbolicLink())
-    return say(`${root}: .vendor/workflow-kit is a folder or submodule, not a link to the shared kit. Delete it (git rm -f for a submodule), then: node ${path.join(kit, 'scripts/init-project.mjs')} --existing --cwd ${root}`);
-  if (!existsSync(path.join(kit, 'AGENT_RULES.md')))
-    return say(`${root}: the shared Workflow Kit checkout ${kit} is missing or incomplete. Clone it: git clone https://github.com/snagg-app/workflow-kit.git ${kit}`);
-  if (real(link) !== real(kit)) {
-    try {
-      rmSync(link, { force: true });
-      mkdirSync(path.dirname(link), { recursive: true });
-      symlinkSync(kit, link, 'junction');
-    } catch (error) { if (real(link) === real(kit)) return; /* a parallel session linked it first */ return say(`${root}: could not link .vendor/workflow-kit to ${kit} (${error.code ?? error.message}).`); }
-  }
+  const kit = shared ?? sharedKit(root), problem = linkKit(root, kit);
+  if (problem) return say(problem);
   if (update && !state.updated) { state.updated = true; updateKit(kit, say); }
   return kit;
 }
@@ -120,9 +126,10 @@ const state = { updated: false };
  * The kit check of one directory; returns the messages (empty: all in order). After a clean full check the git dir gets a stamp (`kit-ok`). While project commit, kit commit
  * and kit path are unchanged and the stamp is young, the next call skips the check and the pull: one git call plus file reads. Time is only an addition, never the key.
  * `update`: also pull the shared kit (the hook at session start); board.mjs and `kit check` read only.
+ * `kit`: the kit checkout that runs (`kit setup`), instead of the shared one found next to the project.
  * `git`: a runner `(...args) => output` in `dir` that throws on failure (board.mjs injects its own).
  */
-export function kitCheck(dir, { update = false, git: run } = {}) {
+export function kitCheck(dir, { update = false, git: run, kit: shared } = {}) {
   useGit(run);
   const messages = [], say = message => messages.push(message);
   const fresh = Number(process.env.KIT_HOOK_FRESH_SECONDS ?? 600) * 1000;
@@ -132,10 +139,10 @@ export function kitCheck(dir, { update = false, git: run } = {}) {
     try {
       const stamp = JSON.parse(readFileSync(file, 'utf8'));
       if (stamp.git === gitDir && stamp.head === head && Date.now() - stamp.at < fresh && (stamp.pulled || !update)
-        && (!process.env.WORKFLOW_KIT_DIR || path.resolve(process.env.WORKFLOW_KIT_DIR) === stamp.kit) && kitHead(stamp.kit) === stamp.kitHead) return messages;
+        && (!process.env.WORKFLOW_KIT_DIR || path.resolve(process.env.WORKFLOW_KIT_DIR) === stamp.kit) && (!shared || shared === stamp.kit) && kitHead(stamp.kit) === stamp.kitHead) return messages;
     } catch { /* no or broken stamp: full check */ }
   }
-  const kit = checkKit(dir, update, say, state);
+  const kit = checkKit(dir, update, say, state, shared);
   if (file && kit && !messages.length) {
     // The check may have fast-forwarded the project, so the commit is read again.
     try { writeFileSync(file, JSON.stringify({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() })); } catch { /* best effort */ }
