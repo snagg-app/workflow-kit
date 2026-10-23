@@ -168,7 +168,7 @@ export async function install(p, c) {
   mkdirSync(parent, { recursive: true });
   await guarded(parent, p.name, async () => {
     if (!existsSync(destination) || !readdirSync(destination).length) {
-      // The folder of a download that failed in an older kit version stays empty.
+      // The folder of a failed download stays empty.
       if (existsSync(destination)) rmdirSync(destination);
       const stage = mkdtempSync(join(parent, '.install-'));
       try {

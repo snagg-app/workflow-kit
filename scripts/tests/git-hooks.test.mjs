@@ -324,12 +324,13 @@ test('a branch that changes the tracked hooks does not run them on checkout or p
     await f.git('switch', '-q', 'evil');
     await f.git('push', '-q', 'origin', 'evil', '--force');
   };
-  // Precondition: with the pre-#194 setting the branch's own hooks run.
+  // Precondition: with a relative setting the branch's own hooks run.
   await f.git('config', '--local', 'core.hooksPath', '.githooks');
   await visit();
   assert.deepEqual(Object.values(markers).map(existsSync), [true, true]);
 
   await f.git('switch', '-q', '--detach', base);
+  await f.git('config', '--local', '--unset', 'core.hooksPath');
   await f.run();
   await visit();
   assert.deepEqual(Object.values(markers).map(existsSync), [false, false]);
