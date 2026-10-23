@@ -20,7 +20,7 @@ const present = p => lstatSync(p, { throwIfNoEntry: false });
 const ours = handler => handler.id === 'workflow-kit';
 
 /** Configures the project at `root` (an existing project keeps its own files: no templates). Throws on a problem; prints what it did. */
-export function initProject({ root, existing = false }) {
+export function initProject({ root, existing = false, log = console.log }) {
   // The kit is the shared checkout; it configures itself or the project named by --cwd, never a project that contains the kit.
   assert.ok(root === kit || !(kit + sep).startsWith(root + sep), 'Run init-project from the shared kit checkout (a clone next to the project, not inside it): node <kit>/scripts/init-project.mjs --cwd <project>');
   /** A project file below the checkout, reached without links, that is a plain file if it exists. */
@@ -76,7 +76,7 @@ export function initProject({ root, existing = false }) {
   // The hook entries call this small copy of kit-entry.mjs, which finds or clones the kit when it is missing.
   write(entryFile, text(join(kit, 'scripts/kit-entry.mjs')));
   for (const name of hookNames) mergeHooks(agents[name].hooks.file, hookSettings(name, features));
-  console.log(noAgentFound ? `No agent found in the project; hooks written for all: ${hookNames.join(', ')}.` : `Hooks written for the agents found: ${hookNames.join(', ')}.`);
+  log(noAgentFound ? `No agent found in the project; hooks written for all: ${hookNames.join(', ')}.` : `Hooks written for the agents found: ${hookNames.join(', ')}.`);
 
   const patterns = ['/.vendor/workflow-kit', '/.workflow-kit/', '/.scratch/','/.impeccable/vendor/', '/.impeccable/setup-*/',
     '.claude/settings.local.json', '**/.impeccable/config.local.json', '**/skills/impeccable/scripts/bin/',
@@ -90,7 +90,7 @@ export function initProject({ root, existing = false }) {
   const searchIgnore = existsSync(safe('.ignore')) ? text(safe('.ignore')) : '';
   const missing = text(join(kit, 'templates/.ignore')).split('\n').filter(line => line && !searchIgnore.split('\n').includes(line));
   if (missing.length) write('.ignore', searchIgnore + (searchIgnore && !searchIgnore.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
-  console.log('Project files configured. Generate and commit skills for this kit update; install and trust hooks explicitly.');
+  log('Project files configured. Generate and commit skills for this kit update; install and trust hooks explicitly.');
 }
 
 if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
