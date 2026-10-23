@@ -37,7 +37,7 @@ claim and resume. Memory, an existing branch or Ready status does not replace it
 | BLOCKED | An open predecessor that is not STACKABLE (no open PR, only a Draft PR, a fork PR, several PRs, another repository), a predecessor closed as not planned or duplicate (needs a recorded decision), a closed issue, status Backlog or Done, an unmet `Wartet bis` condition, or work of another session (see Claims). |
 | UNKNOWN | API error, incomplete dependency data (including the PR list of an open predecessor), an inaccessible predecessor, an unset or unknown status, the issue is missing from the Project, or an unreadable `Wartet bis` line. Retry the read; never read it as "no blockers". |
 
-**Claims.** `start` posts the claim as an issue comment with `Agent: claude|codex, Session: ID` and `Basis: BRANCH` (`Base: BRANCH` with `"language": "en"`; both are read); the Draft PR that the first `done`
+**Claims.** `start` posts the claim as an issue comment with `Agent: NAME, Session: ID` and `Basis: BRANCH` (`Base: BRANCH` with `"language": "en"`; both are read); the Draft PR that the first `done`
 opens carries the line in its body and decides from then on (anywhere in a line, not quoted in code; in a PR body `Agent: codex` alone is a claim of an unknown
 session). The check (`start ISSUE --session ID`) reads it with the one issue query. Whatever the claims say, the check reports BLOCKED while an open PR closes
 the issue (a Draft too), a claim comment of another session stands or a branch `<agent>/<issue number>-…` exists, unless the claim names `--session`

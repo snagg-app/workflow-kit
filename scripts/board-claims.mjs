@@ -3,7 +3,8 @@
 import assert from 'node:assert/strict';
 import { issueProject, number, project, rest, staleHours, state, statuses } from './board-context.mjs';
 import { baseOf } from './board-check.mjs';
-import { ago, claimOf, commentClaims, defaultBranchName, projectItem, projectStatus, refOf, sameLogin, stackOrderText } from './board-common.mjs';
+import { claimOf, commentClaims } from './claim.mjs';
+import { ago, defaultBranchName, projectItem, projectStatus, refOf, sameLogin, stackOrderText } from './board-common.mjs';
 
 /**
  * Milliseconds since the last activity: the newest of the issue (comments), its Project item (status) and its open PR (push, comments, reviews),

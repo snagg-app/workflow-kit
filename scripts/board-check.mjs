@@ -5,13 +5,14 @@ import { result } from './board-result.mjs';
 import { textInEveryLanguage } from './project-profile.mjs';
 import { git, graphql, handoffHeading, issueProject, project, projectDirectory, rest, sessionOption, state, statuses, texts } from './board-context.mjs';
 import { currentIssuePr, isOwn, openPrs, ownWork, startReasons } from './board-claims.mjs';
-import { baseSetting, claimOf, commentClaims, decisionWait, feedbackNode, issueFeedback, logins, projectItem, projectStatus, readIssue, refOf, replyLine, validTagName } from './board-common.mjs';
+import { claimOf, commentClaims, isReply } from './claim.mjs';
+import { baseSetting, decisionWait, feedbackNode, issueFeedback, logins, projectItem, projectStatus, readIssue, refOf, validTagName } from './board-common.mjs';
 import { stackBase } from './board-stack.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
   { name: 'check', run: 'checkCommand', hidden: true, summary: 'The start verdict of an issue (STARTABLE, BLOCKED, UNKNOWN, STACKABLE) and its reasons; `start` runs it first.',
-    words: [{ name: 'ISSUE', kind: 'number' }], flags: { '--session': { value: 'ID', kind: 'id', help: 'The own session (default: the worktree, CODEX_THREAD_ID or CLAUDE_CODE_SESSION_ID).' } } },
+    words: [{ name: 'ISSUE', kind: 'number' }], flags: { '--session': { value: 'ID', kind: 'id', help: 'The own session (default: the session variable of the agent table, else the worktree).' } } },
 ];
 
 /** Why native predecessors still hold an issue: open, closed without delivery, or unreadable. */
@@ -86,7 +87,7 @@ function loadPrFeedback(issues) {
 }
 
 /**
- * What happened on a ticket since the agent's last word, or undefined. The agent's word is the handoff (a heading with texts.handoff) or a comment with an "Agent: claude|codex" line,
+ * What happened on a ticket since the agent's last word, or undefined. The agent's word is the handoff (a heading with texts.handoff) or a comment with an "Agent: NAME" line,
  * never the login: agents and humans share it. Counts for an issue assigned to the login (and, with SESSION, claimed by it): everything after that word, and the issue
  * back in In progress or Automated review after the handoff. Any issue: an @mention of the login after it.
  * ponytail: reads the last 10 issue comments, 5 PR comments and 5 reviews, and any agent's marker answers; replace when feedback is missed or a second agent shares a ticket.
@@ -95,7 +96,7 @@ function feedback(issue, login, session) {
   const mine = issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === login.toLowerCase()) && (!session || isOwn(issue, session));
   const events = [...(issue.comments?.nodes ?? []), ...openPrs(issue).flatMap(pr => [...(pr.comments?.nodes ?? []), ...(pr.reviews?.nodes ?? [])])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const anchor = events.findLastIndex(event => handoffHeading.test(event.body) || replyLine.test(event.body));
+  const anchor = events.findLastIndex(event => handoffHeading.test(event.body) || isReply(event.body));
   const mention = new RegExp(`(?<![\\w-])@${RegExp.escape(login)}(?![\\w-])`, 'i'), status = projectStatus(issue), tracked = mine && anchor >= 0;
   const seen = events.slice(anchor + 1).filter(event => tracked || mention.test(event.body));
   const why = [tracked && handoffHeading.test(events[anchor].body) && [statuses.inProgress, statuses.automatedReview].includes(status) && `back in ${status} after the handoff`,

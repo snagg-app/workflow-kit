@@ -8,7 +8,8 @@ import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { args, gitAt, graphql, progress, project, projectDirectory, restAll, sessionOption, statuses, texts } from './board-context.mjs';
 import { feedback, heldOnlyByOpenPredecessors, loadPrFeedback, predecessorReasons, waitReasons } from './board-check.mjs';
 import { conflicting, idleMs, isStale, openPr, ownWork, startReasons } from './board-claims.mjs';
-import { ago, baseField, commentClaims, issueFeedback, loadDeliveries, predecessorFields, projectItem, projectStatus } from './board-common.mjs';
+import { commentClaims } from './claim.mjs';
+import { ago, baseField, issueFeedback, loadDeliveries, predecessorFields, projectItem, projectStatus } from './board-common.mjs';
 import { dropFieldsCache, selectField } from './board-fields.mjs';
 import { stackBase } from './board-stack.mjs';
 
