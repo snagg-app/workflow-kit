@@ -74,7 +74,11 @@ ab, auch im Bypass-Modus: `$(…)` in Pipes, Schleifen mit `git` oder `gh`,
 Inline-`node` oder `python`, Heredocs und Umleitungen auf Pfade außerhalb des
 Worktrees, `cd … && git` sowie Variablen in `gh`-Pfaden. Stattdessen einfache
 Einzelbefehle oder eine Skriptdatei im eigenen Scratch-Verzeichnis verwenden, statt
-mehrfach zu probieren. Dateien, Kommentartexte und PR-Bodies mit dem Write-Werkzeug
+mehrfach zu probieren. Die Prüfung gehört zu Claude Code, nicht zum Kit; das Kit kann
+sie nicht lockern (#849). Sie lehnt Inline-`node -e`/`-p` schon ab, wenn das Wort „git“
+nur im Skripttext steht (`echo` und Dateiargumente sind davon nicht betroffen). Der
+eine Weg, der funktioniert: das Skript mit dem Write-Werkzeug als Datei im Scratch
+schreiben und `node <Datei>` ausführen. Dateien, Kommentartexte und PR-Bodies mit dem Write-Werkzeug
 schreiben und per `--body-file` übergeben, nicht per Heredoc.
 
 ## Driver-Regeln
