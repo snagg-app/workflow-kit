@@ -22,12 +22,15 @@ export const hookEvents = events().map(({ event }) => event);
 export function hookSettings(name, on) {
   const commands = JSON.parse(readFileSync(new URL('./hook-commands.json', import.meta.url), 'utf8'));
   const { node } = readVersions();
-  const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile).replaceAll('{node}', node);
+  const { hooks: shape, projectEnv: env } = agents[name];
+  // The project folder as the shell reads it: the agent's variable, else the working folder.
+  const dir = windows => (!env ? (windows ? "'.'" : '.') : windows ? `if ($env:${env}) { $env:${env} } else { '.' }` : `\${${env}:-.}`);
+  const fill = (text, event, windows) => text.replaceAll('{projectDir}', dir(windows)).replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile).replaceAll('{node}', node);
   const hooks = {};
   for (const { event, kind, timeout, matcher, statusMessage, feature } of events()) {
     if (feature && on && !on[feature]) continue;
-    const handler = { id: 'workflow-kit', type: 'command', command: fill(commands[kind], event) };
-    if (shape.windows) handler.commandWindows = fill(commands[`${kind}Windows`], event);
+    const handler = { id: 'workflow-kit', type: 'command', command: fill(commands[kind], event, false) };
+    if (shape.windows) handler.commandWindows = fill(commands[`${kind}Windows`], event, true);
     handler.timeout = timeout;
     if (shape.shell) handler.shell = shape.shell;
     if (statusMessage) handler.statusMessage = statusMessage;

@@ -2,6 +2,7 @@
 // skills: where the agent finds skills. agents: where it finds agent definitions; upstreamAgents: where Impeccable ships them.
 // linksShared: the agent reads the shared skills through links (junction or symlink, never committed), not copies.
 // detectEnv: an environment variable only this agent's session sets; defaultAgent is the one without.
+// projectEnv: the variable that names the project folder for the agent's hooks (absent: the hook runs in the project folder, ".").
 // label: the name messages use. sessionEnv: the variable that names the agent's session (claims, #789).
 // sessionFromDirectory: a pattern on the working directory whose first group is the session, for an agent whose worktrees carry it (#810).
 // detect: project paths that show a project uses this agent (kit setup writes hooks only for detected agents; none detected: for all).
@@ -17,6 +18,7 @@ export const agents = {
   codex: {
     label: 'Codex',
     detectEnv: 'CODEX_THREAD_ID',
+    projectEnv: 'CLAUDE_PROJECT_DIR',
     sessionEnv: 'CODEX_THREAD_ID',
     detect: ['.codex'],
     skills: sharedSkills,
@@ -26,6 +28,7 @@ export const agents = {
   },
   claude: {
     label: 'Claude Code',
+    projectEnv: 'CLAUDE_PROJECT_DIR',
     sessionFromDirectory: /[\\/]agent-(\w+)(?:[\\/]|$)/,
     sessionEnv: 'CLAUDE_CODE_SESSION_ID',
     detect: ['.claude'],
@@ -58,6 +61,8 @@ export function projectAgents(root, filter = () => true) {
   const candidates = agentNames().filter(name => filter(agents[name])), found = candidates.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
   return { names: found.length ? found : candidates, none: !found.length };
 }
+/** The project folder the environment names for the agent (without an agent: any agent's variable), else undefined. */
+export const projectDirOf = (agent, env = process.env) => (agent ? [agent] : agentNames()).map(name => env[agents[name].projectEnv]).find(Boolean) || undefined;
 /** The agent whose session this process runs in. */
 export const detectAgent = (env = process.env) => Object.keys(agents).find(name => agents[name].detectEnv && env[agents[name].detectEnv]) ?? defaultAgent;
 export const hookFiles = Object.values(agents).filter(agent => agent.hooks).map(agent => agent.hooks.file);
