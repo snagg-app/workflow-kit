@@ -5,9 +5,8 @@ import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agentLabels, agents, projectAgents } from './agents.mjs';
-import { setupBoard } from './github-board.mjs';
-import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
-import { createGithub } from './github.mjs';
+import { setupBoard, setupGithub } from './github-board.mjs';
+import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { initProject } from './init-project.mjs';
 import { installGitHooks } from './install-git-hooks.mjs';
 import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
@@ -71,7 +70,7 @@ for (const provider of featureProviders().filter(provider => provider.install))
     return ok();
   });
 step('GitHub board and labels', false, () => {
-  const board = setupBoard({ root, github: createGithub({ tool: externalTool('gh', root), command: 'setup', projectDirectory: root, sleep() {} }) });
+  const board = setupBoard({ root, github: setupGithub(root) });
   return board.status === 0 ? ok(board.note) : open(board.stderr);
 });
 

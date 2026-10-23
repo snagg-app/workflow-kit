@@ -1,7 +1,7 @@
 // The hook events and the settings the kit writes for them. The providers name their own handlers (`hooks` in provider-<name>.mjs); this file only collects them.
 // A provider's hook entry with `kind` owns the event's settings (kind: `simple` only hands over; timeout, matcher, statusMessage); one without joins the kit's own start events.
 import { readFileSync } from 'node:fs';
-import { agents, entryFile } from './agents.mjs';
+import { agents, entryFile, handlerId } from './agents.mjs';
 import { providerList } from './provider-list.mjs';
 import { readVersions } from './versions.mjs';
 
@@ -29,7 +29,7 @@ export function hookSettings(name, on) {
   const hooks = {};
   for (const { event, kind, timeout, matcher, statusMessage, feature } of events()) {
     if (feature && on && !on[feature]) continue;
-    const handler = { id: 'workflow-kit', type: 'command', command: fill(commands[kind], event, false) };
+    const handler = { id: handlerId, type: 'command', command: fill(commands[kind], event, false) };
     if (shape.windows) handler.commandWindows = fill(commands[`${kind}Windows`], event, true);
     handler.timeout = timeout;
     if (shape.shell) handler.shell = shape.shell;

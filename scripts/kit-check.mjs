@@ -3,8 +3,8 @@
 // Nutzen: Der Hook ist nur eine frühere Ausführung derselben Prüfung; ein Agent ohne Hooks bekommt dieselben Hinweise über board.mjs und `kit check`.
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
-import { hookFiles } from './agents.mjs';
-import { asking, gitIn, gitStamp, patient } from './git-tool.mjs';
+import { handlerId, hookFiles } from './agents.mjs';
+import { asking, gitIn, gitStamp, patient, unattended } from './git-tool.mjs';
 import { sharedKit } from './kit-entry.mjs';
 import { locked } from './lock.mjs';
 import { readProfileLenient, textsFor } from './project-profile.mjs';
@@ -18,7 +18,7 @@ const textsAt = dir => textsFor(readProfileLenient(dir));
 const isDirectory = dir => existsSync(dir) && statSync(dir).isDirectory();
 const real = file => { try { return realpathSync.native(file); } catch { return ''; } };
 const mentionsKit = root => hookFiles.some(file => {
-  try { return /"id":\s*"workflow-kit"/.test(readFileSync(path.join(root, file), 'utf8')); } catch { return false; }
+  try { return new RegExp(`"id":\\s*"${handlerId}"`).test(readFileSync(path.join(root, file), 'utf8')); } catch { return false; }
 });
 
 /** Changes in the checkout; a status that failed (timeout, git error) counts as changes, so nothing is merged on a guess. */
@@ -38,7 +38,7 @@ function followBase(git, root, say) {
     if (dirty(git, root)) {
       say(textsAt(root).kitBehind(behind, name));
     } else {
-      git(root, '-c', 'core.hooksPath=/dev/null', 'merge', '--ff-only', '--quiet', base.out);
+      git(root, ...unattended, 'merge', '--ff-only', '--quiet', base.out);
     }
     return;
   }
@@ -52,7 +52,7 @@ function updateKit(git, kit, say, root) {
   if (dirty(git, kit) || git(kit, 'rev-list', '-n', '1', 'HEAD', '--not', '--remotes').out)
     return say(textsAt(root).kitDirty(kit), true);
   // Never prompt, never run hooks of the checkout (the runner carries the timeout and the no-prompt environment, see `hookGit`).
-  const step = (...args) => git(kit, '-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', ...args).ok;
+  const step = (...args) => git(kit, ...unattended, ...args).ok;
   const ran = locked(path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock'), 10 * 60_000, () => {
     if (!step('pull', '--ff-only', '--quiet') || (existsSync(path.join(kit, '.gitmodules')) && !step('submodule', 'update', '--init', '--quiet')))
       say(textsAt(root).kitNotUpdated(kit), true);

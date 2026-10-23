@@ -6,7 +6,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from '
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
-import { agents, entryFile, projectAgents } from './agents.mjs';
+import { agents, entryFile, handlerId, projectAgents } from './agents.mjs';
 import { hookSettings } from './hooks.mjs';
 import { linkKit } from './kit-check.mjs';
 import { ownSkills } from './provider-list.mjs';
@@ -16,7 +16,7 @@ import { projectFile, writeProjectFile } from './write-guard.mjs';
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 // Every kit handler carries this id; the template files stay the only place that names it.
-const ours = handler => handler.id === 'workflow-kit';
+const ours = handler => handler.id === handlerId;
 
 /** Configures the project at `root` (an existing project keeps its own files: no templates). Throws on a problem; prints what it did. */
 export function initProject({ root, existing = false, log = console.log, profile = readProfile(root) }) {

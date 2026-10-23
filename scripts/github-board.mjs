@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
+import { externalTool } from './checkout-root.mjs';
+import { createGithub } from './github.mjs';
 import { gitResultIn } from './git-tool.mjs';
 import { boardTemplate, projectLabels, readProfile, statusMismatch } from './project-profile.mjs';
 import { projectFile, writeProjectFile } from './write-guard.mjs';
@@ -21,6 +23,9 @@ function originRepository(root) {
  * Binds the project in `root` to its board. `repo` and `number` name the target by hand; without `repo` the `origin` remote decides and a
  * project that is already bound stays as it is: no network, no GraphQL quota (#730). Returns { status, note, text }; a failed check throws.
  */
+/** The GitHub access the board setup uses, for the project at `root`. */
+export const setupGithub = root => createGithub({ tool: externalTool('gh', root), projectDirectory: root, sleep() {} });
+
 export function setupBoard({ root, github, repo, number: requestedNumber, kitProject }) {
   const markerName = '.github/workflow-project.json', marker = join(root, markerName);
   const byHand = repo !== undefined;
