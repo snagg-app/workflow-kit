@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { asking, gitIn } from './git-tool.mjs';
+import { featureProviders } from './provider-list.mjs';
 
 const defaultStatuses = { backlog: 'Backlog', ready: 'Ready', inProgress: 'In progress', automatedReview: 'Automated review', humanReview: 'Human review', done: 'Done' };
 
@@ -127,29 +128,14 @@ export function activeSkills(project) {
   return project.skills.flatMap(name => name === 'core' ? coreSkills : [name]);
 }
 
-const uiDependencies = ['react', 'react-dom', 'react-native', 'expo', 'vue', 'svelte', 'solid-js', 'preact', 'lit', '@angular/core', 'next', 'astro'];
-const uiFile = /\.(?:tsx|jsx|vue|svelte|astro)$/;
-
-/**
- * Whether the project has UI files: a component file (tracked or new, not ignored) or a UI dependency in any package.json.
- * shortcut: names the common frameworks only; when it guesses wrong, set "impeccable" to true or false in the profile.
- */
-export function hasUi(root, git) {
-  const listed = asking(git)(root, 'ls-files', '--cached', '--others', '--exclude-standard');
-  const files = listed.ok ? listed.out.split('\n').filter(Boolean) : [];
-  if (files.some(file => uiFile.test(file))) return true;
-  return files.filter(file => /(?:^|\/)package\.json$/.test(file)).some(file => {
-    try {
-      const manifest = JSON.parse(readFileSync(join(root, file), 'utf8'));
-      return [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies].some(list => list && uiDependencies.some(name => Object.hasOwn(list, name)));
-    } catch { return false; }
-  });
-}
-
-/** The optional kit functions of a project: "impeccable" (true, false or "auto", the default: on with UI files) and "ponytail" (true by default, or false). */
+/** The optional kit functions of a project, one switch per provider with a `feature` (provider-list.mjs): true or false, or "auto" where the provider can tell (Impeccable: on with UI files). */
 export function projectFeatures(root, git = gitIn({}, root)) {
-  const { impeccable = 'auto', ponytail = true } = readProfile(root);
-  assert.ok([true, false, 'auto'].includes(impeccable), 'impeccable in .github/workflow-project.json must be true, false or "auto"; omit it for "auto" (on when the project has UI files)');
-  assert.ok(typeof ponytail === 'boolean', 'ponytail in .github/workflow-project.json must be true or false; omit it for true');
-  return { impeccable: impeccable === 'auto' ? hasUi(root, git) : impeccable, ponytail };
+  const profile = readProfile(root), on = {};
+  for (const { name, feature } of featureProviders()) {
+    const value = profile[name] === undefined ? feature.default : profile[name];
+    assert.ok(typeof value === 'boolean' || (feature.auto && value === 'auto'),
+      `${name} in .github/workflow-project.json must be ${feature.auto ? 'true, false or "auto"' : 'true or false'}; omit it for ${JSON.stringify(feature.default)}${feature.hint ?? ''}`);
+    on[name] = value === 'auto' ? feature.auto(root, asking(git)) : value;
+  }
+  return on;
 }

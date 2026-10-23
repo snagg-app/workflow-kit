@@ -15,13 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { withLock } from './lock.mjs';
 import { checkDirectory, linkSkills, localDirectory, materialize, moveAside, rename } from './provider-links.mjs';
+import { providerList, providerNamed } from './provider-list.mjs';
 
-// A fourth provider is one file and one line here.
-const providers = {
-  ponytail: () => import('./provider-ponytail.mjs'),
-  impeccable: () => import('./provider-impeccable.mjs'),
-  'matt-pocock': () => import('./provider-matt-pocock.mjs'),
-};
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
 export { withLock };
@@ -208,11 +203,11 @@ if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.nat
   enterCwd();
   const [name, action, ...extra] = process.argv.slice(2);
   const run = { setup, install };
-  if (!(name in providers) || !['setup', 'install', 'update'].includes(action) || extra.length > (action === 'update' ? 1 : 0)) {
-    console.error(`Usage: node <kit>/scripts/provider.mjs [--cwd PROJECT_DIR] <${Object.keys(providers).join('|')}> <setup|install|update [PREVIOUS_UPSTREAM_REVISION]>`);
+  const p = providerNamed(name);
+  if (!p || !['setup', 'install', 'update'].includes(action) || extra.length > (action === 'update' ? 1 : 0)) {
+    console.error(`Usage: node <kit>/scripts/provider.mjs [--cwd PROJECT_DIR] <${providerList().map(provider => provider.name).join('|')}> <setup|install|update [PREVIOUS_UPSTREAM_REVISION]>`);
     process.exit(2);
   }
-  const { default: p } = await providers[name]();
   const c = context();
   assert.ok(action === 'setup' ? p.build : p[action], `${p.label} has no ${action}`);
   if (action === 'update') {

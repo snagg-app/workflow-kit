@@ -5,6 +5,25 @@ import { dirname, join } from 'node:path';
 import { agents, providers } from './agents.mjs';
 import { checkDirectory } from './provider-links.mjs';
 
+const uiDependencies = ['react', 'react-dom', 'react-native', 'expo', 'vue', 'svelte', 'solid-js', 'preact', 'lit', '@angular/core', 'next', 'astro'];
+const uiFile = /\.(?:tsx|jsx|vue|svelte|astro)$/;
+
+/**
+ * Whether the project has UI files: a component file (tracked or new, not ignored) or a UI dependency in any package.json. `ask` runs Git in `root` (asking() of git-tool.mjs).
+ * shortcut: names the common frameworks only; when it guesses wrong, set "impeccable" to true or false in the profile.
+ */
+function hasUi(root, ask) {
+  const listed = ask(root, 'ls-files', '--cached', '--others', '--exclude-standard');
+  const files = listed.ok ? listed.out.split('\n').filter(Boolean) : [];
+  if (files.some(file => uiFile.test(file))) return true;
+  return files.filter(file => /(?:^|\/)package\.json$/.test(file)).some(file => {
+    try {
+      const manifest = JSON.parse(readFileSync(join(root, file), 'utf8'));
+      return [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies].some(list => list && uiDependencies.some(name => Object.hasOwn(list, name)));
+    } catch { return false; }
+  });
+}
+
 const folders = Object.values(agents).map(agent => agent.agents);
 const skills = providers.map(provider => `${provider}/skills/impeccable`);
 const windows = process.platform === 'win32';
@@ -22,6 +41,10 @@ export default {
   name: 'impeccable',
   label: 'Impeccable',
   source: '.vendor/impeccable',
+  // The skills, generated per agent (every agent keeps its own copy), and the profile switch ("auto": on with UI files).
+  skills: ['impeccable'],
+  perAgent: true,
+  feature: { default: 'auto', auto: hasUi, hint: ' (on when the project has UI files)' },
 
   build(c, next) {
     const version = c.versions.impeccable;

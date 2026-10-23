@@ -1,7 +1,6 @@
 // Zweck: `kit setup` stellt den Sollzustand des Kits in einem Projekt her (neu, nach Update, halb kaputt) und nennt am Ende nur die Schritte für Menschen.
 // Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts. `check` meldet nur den Zustand (kit-check.mjs).
-// Nutzen: Die Einzelskripte (init-project, setup-skills, provider install, install-git-hooks, setup-github) laufen als interne Schritte; hier steht keine eigene Logik dafür.
-import { spawnSync } from 'node:child_process';
+// Nutzen: Die Einzelskripte (init-project, setup-skills, provider install, install-git-hooks, setup-github) laufen als Funktionen; hier steht keine eigene Logik dafür.
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,9 +8,14 @@ import { agents } from './agents.mjs';
 import { setupBoard } from './github-board.mjs';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { createGithub } from './github.mjs';
+import { initProject } from './init-project.mjs';
+import { installGitHooks } from './install-git-hooks.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
 import { activeSkills, projectFeatures } from './project-profile.mjs';
+import { featureProviders } from './provider-list.mjs';
+import { context, install } from './provider.mjs';
+import { setupSkills } from './setup-skills.mjs';
 
 enterCwd();
 if (!['setup', 'check'].includes(process.argv[2]) || process.argv.length > 3) {
@@ -27,10 +31,15 @@ if (process.argv[2] === 'check') {
   process.exit(hints.length ? 1 : 0);
 }
 const profile = join(root, '.github/workflow-project.json');
-const output = (result) => `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
-const run = (name, ...args) => spawnSync(process.execPath, [join(scripts, name), ...args], { cwd: root, encoding: 'utf8' });
-// A crashed script ends its output with the Node version; the line that names the error is the useful one.
-const lastLine = (text) => (text.split('\n').find(line => /Error/.test(line) && !/^\s+at /.test(line)) ?? text.split('\n').filter(Boolean).at(-1) ?? 'no output').replace(/^[\s[]+|[\s\]{]+$/g, '');
+// A step is a function: it returns { state: 'ok' | 'open', note?, hint? } ("open": something is left to do, `hint` says what) or throws (the error message is the hint).
+const ok = note => ({ state: 'ok', note });
+const open = hint => ({ state: 'open', hint });
+// The steps print what they did for single use; `kit setup` shows one line per step.
+async function quietly(work) {
+  const log = console.log;
+  console.log = () => {};
+  try { return await work(); } finally { console.log = log; }
+}
 
 const tasks = [];
 const humans = [];
@@ -39,32 +48,38 @@ const humans = [];
 const step = (title, required, work) => tasks.push({ title, required, work });
 
 // A new project (no AGENTS.md yet) also gets the starter files; an existing one keeps everything of its own.
-step('link, kit hooks, ignore files', true, () => run('init-project.mjs', ...(existsSync(join(root, 'AGENTS.md')) ? ['--existing'] : [])));
+step('link, kit hooks, ignore files', true, () => { initProject({ root, existing: existsSync(join(root, 'AGENTS.md')) }); return ok(); });
 // The check the session start runs (without the pull): it reports what the other steps cannot repair.
 step('kit check', false, () => {
   const hints = [...kitCheck(root, { kit: dirname(scripts) }), ...modulesCheck(root)];
-  return hints.length ? { status: 1, stderr: hints.join(' ') } : { status: 0 };
+  return hints.length ? open(hints.join(' ')) : ok();
 });
 step('profile .github/workflow-project.json', true, () => {
   if (!existsSync(profile)) { mkdirSync(dirname(profile), { recursive: true }); writeFileSync(profile, '{\n  "language": "en"\n}\n'); }
-  return { status: 0 };
+  return ok();
 });
-step('skills for Codex and Claude Code', true, () => run('setup-skills.mjs'));
-step('git hooks (.githooks)', true, () => run('install-git-hooks.mjs'));
+step('skills for Codex and Claude Code', true, async () => { await setupSkills(); return ok(); });
+step('git hooks (.githooks)', true, () => { installGitHooks({ root }); return ok(); });
 // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
-for (const [name, title] of [['ponytail', 'Ponytail hooks'], ['impeccable', 'Impeccable hooks']])
-  step(title, false, () => projectFeatures(root)[name] ? run('provider.mjs', name, 'install') : { status: 0, note: 'off for this project ("' + name + '" in .github/workflow-project.json)' });
-step('GitHub board and labels', false, () => setupBoard({ root, github: createGithub({ tool: externalTool('gh', root), command: 'setup', projectDirectory: root, sleep() {} }) }));
+for (const provider of featureProviders().filter(provider => provider.install))
+  step(`${provider.label} hooks`, false, async () => {
+    if (!projectFeatures(root)[provider.name]) return ok(`off for this project ("${provider.name}" in .github/workflow-project.json)`);
+    await install(provider, context());
+    return ok();
+  });
+step('GitHub board and labels', false, () => {
+  const board = setupBoard({ root, github: createGithub({ tool: externalTool('gh', root), command: 'setup', projectDirectory: root, sleep() {} }) });
+  return board.status === 0 ? ok(board.note) : open(board.stderr);
+});
 
 let failed = false;
 for (const { title, required, work } of tasks) {
   let result;
-  try { result = work(); } catch (error) { result = { status: 1, stderr: error.message }; }
-  if (result.status === 0) { console.log(`ok    ${title}${result.note ? ': ' + result.note : ''}`); continue; }
-  const reason = lastLine(output(result));
-  if (required) { console.log(`FAIL  ${title}: ${reason}`); failed = true; break; }
-  console.log(`open  ${title}: ${reason}`);
-  humans.push(`Fix "${title}" (${reason}), then run kit setup again.`);
+  try { result = await quietly(work); } catch (error) { result = { state: required ? 'error' : 'open', hint: String(error.message ?? error).split('\n')[0] }; }
+  if (result.state === 'ok') { console.log(`ok    ${title}${result.note ? ': ' + result.note : ''}`); continue; }
+  if (result.state === 'error') { console.log(`FAIL  ${title}: ${result.hint}`); failed = true; break; }
+  console.log(`open  ${title}: ${result.hint}`);
+  humans.push(`Fix "${title}" (${result.hint}), then run kit setup again.`);
 }
 if (failed) process.exit(1);
 

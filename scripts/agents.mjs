@@ -9,8 +9,6 @@ import { dirname, join } from 'node:path';
 
 export const defaultAgent = 'claude';
 export const sharedSkills = '.agents/skills';
-/** Skills whose files differ per agent: every agent keeps its own copy. */
-export const ownSkills = ['impeccable'];
 
 export const agents = {
   codex: {
@@ -62,13 +60,13 @@ const events = [
 
 export const hookEvents = events.map(({ event }) => event);
 
-/** The hook settings the kit contributes to one agent's settings file; `on` names the functions the project uses (projectFeatures). */
-export function hookSettings(name, on = { impeccable: true, ponytail: true }) {
+/** The hook settings the kit contributes to one agent's settings file; `on` names the functions the project uses (projectFeatures), without it all of them. */
+export function hookSettings(name, on) {
   const commands = JSON.parse(readFileSync(new URL('./hook-commands.json', import.meta.url), 'utf8'));
   const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile);
   const hooks = {};
   for (const { event, kind, timeout, matcher, statusMessage, feature } of events) {
-    if (feature && !on[feature]) continue;
+    if (feature && on && !on[feature]) continue;
     const handler = { id: 'workflow-kit', type: 'command', command: fill(commands[kind], event) };
     if (shape.windows) handler.commandWindows = fill(commands[`${kind}Windows`], event);
     handler.timeout = timeout;
@@ -76,5 +74,5 @@ export function hookSettings(name, on = { impeccable: true, ponytail: true }) {
     if (statusMessage) handler.statusMessage = 'Impeccable UI check (verified user installation)';
     hooks[event] = [{ ...(matcher && { matcher: shape.matcher }), hooks: [handler] }];
   }
-  return { ...(shape.description && on.impeccable && { description: shape.description }), hooks };
+  return { ...(shape.description && (!on || on.impeccable) && { description: shape.description }), hooks };
 }
