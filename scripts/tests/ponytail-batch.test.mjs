@@ -38,7 +38,7 @@ async function fixture(t) {
     'diff --git a/skills/ponytail/SKILL.md b/skills/ponytail/SKILL.md\n'
     + '--- a/skills/ponytail/SKILL.md\n+++ b/skills/ponytail/SKILL.md\n'
     + '@@ -1,3 +1,3 @@\n # ponytail\n-base\n+patched\n Grüße 🎴\n');
-  for (const script of ['provider.mjs', 'provider-ponytail.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'versions.json'])
+  for (const script of ['provider.mjs', 'provider-ponytail.mjs', 'checkout-root.mjs', 'lock.mjs', 'provider-links.mjs', 'agents.mjs', 'versions.json'])
     copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   const run = () => exec(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'setup'], { cwd: root });
   return { root, source: join(kit, '.vendor/ponytail'), expected, run };

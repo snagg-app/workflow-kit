@@ -2,7 +2,7 @@
 // Nutzen: Der Test geht durch den echten Hook-Einstieg und zaehlt Downloads an einem lokalen Ziel; die Engine selbst testet provider.test.mjs.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,11 +17,9 @@ const { impeccable: version } = JSON.parse(readFileSync(new URL('../versions.jso
 test('two SessionStart hooks at the same time install Impeccable once, and the next call finds it', async t => {
   const temp = temporary(t, 'hook-twice-');
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
-  for (const from of ['.agents/hooks', '.agents/skills/ponytail', 'scripts/impeccable'])
+  for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
-  for (const file of ['kit-hook', 'kit-check', 'provider', 'provider-ponytail', 'provider-impeccable', 'provider-links', 'agents', 'checkout-root', 'project-profile'])
-    copyFileSync(path.join(root, `scripts/${file}.mjs`), path.join(checkout, `scripts/${file}.mjs`));
-  copyFileSync(path.join(root, 'scripts/versions.json'), path.join(checkout, 'scripts/versions.json'));
+  cpSync(path.join(root, 'scripts'), path.join(checkout, 'scripts'), { recursive: true, filter: file => path.basename(file) !== 'tests' });
   mkdirSync(path.join(checkout, '.git'));
   mkdirSync(path.join(checkout, '.github'));
   writeFileSync(path.join(checkout, '.github/workflow-project.json'), '{"impeccable":true}');

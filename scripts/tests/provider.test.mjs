@@ -16,7 +16,7 @@ const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const data = text => `data:application/octet-stream;base64,${Buffer.from(text).toString('base64')}`;
 const sleep = ms => new Promise(done => setTimeout(done, ms));
 /** A provider that installs the given files below <home>/.fake/kit/1.0.0. */
-const fake = files => ({ name: 'fake', label: 'Fake', install: { home: ['.fake', 'kit'], directory: version => version, files: () => files } });
+const fake = files => ({ name: 'fake', label: 'Fake', install: { home: ['.fake', 'kit'], directory: version => version, launcher: 'run', files: () => files } });
 function installFixture(t) {
   const home = join(temporary(t, 'provider install '), 'home');
   return { home, parent: join(home, '.fake/kit'), c: { home, outside: outsideCheckouts, versions: { fake: '1.0.0' } } };
