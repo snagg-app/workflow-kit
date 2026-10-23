@@ -1,7 +1,7 @@
 // Zweck: `kit setup` stellt den Sollzustand des Kits in einem Projekt her (neu, nach Update, halb kaputt) und nennt am Ende nur die Schritte für Menschen.
 // Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts. `check` meldet nur den Zustand (kit-check.mjs).
 // Nutzen: Die Einzelskripte (init-project, setup-skills, provider install, install-git-hooks, setup-github) laufen als Funktionen; hier steht keine eigene Logik dafür.
-import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents } from './agents.mjs';
@@ -16,6 +16,7 @@ import { activeSkills, projectFeatures, readProfile } from './project-profile.mj
 import { featureProviders } from './provider-list.mjs';
 import { context, install } from './provider.mjs';
 import { setupSkills } from './setup-skills.mjs';
+import { writeProjectFile } from './write-guard.mjs';
 
 enterCwd();
 if (!['setup', 'check'].includes(process.argv[2]) || process.argv.length > 3) {
@@ -50,7 +51,7 @@ step('kit check', false, () => {
   return hints.length ? open(hints.join(' ')) : ok();
 });
 step('profile .github/workflow-project.json', true, () => {
-  if (!existsSync(profile)) { mkdirSync(dirname(profile), { recursive: true }); writeFileSync(profile, '{\n  "language": "en"\n}\n'); }
+  if (!existsSync(profile)) writeProjectFile(root, '.github/workflow-project.json', '{\n  "language": "en"\n}\n');
   return ok();
 });
 step('skills for Codex and Claude Code', true, async log => { await setupSkills({ log }); return ok(); });

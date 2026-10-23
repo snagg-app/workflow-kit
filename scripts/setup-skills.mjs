@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { enterCwd } from './checkout-root.mjs';
 import { providers, sourceProviders } from './agents.mjs';
 import { activeSkills, readProfile } from './project-profile.mjs';
-import { checkDirectory, linkSkills, materialize } from './provider-links.mjs';
+import { linkSkills, materialize } from './provider-links.mjs';
+import { checkDirectory } from './write-guard.mjs';
 import { providerList, skillsOf } from './provider-list.mjs';
 import { context, setup } from './provider.mjs';
 

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
 import { entryFile } from '../agents.mjs';
 import { hookSettings } from '../hooks.mjs';
-import { rename } from '../provider-links.mjs';
+import { rename } from '../write-guard.mjs';
 import { isolatedGit, run as spawn, temporary } from './fixtures.mjs';
 
 const hook = fileURLToPath(new URL('../kit-hook.mjs', import.meta.url));

@@ -6,7 +6,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { checkDirectory } from './provider-links.mjs';
+import { checkDirectory } from './write-guard.mjs';
 
 const git = (cwd, ...args) => execFileSync('git', ['-c', 'core.autocrlf=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 const lf = text => text.replaceAll('\r\n', '\n');

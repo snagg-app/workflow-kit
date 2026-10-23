@@ -6,8 +6,9 @@ import mattPocock from './provider-matt-pocock.mjs';
 import ponytail from './provider-ponytail.mjs';
 import impeccable from './provider-impeccable.mjs';
 
-// Functions, not constants: the providers import modules that import this one. Order is the setup order (Matt's ownership manifests are checked first).
-export const providerList = () => [mattPocock, ponytail, impeccable];
+// Order is the setup order (Matt's ownership manifests are checked first).
+const providers = [mattPocock, ponytail, impeccable];
+export const providerList = () => providers;
 export const providerNamed = name => providerList().find(provider => provider.name === name);
 /** The skills a provider has in the project at `root`. */
 export const skillsOf = (provider, root) => typeof provider.skills === 'function' ? provider.skills(root) : provider.skills;

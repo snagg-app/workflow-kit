@@ -4,7 +4,7 @@ import { chmodSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'no
 import { basename, dirname, join } from 'node:path';
 import { providers, sharedSkills, sourceProviders } from './agents.mjs';
 import { adaptCodeReview } from './code-review-failure-paths.mjs';
-import { checkDirectory } from './provider-links.mjs';
+import { checkDirectory } from './write-guard.mjs';
 
 // Documented deviations from upstream (docs/matt-pocock.md): agents run the retro before every
 // handoff, which upstream's `disable-model-invocation` makes the Skill tool refuse (#212), and

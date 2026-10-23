@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { agents, providers } from './agents.mjs';
-import { checkDirectory } from './provider-links.mjs';
+import { checkDirectory } from './write-guard.mjs';
 
 const uiDependencies = ['react', 'react-dom', 'react-native', 'expo', 'vue', 'svelte', 'solid-js', 'preact', 'lit', '@angular/core', 'next', 'astro'];
 const uiFile = /\.(?:tsx|jsx|vue|svelte|astro)$/;
