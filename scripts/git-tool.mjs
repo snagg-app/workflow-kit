@@ -2,6 +2,8 @@
 // Aufruf: const git = gitIn({ timeout, env }, ...pfade); git(ordner, ...argumente) liefert die Ausgabe oder wirft; gitResultIn liefert Status und Fehlerausgabe, gitAsyncIn läuft parallel.
 // Nutzen: Ein Checkout kann kein eigenes git unterschieben; Hooks, Kit-Prüfung, Einrichtung, Board und Test-Auswahl nutzen denselben Weg.
 import { execFile } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { externalTool } from './checkout-root.mjs';
 import { runProgram } from './run-program.mjs';
 
@@ -53,6 +55,15 @@ export function gitAsyncIn({ timeout, env } = {}, ...paths) {
 
 /** For a check that may pull: never prompt, never wait long (the host kills a hook after 120 seconds). */
 export const patient = { timeout: 40_000, env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } };
+
+/** A JSON stamp `name` in the git dir (`kit-ok`, `kit-has-ui`): `read()` gives the object or null (none, broken, no git dir), `write(data)` is best effort. */
+export function gitStamp(gitDir, name) {
+  const file = gitDir && join(gitDir, name);
+  return {
+    read() { try { return file ? JSON.parse(readFileSync(file, 'utf8')) : null; } catch { return null; } },
+    write(data) { try { if (file) writeFileSync(file, JSON.stringify(data)); } catch { /* best effort */ } },
+  };
+}
 
 /** The same runner for callers that only ask: `{ ok, out }`, no throw (git missing, not a repository, failed command). */
 export const asking = git => (dir, ...args) => {

@@ -11,7 +11,7 @@ import { hookEvents } from './hooks.mjs';
 import { readVersions } from './versions.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
-import { kitCheck, modulesCheck } from './kit-check.mjs';
+import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
 import { locate, markUsed } from './provider.mjs';
 import { featureProviders, providerList, providerNamed } from './provider-list.mjs';
 import { projectFeatures, readProfile, textsFor } from './project-profile.mjs';
@@ -130,7 +130,9 @@ else {
   let on = Object.fromEntries(featureProviders().map(provider => [provider.name, true])); // a broken profile must not stop the session
   try { on = projectFeatures(project, hookGit); } catch (error) { if (event === 'SessionStart') say(error.message); }
   // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
-  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) kitCheck(dir, { update: event === 'SessionStart' && input.source !== 'compact', git: hookGit }).forEach(say);
+  const updated = new Set();
+  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean)))
+    kitCheck(dir, { ...kitEnvironment(), update: event === 'SessionStart' && input.source !== 'compact', git: hookGit, updated }).messages.forEach(say);
   if (event === 'SessionStart') {
     modulesCheck(project, { git: hookGit }).forEach(say);
     if (fresh) spawn(process.execPath, [self, '--install', ...Object.keys(on).filter(name => on[name])], { detached: true, stdio: 'ignore', windowsHide: true }).unref();

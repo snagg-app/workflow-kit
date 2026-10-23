@@ -10,7 +10,7 @@ import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { createGithub } from './github.mjs';
 import { initProject } from './init-project.mjs';
 import { installGitHooks } from './install-git-hooks.mjs';
-import { kitCheck, modulesCheck } from './kit-check.mjs';
+import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
 import { activeSkills, projectFeatures, readProfile } from './project-profile.mjs';
 import { featureProviders } from './provider-list.mjs';
@@ -27,7 +27,7 @@ const scripts = dirname(fileURLToPath(import.meta.url));
 const root = projectRoot();
 // `check`: the one check behind the hooks and board.mjs, for an agent without hooks. Hints out, exit 1 when there are any.
 if (process.argv[2] === 'check') {
-  const hints = [...kitCheck(root), ...modulesCheck(root)];
+  const hints = [...kitCheck(root, kitEnvironment()).messages, ...modulesCheck(root)];
   console.log(hints.length ? hints.join('\n') : 'ok    kit is in order');
   process.exit(hints.length ? 1 : 0);
 }
@@ -51,7 +51,7 @@ const step = (title, required, work) => tasks.push({ title, required, work });
 step('link, kit hooks, ignore files', true, log => { initProject({ root, existing: existsSync(join(root, 'AGENTS.md')), log }); return ok(); });
 // The check the session start runs (without the pull): it reports what the other steps cannot repair.
 step('kit check', false, () => {
-  const hints = [...kitCheck(root, { kit: dirname(scripts) }), ...modulesCheck(root)];
+  const hints = [...kitCheck(root, { ...kitEnvironment(), kit: dirname(scripts) }).messages, ...modulesCheck(root)];
   return hints.length ? open(hints.join(' ')) : ok();
 });
 step('profile .github/workflow-project.json', true, () => {
