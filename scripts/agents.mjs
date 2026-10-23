@@ -69,3 +69,5 @@ export const hookFiles = Object.values(agents).filter(agent => agent.hooks).map(
 
 /** The project's copy of kit-entry.mjs (written by `kit setup`); hook-commands.json names the same path. */
 export const entryFile = '.agents/workflow-kit-hook.mjs';
+/** The id every kit hook handler carries; a settings file's other handlers are not the kit's. */
+export const handlerId = 'workflow-kit';

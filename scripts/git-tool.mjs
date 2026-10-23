@@ -53,6 +53,9 @@ export function gitAsyncIn({ timeout, env, from = process.env } = {}, ...paths) 
   });
 }
 
+/** Git options for a call that must never prompt nor run the checkout's own hooks (`kit-entry.mjs` repeats them: it runs before the kit exists). */
+export const unattended = ['-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null'];
+
 /** For a check that may pull: never prompt, never wait long (the host kills a hook after 120 seconds). */
 export const patient = { timeout: 40_000, env: { GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } };
 

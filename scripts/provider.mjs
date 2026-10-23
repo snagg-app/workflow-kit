@@ -11,7 +11,7 @@ import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync,
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enterCwd, projectRoot } from './checkout-root.mjs';
+import { ancestors, enterCwd, hasGit, projectRoot } from './checkout-root.mjs';
 import { gitIn } from './git-tool.mjs';
 import { withLock } from './lock.mjs';
 import { linkSkills, materialize } from './provider-links.mjs';
@@ -37,12 +37,7 @@ export async function guarded(dir, name, work, options) {
   }
 }
 
-const insideCheckout = directory => {
-  for (; ; directory = dirname(directory)) {
-    if (existsSync(join(directory, '.git'))) return true;
-    if (directory === dirname(directory)) return false;
-  }
-};
+const insideCheckout = directory => [...ancestors(directory)].some(hasGit);
 /** Personal trusted code must live outside every checkout. The existing part of `path` is resolved first, so junctions cannot hide a checkout. */
 export function outsideCheckouts(path, message) {
   let existing = path;

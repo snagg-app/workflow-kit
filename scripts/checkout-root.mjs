@@ -6,11 +6,18 @@ import { delimiter, dirname, isAbsolute, join, sep } from 'node:path';
 // An enclosing checkout also owns sibling tools outside a nested submodule.
 export function checkoutRoot(path) {
   let checkout = realpathSync.native(path);
-  for (let ancestor = dirname(checkout);; ancestor = dirname(ancestor)) {
-    if (existsSync(join(ancestor, '.git'))) checkout = ancestor;
-    if (dirname(ancestor) === ancestor) return checkout;
+  for (const ancestor of ancestors(dirname(checkout))) if (hasGit(ancestor)) checkout = ancestor;
+  return checkout;
+}
+
+/** `start` and every folder above it, up to the file system root. */
+export function* ancestors(start) {
+  for (let directory = start;; directory = dirname(directory)) {
+    yield directory;
+    if (dirname(directory) === directory) return;
   }
 }
+export const hasGit = directory => existsSync(join(directory, '.git'));
 
 /** Takes `--cwd PROJECT_DIR`, at any position, off `argv` and returns the directory ('.' without the option),
  * so a driver can run a kit command for another clone without `cd`. The one path a command takes from its arguments. */
@@ -45,10 +52,9 @@ export function enterCwd() {
 /** The Git checkout containing `start` (default: the working directory, which `--cwd` sets): kit commands act on the project
  * they run in, never on any other path taken from their arguments. A submodule's `.git` file ends the search there. */
 export function projectRoot(start = process.cwd()) {
-  for (let directory = realpathSync.native(start);; directory = dirname(directory)) {
-    if (existsSync(join(directory, '.git'))) return directory;
-    assert.notEqual(dirname(directory), directory, 'Run this command inside a Git checkout');
-  }
+  const found = [...ancestors(realpathSync.native(start))].find(hasGit);
+  assert.ok(found, 'Run this command inside a Git checkout');
+  return found;
 }
 
 /** Resolve an installed CLI (git, gh) outside every checkout containing `paths`, so a checkout
