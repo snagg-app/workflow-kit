@@ -46,10 +46,41 @@ test('start prints the kit hints of the session hook, so an agent without hooks 
   mkdirSync(join(checkout, '.claude'));
   writeFileSync(join(checkout, '.claude/settings.json'), '{"hooks":{"SessionStart":[{"hooks":[{"id":"workflow-kit"}]}]}}');
   env.WORKFLOW_KIT_DIR = join(dirname(checkout), 'no-such-kit');
+  // #813: a kit that cannot be linked stops start before any write.
   const result = run('start', '1', '--session', 'S1');
-  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /Workflow-Kit-Checkout .* fehlt oder ist unvollständig/);
-  assert.equal(readFileSync(file('stored'), 'utf8'), 'In progress');
+  assert.equal(existsSync(file('stored')), false);
+});
+
+test('start brings the shared kit to origin/main, and refuses without a write when it cannot (#813)', t => {
+  const { checkout, run, writeIssue, git, file, env } = startFixture(t);
+  writeIssue(issue('Ready'));
+  mkdirSync(join(checkout, '.claude'));
+  writeFileSync(join(checkout, '.claude/settings.json'), '{"hooks":{"SessionStart":[{"hooks":[{"id":"workflow-kit"}]}]}}');
+  const parent = dirname(checkout), upstream = join(parent, 'kit-upstream'), kit = join(parent, 'kit');
+  mkdirSync(upstream);
+  git(upstream, 'init', '-q', '-b', 'main');
+  writeFileSync(join(upstream, 'AGENT_RULES.md'), 'x');
+  git(upstream, 'add', '.');
+  git(upstream, 'commit', '-q', '-m', 'kit');
+  git(parent, 'clone', '-q', upstream, kit);
+  env.WORKFLOW_KIT_DIR = kit;
+  // The kit has an own commit: no fast-forward, start stops and changes nothing.
+  git(upstream, 'commit', '-q', '--allow-empty', '-m', 'newer');
+  git(kit, 'commit', '-q', '--allow-empty', '-m', 'mine');
+  const mine = git(kit, 'rev-parse', 'HEAD');
+  let result = run('start', '1', '--session', 'S1');
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /could not be brought to origin\/main/);
+  assert.equal(git(kit, 'rev-parse', 'HEAD'), mine);
+  assert.equal(existsSync(file('stored')), false, 'nothing was claimed');
+  // Behind origin/main: start fast-forwards the kit first.
+  git(kit, 'reset', '-q', '--hard', 'origin/main');
+  git(upstream, 'commit', '-q', '--allow-empty', '-m', 'newest');
+  result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(kit, 'rev-parse', 'HEAD'), git(upstream, 'rev-parse', 'HEAD'));
 });
 
 test('the claim comment follows the profile language, and a claim in either language is read (#759)', t => {

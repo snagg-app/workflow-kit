@@ -72,7 +72,10 @@ function start() {
   const session = sessionOption();
   assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
   // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
-  [...kitCheck(projectDirectory, { git: gitAt }), ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
+  // #813: a driver in a fresh worktree gets no SessionStart hook, so start itself brings the shared kit to origin/main (fast-forward) and stops when it cannot.
+  const kitHints = kitCheck(projectDirectory, { git: gitAt, update: true, force: true });
+  [...kitHints, ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
+  assert.ok(!kitHints.stuck, `the shared kit could not be brought to origin/main (${kitHints.at(-1) ?? 'another update holds the kit lock'}); nothing was written, fix the kit checkout and run start again`);
   // One checkout-wide setting each, so a commit in a submodule never rides along with a project push and a branch switch follows the submodule pins.
   if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);
   const issue = readIssue();
