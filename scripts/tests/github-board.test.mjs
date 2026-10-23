@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { setupBoard } from '../board-setup.mjs';
+import { setupBoard } from '../github-board.mjs';
 import { createGithub, useGhAdapter } from '../github.mjs';
 import { fakeGh } from './fake-gh.mjs';
 import { temporary } from './fixtures.mjs';

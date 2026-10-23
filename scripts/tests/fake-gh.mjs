@@ -262,8 +262,8 @@ function api(argv, input, stdout, stderr, exit) {
       stdout('{}');
       exit(0);
     }
-    // The labels of the repository (labels.json: names, the default is none), as the board setup reads them.
-    if (parts[3] === 'labels') { stdout(JSON.stringify([(fs.existsSync('labels.json') ? JSON.parse(fs.readFileSync('labels.json')) : []).map(name => ({ name }))])); exit(0); }
+    // The labels of the repository (labels.json: names, the default is none), as the board setup reads them (--paginate --slurp).
+    if (parts[3] === 'labels' && argv.includes('--slurp')) { stdout(JSON.stringify([(fs.existsSync('labels.json') ? JSON.parse(fs.readFileSync('labels.json')) : []).map(name => ({ name }))])); exit(0); }
     if (parts[3] === 'branches' && parts.length === 4) {
       // The branches of the repository (branches.json: names, the default is none), as `next` reads them.
       stdout(JSON.stringify((fs.existsSync('branches.json') ? JSON.parse(fs.readFileSync('branches.json')) : []).map(name => ({ name }))));
@@ -574,7 +574,7 @@ function issue(argv) {
 }
 
 /**
- * gh auth|repo|project|label …: what the board setup (board-setup.mjs) asks. Every call is kept in setup-calls; a copied board is number 9.
+ * gh auth|repo|project|label …: what the board setup (github-board.mjs) asks. Every call is kept in setup-calls; a copied board is number 9.
  * The board has the six statuses and a Priority of four choices.
  */
 function setup(argv, input, stdout, stderr, exit) {

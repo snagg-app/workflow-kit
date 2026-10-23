@@ -1,5 +1,5 @@
 import { realpathSync } from 'node:fs';
-import { setupBoard } from './board-setup.mjs';
+import { setupBoard } from './github-board.mjs';
 import { externalTool } from './checkout-root.mjs';
 import { createGithub } from './github.mjs';
 

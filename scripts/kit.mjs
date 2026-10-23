@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents } from './agents.mjs';
-import { setupBoard } from './board-setup.mjs';
+import { setupBoard } from './github-board.mjs';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { createGithub } from './github.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
