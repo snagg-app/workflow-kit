@@ -55,6 +55,21 @@ test('kit setup does not write the profile through a link that leaves the projec
   assert.deepEqual(readdirSync(outside), [], 'nothing was written through the link');
 });
 
+test('importing kit.mjs runs no step; kitSetup returns the result instead of exiting (#825)', { skip: skipWithoutSubmodules() }, async t => {
+  const { project } = setup(t), outside = temporary(t, 'kit setup outside ');
+  const { kitSetup } = await import('../kit.mjs');
+  assert.equal(typeof kitSetup, 'function');
+  assert.deepEqual(readdirSync(project).filter(name => name !== '.git'), [], 'the import changed nothing');
+  writeFileSync(join(project, 'AGENTS.md'), 'own\n');
+  symlinkSync(outside, join(project, '.github'), 'junction');
+  const seen = [];
+  const result = await kitSetup(project, { onStep: step => seen.push(step.title) });
+  assert.equal(result.exitCode, 1);
+  assert.equal(result.steps.at(-1).state, 'error');
+  assert.deepEqual(seen, result.steps.map(step => step.title));
+  assert.deepEqual(readdirSync(outside), []);
+});
+
 test('kit setup leaves a project that is already bound to its board alone, without any network call (#730)', { skip: skipWithoutSubmodules() }, t => {
   const { project, home, run, env } = setup(t);
   mkdirSync(join(project, '.github'));
