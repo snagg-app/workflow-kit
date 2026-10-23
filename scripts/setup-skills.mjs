@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, readFileSync, realpathSync, rmSync, unlinkSync } from 'node:fs';
+import { lstatSync, realpathSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd } from './checkout-root.mjs';
 import { providers, sourceProviders } from './agents.mjs';
-import { activeSkills } from './project-profile.mjs';
+import { activeSkills, readProfile } from './project-profile.mjs';
 import { checkDirectory, linkSkills, materialize } from './provider-links.mjs';
 import { providerList, skillsOf } from './provider-list.mjs';
 import { context, setup } from './provider.mjs';
@@ -28,8 +28,7 @@ export async function setupSkills() {
   }
   linkSkills(root); // agents that read the shared skills through links
   // The project's "skills" choice: kit skills outside it go again. Skills of the project itself are never touched.
-  const profilePath = join(root, '.github/workflow-project.json');
-  const project = existsSync(profilePath) ? JSON.parse(readFileSync(profilePath, 'utf8')) : {};
+  const project = readProfile(root);
   const active = activeSkills(project);
   if (active) {
     const kitSkills = [...providerList().flatMap(provider => skillsOf(provider, root)), ...kitOwnedSkills];

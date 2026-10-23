@@ -7,6 +7,7 @@ import { hookFiles } from './agents.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
 import { sharedKit } from './kit-entry.mjs';
 import { locked } from './lock.mjs';
+import { readProfile } from './project-profile.mjs';
 import { fileURLToPath } from 'node:url';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
@@ -137,6 +138,7 @@ export function modulesCheck(dir, { git: run = gitIn({}, dir) } = {}) {
   const read = file => { try { return JSON.parse(readFileSync(path.join(root, file), 'utf8')); } catch { return null; } };
   const manifest = read('package.json');
   if (![manifest?.dependencies, manifest?.devDependencies].some(list => list && typeof list === 'object' && Object.keys(list).length)) return [];
-  const setup = typeof read('.github/workflow-project.json')?.setup === 'string' ? read('.github/workflow-project.json').setup.replace(/[^A-Za-z0-9 /._:=@-]/g, '') : '';
+  let setup = '';
+  try { setup = readProfile(root).setup.replace(/[^A-Za-z0-9 /._:=@-]/g, ''); } catch { /* a broken profile is board.mjs's to report, not the hook's */ }
   return [`node_modules is missing in this worktree although package.json lists dependencies, so Node may resolve modules from a parent checkout. Nothing was installed: run ${setup || 'the project setup (see its AGENTS.md)'}.`];
 }

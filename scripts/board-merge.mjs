@@ -85,7 +85,7 @@ export function createMerge(env) {
     let work;
     const run = gitAt;
     try {
-      const commands = readProfileAt(rest, project.repository, merged).push ?? [];
+      const commands = readProfileAt(rest, project.repository, merged).push;
       if (!commands.length) return;
       run(projectDirectory, 'fetch', '--quiet', 'origin', branch);
       work = mkdtempSync(join(tmpdir(), 'board-push-'));

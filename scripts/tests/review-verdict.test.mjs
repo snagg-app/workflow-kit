@@ -51,7 +51,6 @@ test('an optional reviewer is shown and never awaited', () => {
   const eyes = facts({ reactions: [{ content: 'eyes', created_at: ago(2), user: { login: 'coderabbitai[bot]', type: 'Bot' } }] });
   assert.equal(judge(eyes).done, false);
   assert.equal(judge(eyes, { optionalReviewers: ['coderabbitai'] }).done, true);
-  assert.throws(() => judge(eyes, { optionalReviewers: [1] }), /optionalReviewers/);
 });
 
 test('open Sonar issues are red, an unreadable count is not clean, a failed read throws', () => {

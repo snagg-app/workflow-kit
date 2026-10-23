@@ -1,6 +1,7 @@
-// What a project's .github/workflow-project.json says about its board statuses the language of the texts board.mjs writes and the kit skills it keeps.
+// What a project's .github/workflow-project.json says (board statuses, the language of the texts board.mjs writes, the kit skills it keeps, review settings),
+// read and checked in one place: readProfile (disk) and readProfileAt (a Git ref) are the only readers of the file.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { asking, gitIn } from './git-tool.mjs';
 import { featureProviders } from './provider-list.mjs';
@@ -96,16 +97,60 @@ export function textsFor(project) {
   return texts[language];
 }
 
-/** The profile as GitHub has it on `ref` (the repository's default branch without one): the single read of a profile at a branch or commit. `rest` is the github adapter's. */
-export function readProfileAt(rest, repository, ref) {
-  const file = rest(`repos/${repository}/contents/.github/workflow-project.json${ref === undefined ? '' : `?ref=${encodeURIComponent(ref)}`}`);
-  assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${repository}${ref === undefined ? '' : ` on ${ref}`} is unreadable`);
-  return JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+const profileFile = '.github/workflow-project.json';
+// Lists of non-empty strings: the field and what its entries are.
+const lists = {
+  optionalReviewers: 'bot logins or app slugs', updateBranchChecks: 'check names', awaitApps: 'app slugs', selfReview: 'check names', push: 'shell commands',
+  requiredFields: 'field names', worktreeVolumePrefixes: 'volume name prefixes', worktreeVolumeProtect: 'volume name parts',
+};
+const numbers = { reviewerGraceMinutes: [3, 'a number of minutes, 0 or more (0 turns the grace off)'], staleHours: [6, 'a number of hours, 0 or more'] };
+
+/**
+ * The one check of a profile: parses the text, checks every known field once and returns the view: the file's fields with the defaults filled in
+ * (`.raw` is the file as written, for a writer that must not copy defaults into it). `where` names the file in the message of a broken one.
+ */
+export function parseProfile(source, where = profileFile) {
+  let raw;
+  try { raw = JSON.parse(source); } catch (error) { throw new Error(`${where} is not valid JSON: ${error.message}`); }
+  assert.ok(raw && typeof raw === 'object' && !Array.isArray(raw), `${where} must be a JSON object`);
+  const view = { ...raw, statuses: statusNames(raw), language: raw.language ?? 'en', labels: projectLabels(raw) };
+  textsFor(view);
+  activeSkills(raw);
+  if (raw.boardTemplate !== undefined) boardTemplate(raw);
+  for (const [key, [fallback, what]] of Object.entries(numbers)) {
+    view[key] = raw[key] === undefined ? fallback : raw[key];
+    assert.ok(Number.isFinite(view[key]) && view[key] >= 0, `${key} in ${profileFile} must be ${what}; omit it for ${fallback}`);
+  }
+  for (const [key, what] of Object.entries(lists)) {
+    view[key] = raw[key] === undefined ? [] : raw[key];
+    assert.ok(Array.isArray(view[key]) && view[key].every(name => typeof name === 'string' && name.trim()), `${key} in ${profileFile} must be a list of ${what}; omit it for none`);
+  }
+  view.specLabel = raw.specLabel === undefined ? 'spec' : raw.specLabel;
+  assert.ok(typeof view.specLabel === 'string' && view.specLabel.trim(), `specLabel in ${profileFile} must be a label name; omit it for "spec"`);
+  view.doneBaseMerge = raw.doneBaseMerge === undefined ? 'always' : raw.doneBaseMerge;
+  assert.ok(['always', 'overlap'].includes(view.doneBaseMerge), `doneBaseMerge in ${profileFile} must be "always" or "overlap"; omit it for "always"`);
+  view.setup = raw.setup === undefined ? '' : raw.setup;
+  assert.ok(typeof view.setup === 'string', `setup in ${profileFile} must be a shell command; omit it for none`);
+  for (const { name, feature } of featureProviders()) {
+    view[name] = raw[name] === undefined ? feature.default : raw[name];
+    assert.ok(typeof view[name] === 'boolean' || (feature.auto && view[name] === 'auto'),
+      `${name} in ${profileFile} must be ${feature.auto ? 'true, false or "auto"' : 'true or false'}; omit it for ${JSON.stringify(feature.default)}${feature.hint ?? ''}`);
+  }
+  return Object.defineProperty(view, 'raw', { value: raw });
 }
 
-/** The profile of a project directory ({} without a readable file). */
+/** The profile as GitHub has it on `ref` (the repository's default branch without one), checked. `rest` is the github adapter's. */
+export function readProfileAt(rest, repository, ref) {
+  const where = `${profileFile} of ${repository}${ref === undefined ? '' : ` on ${ref}`}`;
+  const file = rest(`repos/${repository}/contents/${profileFile}${ref === undefined ? '' : `?ref=${encodeURIComponent(ref)}`}`);
+  assert.equal(file?.encoding, 'base64', `${where} is unreadable`);
+  return parseProfile(Buffer.from(file.content, 'base64').toString('utf8'), where);
+}
+
+/** The profile of a project directory, checked; without a file the defaults. The single read of a profile on disk. */
 export function readProfile(root) {
-  try { return JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8')); } catch { return {}; }
+  const file = join(root, profileFile);
+  return parseProfile(existsSync(file) ? readFileSync(file, 'utf8') : '{}');
 }
 
 export const languages = Object.keys(texts);
@@ -130,12 +175,6 @@ export function activeSkills(project) {
 
 /** The optional kit functions of a project, one switch per provider with a `feature` (provider-list.mjs): true or false, or "auto" where the provider can tell (Impeccable: on with UI files). */
 export function projectFeatures(root, git = gitIn({}, root)) {
-  const profile = readProfile(root), on = {};
-  for (const { name, feature } of featureProviders()) {
-    const value = profile[name] === undefined ? feature.default : profile[name];
-    assert.ok(typeof value === 'boolean' || (feature.auto && value === 'auto'),
-      `${name} in .github/workflow-project.json must be ${feature.auto ? 'true, false or "auto"' : 'true or false'}; omit it for ${JSON.stringify(feature.default)}${feature.hint ?? ''}`);
-    on[name] = value === 'auto' ? feature.auto(root, asking(git)) : value;
-  }
-  return on;
+  const profile = readProfile(root);
+  return Object.fromEntries(featureProviders().map(({ name, feature }) => [name, profile[name] === 'auto' ? feature.auto(root, asking(git)) : profile[name]]));
 }

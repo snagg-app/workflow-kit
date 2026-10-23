@@ -7,6 +7,8 @@
 // Names, texts and numbers never reach the files: a string becomes "x" (an enum such as OPEN stays), a number 1, a list one merged element.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { readProfile } from './project-profile.mjs';
 import { merge } from './tests/gh-shapes.mjs';
 
 const dir = new URL('./tests/gh-shapes/', import.meta.url);
@@ -34,7 +36,7 @@ function graphql(query, variables) {
 
 function main() {
   const args = process.argv.slice(2), values = flag => args.flatMap((arg, index) => arg === flag ? [args[index + 1]] : []);
-  const project = JSON.parse(fs.readFileSync(new URL('../.github/workflow-project.json', import.meta.url), 'utf8'));
+  const project = readProfile(fileURLToPath(new URL('..', import.meta.url)));
   const [owner, name] = (values('--repo')[0] ?? project.repository).split('/');
   const issues = values('--issue').map(Number), prs = values('--pr').map(Number);
   if (!issues.length || !prs.length) throw new Error('Name at least one --issue and one --pr to record');

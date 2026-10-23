@@ -12,7 +12,7 @@ const uiFile = /\.(?:tsx|jsx|vue|svelte|astro)$/;
  * Whether the project has UI files: a component file (tracked or new, not ignored) or a UI dependency in any package.json. `ask` runs Git in `root` (asking() of git-tool.mjs).
  * shortcut: names the common frameworks only; when it guesses wrong, set "impeccable" to true or false in the profile.
  */
-function hasUi(root, ask) {
+function scanForUi(root, ask) {
   const listed = ask(root, 'ls-files', '--cached', '--others', '--exclude-standard');
   const files = listed.ok ? listed.out.split('\n').filter(Boolean) : [];
   if (files.some(file => uiFile.test(file))) return true;
@@ -22,6 +22,22 @@ function hasUi(root, ask) {
       return [manifest.dependencies, manifest.devDependencies, manifest.peerDependencies].some(list => list && uiDependencies.some(name => Object.hasOwn(list, name)));
     } catch { return false; }
   });
+}
+
+/**
+ * The answer of scanForUi, kept in the git dir (`kit-has-ui`) so a session start does not scan the whole tree again: it holds while the commit is
+ * the same and the stamp is under an hour old. A component file added since (uncommitted) shows up with the next commit or the hour.
+ */
+function hasUi(root, ask) {
+  const [gitDir, head] = ask(root, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');
+  const file = gitDir && head && join(gitDir, 'kit-has-ui');
+  try {
+    const stamp = file && JSON.parse(readFileSync(file, 'utf8'));
+    if (stamp && stamp.head === head && Date.now() - stamp.at < 3600_000) return stamp.ui;
+  } catch { /* no or broken stamp: scan */ }
+  const ui = scanForUi(root, ask);
+  try { if (file) writeFileSync(file, JSON.stringify({ head, ui, at: Date.now() })); } catch { /* best effort */ }
+  return ui;
 }
 
 const folders = Object.values(agents).map(agent => agent.agents);

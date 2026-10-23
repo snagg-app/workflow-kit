@@ -109,11 +109,7 @@ export function createHandoff(env) {
    * any level; its sub-headings belong to it) must name. Whether a check was good is not judged. Without the field nothing is asked.
    */
   // ponytail: a name counts when the section mentions it, the section is not proof the check ran; replace when a check leaves a trace.
-  function selfReviewChecks() {
-    const checks = project.selfReview === undefined ? [] : project.selfReview; // only a missing field is allowed; null is malformed
-    assert.ok(Array.isArray(checks) && checks.every(check => typeof check === 'string' && check.trim()), 'selfReview must be a list of non-empty check names');
-    return checks;
-  }
+  const selfReviewChecks = () => project.selfReview;
 
   function selfReviewReasons(bodyHtml, checks) {
     if (!checks.length) return [];
