@@ -9,8 +9,7 @@ Read any existing target AGENTS.md and contribution rules; inspect its remote,
 Git status, board, CI, update bots and agent configuration. Confirm the target, which may
 differ from this checkout. Resolve only missing choices in one compact round:
 
-- **Repository:** a new one from
-  [project-template](https://github.com/snagg-app/project-template), or an existing
+- **Repository:** a new one (from your own template repository or empty), or an existing
   one? Get the exact OWNER/REPO and local path. For a new one, also the owner, name
   and visibility; recommend private.
 - **Board:** an existing GitHub Project number under the same owner, or a copy of
@@ -28,7 +27,7 @@ the user's budget decision first.
 ## 2. Repository
 
 For a new repository run
-`gh repo create OWNER/REPO --template snagg-app/project-template --private`, then
+`gh repo create OWNER/REPO --private` (add `--template OWNER/TEMPLATE` for a template of yours), then
 clone it with `--recurse-submodules`.
 
 With a working kit and `.github/workflow-project.json`, follow
@@ -57,12 +56,12 @@ review, Human review, Done, plus a usable Priority scale. Migrate In review by
 renaming it to Automated review in place and adding Human review before Done;
 preserve option IDs, cards and existing Priority, including organization fields.
 
-`kit setup` runs `setup-github.mjs OWNER/REPO` for the `origin` remote; for another board call
+`kit setup` binds the board for the `origin` remote (the same as `setup-github.mjs OWNER/REPO`); for another board call
 `node .vendor/workflow-kit/scripts/setup-github.mjs OWNER/REPO PROJECT_NUMBER` yourself.
 It copies or reuses the Project and records it in `.github/workflow-project.json`,
-keeping `"start"`. It also checks the six statuses and Priority, links the
-repository, and adds the missing default labels: ci, documentation, testing,
-security, dependencies, needs-human-input, spec.
+keeping `"start"`. A new board is a copy of `"boardTemplate"` (`{"owner": "ORG", "number": 5}`); without it the kit copies its own board (the one in the kit repository's own `.github/workflow-project.json`). It also checks the six statuses and Priority, links the
+repository, and adds the missing labels, by default: ci, documentation, testing,
+security, dependencies, needs-human-input, spec. `"labels"` (`[{"name": "ci", "color": "1d76db"}]`) replaces that list.
 
 If field validation fails, correct that board and repeat the same command; a
 copied board is already recorded, so do not create a replacement. Write and verify

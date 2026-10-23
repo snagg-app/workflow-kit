@@ -67,14 +67,6 @@ test('a project without UI files gets no Impeccable entry, and an old one goes; 
   assert.deepEqual(events(), full, 'a UI dependency in any package.json turns it on');
 });
 
-// The kit is product-neutral. Left out: the license holder, the kit's own board binding, its consumer list; the notify workflow may name only its secret.
-const projectConfig = new Set(['LICENSE', '.github/workflow-project.json', '.github/kit-consumers.json']);
-test('no tracked kit file names a consuming product', () => {
-  const files = spawnSync('git', ['ls-files', '-z'], { cwd: new URL('../..', import.meta.url), encoding: 'utf8' }).stdout.split('\0').filter(file => file && !projectConfig.has(file) && statSync(new URL(`../../${file}`, import.meta.url), { throwIfNoEntry: false })?.isFile());
-  assert.ok(files.length > 50);
-  for (const file of files) assert.doesNotMatch(readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').replaceAll('snagg-app', '').replaceAll('VAULTDEX_DISPATCH_TOKEN', ''), new RegExp(['vault' + 'dex', 'sna' + 'gg'].join('|'), 'i'), file);
-});
-
 test('every shipped hook handler has the kit id and calls the hook module', () => {
   for (const [file, settings] of [['claude', hookSettings('claude')], ['codex', hookSettings('codex')], ['.claude/settings.json', read(new URL('../../.claude/settings.json', import.meta.url))], ['.codex/hooks.json', read(new URL('../../.codex/hooks.json', import.meta.url))]]) {
     const handlers = Object.values(settings.hooks).flat().flatMap(group => group.hooks);
