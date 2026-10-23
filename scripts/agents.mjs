@@ -46,15 +46,16 @@ export const agents = {
 export const providers = Object.values(agents).map(agent => dirname(agent.skills));
 /** Provider folders that hold real skill copies; the others link to them. */
 export const sourceProviders = Object.values(agents).filter(agent => !agent.linksShared).map(agent => dirname(agent.skills));
-export const agentNames = Object.keys(agents);
+/** The one way to list the agent names: read live from the table (a test may extend it). */
+export const agentNames = () => Object.keys(agents);
 /** "A", "A and B", "A, B and C": the labels of the given agents (default: all of the table) for a message. */
-export function agentLabels(names = agentNames) {
+export function agentLabels(names = agentNames()) {
   const labels = names.map(name => agents[name].label ?? name);
   return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels.join('');
 }
 /** The agents a project uses (one of their detect paths exists), optionally only those that pass the filter (hooks: agent => agent.hooks). none: nothing found, as in a new project; names is then all agents that pass. */
 export function projectAgents(root, filter = () => true) {
-  const candidates = agentNames.filter(name => filter(agents[name])), found = candidates.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
+  const candidates = agentNames().filter(name => filter(agents[name])), found = candidates.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
   return { names: found.length ? found : candidates, none: !found.length };
 }
 /** The agent whose session this process runs in. */

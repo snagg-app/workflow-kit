@@ -1,11 +1,10 @@
 // The claim format (#643, #789): "Agent: NAME, Session: ID", written by `start`, read by every board command. The one module that builds or searches claim lines.
 // NAME is any agent of the agent table (agents.mjs), so a new agent needs no entry here; its session variable is `sessionEnv` there.
-import { agents, detectAgent } from './agents.mjs';
+import { agents, agentNames, detectAgent } from './agents.mjs';
 
 // `start` writes it as an issue comment (with "Basis: BRANCH"); once the first push opens the Draft PR, the PR body carries it and decides. The field may stand anywhere in a line
 // (Codex wrote it at the end of a sentence), not quoted in code, and "Agent: codex" alone is the claim of an unknown session: it can never be
 // the caller's, so it holds the issue until the line in the PR body is edited to the new session (a handover).
-const agentNames = () => Object.keys(agents);
 // Built on each call from the table (the table is a module-level object a test may extend); groups: 1 agent, 2 session.
 const claimField = () => new RegExp(`(?<![\\w\`])Agent:[ \\t]*(${agentNames().join('|')})(?![\\w-])(?:[ \\t]*,[ \\t]*Session:[ \\t]*(\\w[\\w.-]*)(?![\\w.-]))?`, 'i');
 
