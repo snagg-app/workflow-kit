@@ -7,10 +7,15 @@ import { hookFiles } from './agents.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
 import { sharedKit } from './kit-entry.mjs';
 import { locked } from './lock.mjs';
-import { readProfile } from './project-profile.mjs';
+import { readProfile, textsFor } from './project-profile.mjs';
 import { fileURLToPath } from 'node:url';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
+
+/** The profile's texts of a project directory; English without a readable profile (a broken one is board.mjs's to report, not the check's). */
+function textsAt(dir) {
+  try { return textsFor(readProfile(dir)); } catch { return textsFor({}); }
+}
 
 const isDirectory = dir => existsSync(dir) && statSync(dir).isDirectory();
 const real = file => { try { return realpathSync.native(file); } catch { return ''; } };
@@ -33,7 +38,7 @@ function followBase(git, root, say) {
     if (!(behind > 0)) continue;
     const name = base.out.replace(/[^A-Za-z0-9/._-]/g, '');
     if (dirty(git, root)) {
-      say(`Checkout is ${behind} commit(s) behind ${name} (as of the last fetch) and has no commits of its own but local changes, so it was not fast-forwarded and its rules, skills and board commands may be outdated. Nothing was fetched: commit or stash the changes, run git fetch, then git merge --ff-only ${name}; skills load at session start, so restart after updating.`);
+      say(textsAt(root).kitBehind(behind, name));
     } else {
       git(root, '-c', 'core.hooksPath=/dev/null', 'merge', '--ff-only', '--quiet', base.out);
     }
@@ -42,17 +47,17 @@ function followBase(git, root, say) {
 }
 
 /** `git pull --ff-only` and the kit's own submodules. Work in progress in the checkout is never touched, only reported. */
-function updateKit(git, kit, say) {
+function updateKit(git, kit, say, root) {
   const branch = git(kit, 'symbolic-ref', '--short', '-q', 'HEAD').out;
   if (branch !== 'main')
-    return say(`The shared Workflow Kit checkout ${kit} is ${branch ? `on branch ${branch}` : 'on a fixed revision'}, not on main, so it was not updated. When you are done with it: git -C ${kit} switch main`);
+    return say(textsAt(root).kitNotMain(kit, branch));
   if (dirty(git, kit) || git(kit, 'rev-list', '-n', '1', 'HEAD', '--not', '--remotes').out)
-    return say(`The shared Workflow Kit checkout ${kit} has local changes or unpublished commits, so it was not updated. Kit work belongs in its own worktree of the kit repository: resolve them in ${kit}.`);
+    return say(textsAt(root).kitDirty(kit));
   // Never prompt, never run hooks of the checkout (the runner carries the timeout and the no-prompt environment, see `hookGit`).
   const step = (...args) => git(kit, '-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', ...args).ok;
   locked(path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock'), 10 * 60_000, () => {
     if (!step('pull', '--ff-only', '--quiet') || (existsSync(path.join(kit, '.gitmodules')) && !step('submodule', 'update', '--init', '--quiet')))
-      say(`The shared Workflow Kit checkout ${kit} could not be updated (offline or diverged?). Try: git -C ${kit} pull --ff-only && git -C ${kit} submodule update --init`);
+      say(textsAt(root).kitNotUpdated(kit));
   });
 }
 
@@ -60,15 +65,15 @@ function updateKit(git, kit, say) {
 export function linkKit(root, kit) {
   const link = path.join(root, '.vendor/workflow-kit'), entry = lstatSync(link, { throwIfNoEntry: false });
   if (entry && !entry.isSymbolicLink())
-    return `${root}: .vendor/workflow-kit is a folder or submodule, not a link to the shared kit. Delete it (git rm -f for a submodule), then: node ${path.join(kit, 'scripts/init-project.mjs')} --existing --cwd ${root}`;
+    return textsAt(root).kitFolder(root, path.join(kit, 'scripts/init-project.mjs'));
   if (!existsSync(path.join(kit, 'AGENT_RULES.md')))
-    return `${root}: the shared Workflow Kit checkout ${kit} is missing or incomplete. Clone it: git clone https://github.com/snagg-app/workflow-kit.git ${kit}`;
+    return textsAt(root).kitMissing(root, kit);
   if (real(link) === real(kit)) return '';
   try {
     rmSync(link, { force: true });
     mkdirSync(path.dirname(link), { recursive: true });
     symlinkSync(kit, link, 'junction');
-  } catch (error) { return real(link) === real(kit) /* a parallel session linked it first */ ? '' : `${root}: could not link .vendor/workflow-kit to ${kit} (${error.code ?? error.message}).`; }
+  } catch (error) { return real(link) === real(kit) /* a parallel session linked it first */ ? '' : textsAt(root).kitLinkFailed(root, kit, error.code ?? error.message); }
   return '';
 }
 
@@ -77,7 +82,7 @@ function checkKit(git, dir, update, say, state, shared) {
   const top = git(dir, 'rev-parse', '--show-toplevel');
   if (!top.ok || !top.out) {
     if (isDirectory(path.join(dir, '.vendor/workflow-kit')))
-      say(`${dir}: Workflow Kit not checked: git did not find the project repository (is git on PATH?).`);
+      say(textsAt(dir).kitNoGit(dir));
     return;
   }
   const root = top.out;
@@ -87,7 +92,7 @@ function checkKit(git, dir, update, say, state, shared) {
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
   const kit = shared ?? sharedKit(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out), problem = linkKit(root, kit);
   if (problem) return say(problem);
-  if (update && !state.updated) { state.updated = true; updateKit(git, kit, say); }
+  if (update && !state.updated) { state.updated = true; updateKit(git, kit, say, root); }
   return kit;
 }
 
@@ -140,5 +145,5 @@ export function modulesCheck(dir, { git: run = gitIn({}, dir) } = {}) {
   if (![manifest?.dependencies, manifest?.devDependencies].some(list => list && typeof list === 'object' && Object.keys(list).length)) return [];
   let setup = '';
   try { setup = readProfile(root).setup.replace(/[^A-Za-z0-9 /._:=@-]/g, ''); } catch { /* a broken profile is board.mjs's to report, not the hook's */ }
-  return [`node_modules is missing in this worktree although package.json lists dependencies, so Node may resolve modules from a parent checkout. Nothing was installed: run ${setup || 'the project setup (see its AGENTS.md)'}.`];
+  return [textsAt(root).modulesMissing(setup)];
 }

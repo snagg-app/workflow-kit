@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { parseProfile, projectFeatures, readProfile, readProfileAt } from '../project-profile.mjs';
+import { parseProfile, projectFeatures, readProfile, readProfileAt, textsFor } from '../project-profile.mjs';
 
 const valid = [
   ['an empty profile gets every default', {}, view => assert.deepEqual([view.language, view.staleHours, view.reviewerGraceMinutes, view.specLabel, view.doneBaseMerge, view.optionalReviewers, view.setup, view.impeccable],
@@ -36,6 +36,13 @@ const invalid = [
   ['a switch that is a text', '{"ponytail":"auto"}', /ponytail in/],
 ];
 for (const [name, text, message] of invalid) test(`profile: ${name} is refused with a message that names the field`, () => assert.throws(() => parseProfile(text), message));
+
+test('profile: every language has the same texts, and a text follows the language', () => {
+  const english = textsFor({}), german = textsFor({ language: 'de' });
+  assert.deepEqual(Object.keys(german), Object.keys(english));
+  assert.notEqual(german.modulesMissing(''), english.modulesMissing(''));
+  assert.notEqual(german.closedByMerge(1, 'main'), english.closedByMerge(1, 'main'));
+});
 
 test('profile: the file as written stays reachable, without defaults', () => {
   assert.deepEqual(parseProfile('{"language":"de"}').raw, { language: 'de' });
