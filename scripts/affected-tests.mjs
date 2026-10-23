@@ -25,6 +25,7 @@ const NOT_BOARD = /^(?!board-).*\.test\.mjs$/;
 // A changed test file always runs itself; a file that matches no row is reported on stderr.
 export const TABLE = [
   [/^scripts\/(board(-[a-z]+)?|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
+  [/^scripts\/claim\.mjs$|^scripts\/tests\/claim\.test\.mjs$/, [BOARD, 'claim.test.mjs']],
   [/^scripts\/(review-facts|review-verdict|sonar)\.mjs$|^scripts\/tests\/fake-sonar\.mjs$/, [BOARD, 'review-verdict.test.mjs']],
   [/^scripts\/tests\/(gh-shapes\.mjs$|gh-shapes\/)/, [BOARD, 'gh-shapes.test.mjs']],
   [/^scripts\/record-gh-shapes\.mjs$/, ['gh-shapes.test.mjs']],
@@ -37,7 +38,7 @@ export const TABLE = [
   [/^scripts\/tests\/fixtures\.mjs$/, ['git-hooks', 'kit-init-hook', 'kit-setup', 'ponytail-batch', 'ponytail-hooks', 'renovate-regenerate', 'setup'].map(n => `${n}.test.mjs`)],
   [/^scripts\/install-git-hooks\.mjs$/, ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']],
   [/^scripts\/project-profile\.mjs$/, ['entrypoints.test.mjs', 'kit-setup.test.mjs', 'ponytail-hooks.test.mjs']],
-  [/^scripts\/(init-project|agents)\.mjs$|^scripts\/hook-commands\.json$|^templates\//, ['entrypoints.test.mjs', 'kit-init-hook.test.mjs', 'impeccable-update.test.mjs', 'matt-pocock.test.mjs']],
+  [/^scripts\/(init-project|agents)\.mjs$|^scripts\/hook-commands\.json$|^templates\//, ['entrypoints.test.mjs', 'kit-init-hook.test.mjs', 'impeccable-update.test.mjs', 'matt-pocock.test.mjs', 'claim.test.mjs']],
   [/^scripts\/provider\.mjs$/, ['provider.test.mjs', 'ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', 'matt-pocock.test.mjs', 'setup.test.mjs', 'impeccable-update.test.mjs']],
   [/^scripts\/provider-ponytail\.mjs$/, ['ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', 'setup.test.mjs']],
   [/^scripts\/(ponytail-patch\.mjs|ponytail\/)/, ['update-ponytail.test.mjs', 'ponytail-batch.test.mjs']],
