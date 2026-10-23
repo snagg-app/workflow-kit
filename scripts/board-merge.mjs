@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } fro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { agentNames, agents } from './agents.mjs';
 import { readProfileAt, textsFor } from './project-profile.mjs';
 import { SonarOtherPr } from './sonar.mjs';
 import { shared } from './board-args.mjs';
@@ -70,7 +71,7 @@ function deleteHeadBranch(pr) {
 }
 
 /**
- * Delete the folder of an agent worktree (under `.claude/worktrees`) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
+ * Delete the folder of an agent worktree (under an agent's `worktrees` folder of the agent table) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
  * (node_modules, .vendor, links). `rmSync` unlinks a junction or symlink without entering it, so a link's target stays. Never the folder this run works in. Returns the line to report, or nothing.
  */
 function removeAgentWorktree(branch) {
@@ -79,7 +80,8 @@ function removeAgentWorktree(branch) {
     const here = process.cwd().replaceAll('\\', '/').toLowerCase();
     for (const block of gitAt(projectDirectory, 'worktree', 'list', '--porcelain').split(/\r?\n\r?\n/)) {
       const path = /^worktree (.+)$/m.exec(block)?.[1];
-      if (!path || !block.includes(`\nbranch refs/heads/${branch}`) || !/\/\.claude\/worktrees\/[^/]+$/.test(path.replaceAll('\\', '/'))) continue;
+      const parent = path?.replaceAll('\\', '/').replace(/\/[^/]+$/, '');
+      if (!path || !block.includes(`\nbranch refs/heads/${branch}`) || !agentNames().some(agent => agents[agent].worktrees && parent.endsWith(`/${agents[agent].worktrees}`))) continue;
       const own = path.replaceAll('\\', '/').toLowerCase();
       if (here === own || here.startsWith(`${own}/`)) return `worktree kept: ${path} is the folder of this run`;
       rmSync(path, { recursive: true, force: true });
