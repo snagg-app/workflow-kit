@@ -12,7 +12,7 @@ notices and reviewed adaptations in generated skills.
 
 ## Install or update in a project
 
-Needs Git, Node 26 and, for the board commands, an authenticated `gh`. All projects on a
+Needs Git, Node (minimum version in `scripts/versions.json`; `.node-version` is the Node that CI and development use) and, for the board commands, an authenticated `gh`. All projects on a
 machine share one kit checkout that always follows `main`; each project reaches it through
 the link `.vendor/workflow-kit`. Kit commands act on the Git checkout they run in. Once per
 machine, clone the kit next to your projects (`WORKFLOW_KIT_DIR` overrides the place). One

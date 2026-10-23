@@ -6,6 +6,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statS
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { agents, agentNames, hookEvents } from './agents.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { snapshotDirectory } from './provider-ponytail.mjs';
@@ -49,8 +50,8 @@ function install(names) {
 }
 
 if (event === '--install') { if (rest.length) install(rest); process.exit(0); }
-if (!['SessionStart', 'SubagentStart', 'UserPromptSubmit', 'PostToolUse', 'Stop'].includes(event) || !['claude', 'codex'].includes(agent)) {
-  console.error('Usage: kit-hook.mjs <SessionStart|SubagentStart|UserPromptSubmit|PostToolUse|Stop> --agent <claude|codex>');
+if (!hookEvents.includes(event) || !agentNames.includes(agent)) {
+  console.error(`Usage: kit-hook.mjs <${hookEvents.join('|')}> --agent <${agentNames.join('|')}>`);
   process.exit(2);
 }
 
@@ -75,18 +76,18 @@ function emit() {
 }
 
 /** Claude loads hooks once per session: SessionStart keeps the settings fingerprint, SubagentStart warns when the last fetched base differs. */
-function fingerprint(dir, input) {
-  const file = input.session_id && path.join(process.env.CLAUDE_CONFIG_DIR || path.join(homedir(), '.claude'), 'hooks-fingerprint', path.basename(String(input.session_id)));
+function fingerprint(dir, input, { configEnv, configDir }, settings) {
+  const file = input.session_id && path.join(process.env[configEnv] || path.join(homedir(), configDir), 'hooks-fingerprint', path.basename(String(input.session_id)));
   if (!file) return;
   if (event === 'SubagentStart') {
     const seen = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
     let now = '';
-    for (const ref of ['@{upstream}', 'origin/HEAD']) if ((now = git(dir, 'rev-parse', '-q', '--verify', `${ref}:.claude/settings.json`).out)) break;
+    for (const ref of ['@{upstream}', 'origin/HEAD']) if ((now = git(dir, 'rev-parse', '-q', '--verify', `${ref}:${settings}`).out)) break;
     if (seen && now && now !== seen) context.push('Hooks seit Session-Start geändert: Session neu starten');
   } else if (input.source !== 'compact') {
     try {
       mkdirSync(path.dirname(file), { recursive: true });
-      writeFileSync(file, git(dir, 'hash-object', path.join(dir, '.claude/settings.json')).out + '\n');
+      writeFileSync(file, git(dir, 'hash-object', path.join(dir, settings)).out + '\n');
     } catch { /* best effort */ }
   }
 }
@@ -128,7 +129,8 @@ else {
   try { input = JSON.parse(raw) ?? {}; } catch { /* no hook JSON: the environment still names the project */ }
   const project = process.env.CLAUDE_PROJECT_DIR || '.';
   const fresh = !['resume', 'compact', 'fork'].includes(input.source);
-  if (agent === 'claude') fingerprint(project, input);
+  const { fingerprint: where, file: settings } = agents[agent].hooks ?? {};
+  if (where) fingerprint(project, input, where, settings);
   let on = { impeccable: true, ponytail: true }; // a broken profile must not stop the session
   try { on = projectFeatures(project); } catch (error) { if (event === 'SessionStart') say(error.message); }
   // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
