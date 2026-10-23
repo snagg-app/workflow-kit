@@ -29,7 +29,7 @@ const hookProject = () => projectRoot(process.env.CLAUDE_PROJECT_DIR || undefine
 function install(names) {
   const home = path.join(homedir(), ...ponytailProvider.install.home);
   mkdirSync(home, { recursive: true });
-  const log = openSync(path.join(home, '.install.log'), 'w');
+  const log = openSync(path.join(home, '.install.log'), 'a');
   try {
     // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
     for (const name of names)
