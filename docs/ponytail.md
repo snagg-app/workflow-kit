@@ -45,8 +45,9 @@ Mode is stored per Git checkout and host in the Ponytail config directory.
 `/ponytail lite|full|ultra|off` switches it, and `/ponytail default <mode>` saves a
 personal default. Bare `/ponytail` enables the default level when off (full if the
 default is off), or reports an active level. Resume/compact preserves the live
-mode. Version 5.2.0 uses snapshot `5.2.0-1`; install and trust the new hook
-commands explicitly. Previous snapshots stay intact.
+mode. Each Ponytail version uses its own snapshot (the version is in
+`scripts/versions.json`); install and trust the new hook commands explicitly.
+Previous snapshots stay intact.
 `node --test scripts/tests/ponytail-hooks.test.mjs` runs the
 real manifest commands with hostile PATH entries; agent loading/trust needs
 separate verification.

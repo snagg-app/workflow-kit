@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { detectAgent } from './agents.mjs';
 import { shared } from './board-args.mjs';
 import { pushPlan, targetBranch } from './board-checkout.mjs';
 import { result } from './board-result.mjs';
@@ -64,7 +65,7 @@ export function createStart(env) {
    * A step that is already done is skipped, so a resume is the same call. The session is the one of `sessionOption`.
    */
   function start() {
-    const agent = process.env.CODEX_THREAD_ID ? 'codex' : 'claude', modules = join(projectDirectory, '.gitmodules');
+    const agent = detectAgent(), modules = join(projectDirectory, '.gitmodules');
     const session = sessionOption();
     assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
     // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
