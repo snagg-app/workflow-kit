@@ -50,11 +50,11 @@ export function outsideCheckouts(path, message) {
 }
 
 /** The kit, the project the command runs in and the tools it needs; Git is the installed one, never a program of the checkout or the working directory. */
-export function context({ kit = resolve(dirname(fileURLToPath(import.meta.url)), '..'), home = homedir() } = {}) {
+export function context({ kit = resolve(dirname(fileURLToPath(import.meta.url)), '..'), home = homedir(), log = console.log } = {}) {
   const root = projectRoot();
   let tool;
   return {
-    kit, root, home, outside: outsideCheckouts,
+    kit, root, home, log, outside: outsideCheckouts,
     git(...args) {
       tool ??= externalTool('git', root, kit, process.cwd());
       return execFileSync(tool.file, args, { cwd: root, env: tool.env, encoding: 'utf8' });
@@ -100,10 +100,10 @@ export async function publish(p, c) {
       // Reject redirected ancestors before replacing any output. Changed or foreign files move aside, equal ones stay.
       checkDirectory(c.root, join(state, 'replaced'));
       for (const [path] of outputs) localDirectory(c.root, dirname(join(c.root, path)));
-      for (const [path, from] of outputs) materialize(c.root, join(c.root, path), join(next, from));
-      for (const path of retire) moveAside(c.root, path);
-      linkSkills(c.root);
-      console.log(message);
+      for (const [path, from] of outputs) materialize(c.root, join(c.root, path), join(next, from), c.log);
+      for (const path of retire) moveAside(c.root, path, c.log);
+      linkSkills(c.root, c.log);
+      (c.log ?? console.log)(message);
     } finally {
       // Only this run's staging, confined to the state folder.
       assert.equal(dirname(stage), state);
@@ -192,10 +192,11 @@ export async function install(p, c) {
       if (entry.mode && process.platform !== 'win32') chmodSync(file, entry.mode);
     }
     await i.after?.(destination, c);
-    console.log(`${p.label} hooks installed: ${destination}`);
+    const log = c.log ?? console.log;
+    log(`${p.label} hooks installed: ${destination}`);
     markUsed(destination);
-    for (const old of pruneUnused(parent, destination)) console.log(`${p.label} installation unused for ${unusedDays} days removed: ${old}`);
-    console.log('Review and enable the project hooks in your agent; start a fresh session. No hook trust or personal agent settings were changed.');
+    for (const old of pruneUnused(parent, destination)) log(`${p.label} installation unused for ${unusedDays} days removed: ${old}`);
+    log('Review and enable the project hooks in your agent; start a fresh session. No hook trust or personal agent settings were changed.');
   });
 }
 

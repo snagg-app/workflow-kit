@@ -40,7 +40,7 @@ export function rename(from, to) {
 }
 
 /** Move whatever is at `path` to .workflow-kit/replaced/<stamp>/, keeping it for the user. */
-export function moveAside(root, path) {
+export function moveAside(root, path, log = console.log) {
   // Through a linked ancestor, `path` would name an entry somewhere else.
   checkDirectory(root, dirname(path));
   const entry = present(path);
@@ -55,7 +55,7 @@ export function moveAside(root, path) {
     symlinkSync(dirname(path) + sep + target, destination);
     unlinkSync(path);
   } else rename(path, destination);
-  console.log(`Moved ${relative(root, path)} to ${relative(root, destination)}`);
+  log(`Moved ${relative(root, path)} to ${relative(root, destination)}`);
 }
 
 /** Compare ordinary files/directories without following a previous provider link. */
@@ -73,10 +73,10 @@ function same(path, source) {
 }
 
 /** Publish generated files; keep equal output and preserve changed files or old junctions aside. */
-export function materialize(root, path, source) {
+export function materialize(root, path, source, log) {
   localDirectory(root, dirname(path));
   if (same(path, source)) return;
-  moveAside(root, path);
+  moveAside(root, path, log);
   cpSync(source, path, { recursive: true });
 }
 
@@ -86,7 +86,7 @@ const realpath = path => { try { return realpathSync.native(path); } catch { ret
  * Link every shared skill into the folders of the agents that read it through links (not committed: a junction on Windows,
  * which needs no privilege, else a symlink). Own skills stay real copies. A copy equal to the shared one goes; a changed one is moved aside.
  */
-export function linkSkills(root) {
+export function linkSkills(root, log) {
   const shared = join(root, sharedSkills);
   checkDirectory(root, shared);
   for (const { skills } of Object.values(agents).filter(agent => agent.linksShared)) {
@@ -97,7 +97,7 @@ export function linkSkills(root) {
         if (same(path, source)) rmSync(path);
       } else if (realpath(path) !== realpath(source)) {
         if (same(path, source)) rmSync(path, { recursive: true });
-        else moveAside(root, path);
+        else moveAside(root, path, log);
         symlinkSync(source, path, 'junction');
       }
     }

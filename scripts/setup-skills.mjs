@@ -16,17 +16,17 @@ const kitOwnedSkills = ['find-skills', 'spec-review'];
  * Writes the skills of every provider and of the kit into the project the process runs in (see projectRoot in checkout-root.mjs),
  * then trims them to the project's "skills" choice. Throws on any problem; prints what it did.
  */
-export async function setupSkills() {
-  const c = context(), { kit, root } = c;
+export async function setupSkills({ log = console.log } = {}) {
+  const c = context({ log }), { kit, root } = c;
   // Check Matt's ownership manifests before another generator changes discovery files (the list is in that order).
   for (const provider of providerList()) await setup(provider, c);
   for (const skill of kitOwnedSkills) {
     const source = join(kit, '.agents/skills', skill);
     checkDirectory(kit, source);
     for (const provider of sourceProviders)
-      materialize(root, join(root, provider, 'skills', skill), source);
+      materialize(root, join(root, provider, 'skills', skill), source, log);
   }
-  linkSkills(root); // agents that read the shared skills through links
+  linkSkills(root, log); // agents that read the shared skills through links
   // The project's "skills" choice: kit skills outside it go again. Skills of the project itself are never touched.
   const project = readProfile(root);
   const active = activeSkills(project);
@@ -43,17 +43,17 @@ export async function setupSkills() {
           removals.push([path, entry]);
         }
       }
-    console.log(`Skills: ${active.length} ${project.skills === undefined ? 'core skills (no "skills" in the profile)' : 'chosen by the project'}, the other kit skills removed.`);
+    log(`Skills: ${active.length} ${project.skills === undefined ? 'core skills (no "skills" in the profile)' : 'chosen by the project'}, the other kit skills removed.`);
     // A project that committed these skills sees them vanish from git; name them and say how to keep them before deleting.
-    if (removed.size) console.log(`Removing kit skills (not in "skills"): ${[...removed].sort().join(', ')}. To keep one, list it in "skills" in .github/workflow-project.json, or use "all" (docs/skill-core.md).`);
+    if (removed.size) log(`Removing kit skills (not in "skills"): ${[...removed].sort().join(', ')}. To keep one, list it in "skills" in .github/workflow-project.json, or use "all" (docs/skill-core.md).`);
     // Generated copies come back with every run; moving them aside would refill .workflow-kit/replaced each time.
     for (const [path, entry] of removals) {
       if (entry.isSymbolicLink()) unlinkSync(path);
       else rmSync(path, { recursive: true });
     }
-    if (!removed.size && project.skills === undefined) console.log('Missing a kit skill? Add "skills": ["core", "tdd"] to .github/workflow-project.json, or "all" to keep every kit skill (docs/skill-core.md).');
+    if (!removed.size && project.skills === undefined) log('Missing a kit skill? Add "skills": ["core", "tdd"] to .github/workflow-project.json, or "all" to keep every kit skill (docs/skill-core.md).');
   }
-  console.log('Skills generated for commit. Hook installation and personal trust are separate explicit steps.');
+  log('Skills generated for commit. Hook installation and personal trust are separate explicit steps.');
 }
 
 // `--cwd PROJECT_DIR` as the argument picks the project; the default is the checkout the command runs in.

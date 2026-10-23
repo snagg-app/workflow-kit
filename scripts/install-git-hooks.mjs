@@ -10,7 +10,7 @@ import { externalTool, projectRoot } from './checkout-root.mjs';
 // Git directory and points core.hooksPath there, so a checked-out branch cannot replace the hooks Git runs (#194).
 // Only a rerun updates the copy. Automatic hooks never run this file. --check only reports.
 /** Copies the project's .githooks into the clone's Git directory and points core.hooksPath there; `check` only reports. Prints what it did. */
-export function installGitHooks({ root, check = false }) {
+export function installGitHooks({ root, check = false, log = console.log }) {
   const git = externalTool('git', root);
   // Inherited repository selection (e.g. when called from a Git hook) would redirect Git away from root.
   for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR']) delete git.env[name];
@@ -24,7 +24,7 @@ export function installGitHooks({ root, check = false }) {
     assert.equal(result.status, 0, result.stderr);
     return result.stdout.trim();
   };
-  const report = message => console.log(`core.hooksPath: ${message}`);
+  const report = message => log(`core.hooksPath: ${message}`);
 
   if (!statSync(join(root, '.githooks'), { throwIfNoEntry: false })?.isDirectory()) {
     report('no .githooks directory, nothing to do');
@@ -153,14 +153,14 @@ export function installGitHooks({ root, check = false }) {
         || readdirSync(hooksDir, { withFileTypes: true }).every(entry => !entry.isFile() || (statSync(join(hooksDir, entry.name)).mode & 0o111) === 0o111);
       const wanted = files(join(root, '.githooks')), installed = files(hooksDir);
       if (executable && JSON.stringify(Object.entries(wanted).sort()) === JSON.stringify(Object.entries(installed).sort()))
-        console.log(`hooks: ${hooksValue} is current`);
-      else console.log(`hooks: would copy .githooks into ${hooksValue}`);
+        log(`hooks: ${hooksValue} is current`);
+      else log(`hooks: would copy .githooks into ${hooksValue}`);
     } else {
       rmSync(hooksDir, { recursive: true, force: true });
       mkdirSync(hooksDir, { recursive: true });
       cpSync(join(root, '.githooks'), hooksDir, { recursive: true, filter: source => !lstatSync(source).isSymbolicLink() });
       for (const name of readdirSync(hooksDir)) if (lstatSync(join(hooksDir, name)).isFile()) chmodSync(join(hooksDir, name), 0o755);
-      console.log(`hooks: copied .githooks into ${hooksValue}; rerun after changing a hook`);
+      log(`hooks: copied .githooks into ${hooksValue}; rerun after changing a hook`);
     }
   }
 }
