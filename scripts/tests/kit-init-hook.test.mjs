@@ -302,7 +302,7 @@ test('a subagent is warned when the base changed the hook settings since the ses
   await git(temp, 'clone', '--quiet', origin, project);
   // `resume` keeps the fingerprint like `startup` but starts no installer.
   const session = (event, session_id, source) => call(event, project, { ...env, CLAUDE_PROJECT_DIR: project }, { session_id, source, cwd: project });
-  const warns = async id => (await session('SubagentStart', id)).stdout.includes('Hooks seit Session-Start geändert: Session neu starten');
+  const warns = async (id, hint = 'Hooks changed since session start: restart the session') => (await session('SubagentStart', id)).stdout.includes(hint);
 
   await session('SessionStart', 'old', 'resume');
   assert.equal(await warns('old'), false, 'unchanged settings stay silent');
@@ -315,6 +315,10 @@ test('a subagent is warned when the base changed the hook settings since the ses
   assert.equal(await warns('old'), true, 'a compaction does not reload hooks, so it keeps the fingerprint');
   await session('SessionStart', 'new', 'resume');
   assert.equal(await warns('new'), false, 'a session that started after the change is not');
+  // The hint follows the profile language (#759).
+  mkdirSync(join(project, '.github'), { recursive: true });
+  writeFileSync(join(project, '.github/workflow-project.json'), '{"language": "de"}');
+  assert.equal(await warns('old', 'Hooks seit Session-Start geändert: Session neu starten'), true);
 });
 
 // The one-line entries of the agent settings: they only find Node and the kit (cloning the shared checkout if it is missing), then hand over to kit-hook.mjs.

@@ -298,6 +298,9 @@ test('"Wartet bis" holds an issue until its tag exists or its UTC time has passe
   assert.equal(check('Wartet bis: v1.2.3').status, 1);
   tag('v1.2.3', 'v1.2.3');
   assert.equal(check('Wartet bis: v1.2.3').status, 0);
+  assert.equal(check('Waits until: v1.2.3').status, 0, 'The English line is read like the German one (#759)');
+  assert.equal(check('Waits until: v9.9.9').status, 1);
+  assert.equal(check('Waits until: Decision Milan').status, 1);
   const future = check('Wartet bis: 2999-01-01T00:00Z');
   assert.equal(future.status, 1, future.stdout);
   assert.ok(future.stdout.includes('2999-01-01T00:00Z'), 'The unmet condition is named');

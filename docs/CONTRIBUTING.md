@@ -37,7 +37,7 @@ claim and resume. Memory, an existing branch or Ready status does not replace it
 | BLOCKED | An open predecessor that is not STACKABLE (no open PR, only a Draft PR, a fork PR, several PRs, another repository), a predecessor closed as not planned or duplicate (needs a recorded decision), a closed issue, status Backlog or Done, an unmet `Wartet bis` condition, or work of another session (see Claims). |
 | UNKNOWN | API error, incomplete dependency data (including the PR list of an open predecessor), an inaccessible predecessor, an unset or unknown status, the issue is missing from the Project, or an unreadable `Wartet bis` line. Retry the read; never read it as "no blockers". |
 
-**Claims.** `start` posts the claim as an issue comment with `Agent: claude|codex, Session: ID` and `Basis: BRANCH`; the Draft PR that the first `done`
+**Claims.** `start` posts the claim as an issue comment with `Agent: claude|codex, Session: ID` and `Basis: BRANCH` (`Base: BRANCH` with `"language": "en"`; both are read); the Draft PR that the first `done`
 opens carries the line in its body and decides from then on (anywhere in a line, not quoted in code; in a PR body `Agent: codex` alone is a claim of an unknown
 session). The check (`start ISSUE --session ID`) reads it with the one issue query. Whatever the claims say, the check reports BLOCKED while an open PR closes
 the issue (a Draft too), a claim comment of another session stands or a branch `<agent>/<issue number>-…` exists, unless the claim names `--session`
@@ -71,7 +71,7 @@ request or Ready placement does not qualify. The guarded command still rejects a
 failed check: keep the current status and verdict, verify ownership and claim
 fields, then work only within the documented exception. It is never STARTABLE.
 
-**Wartet bis.** Eine Zeile `Wartet bis: <Wert>` (üblich im Abschnitt **Abhängigkeiten
+**Wartet bis.** Eine Zeile `Wartet bis: <Wert>` (englisch `Waits until: <value>`, `Decision` statt `Entscheidung`; beide Schreibweisen werden gelesen, unabhängig von `language`) (üblich im Abschnitt **Abhängigkeiten
 und Wiederaufnahme**) macht eine Wartebedingung maschinenlesbar. Der Wert ist entweder
 ein Tag des Projekt-Repositorys (`Wartet bis: v0.1.1`) oder ein UTC-Zeitpunkt
 `JJJJ-MM-TTThh:mmZ` (`Wartet bis: 2026-10-12T18:51Z`); mehrere Zeilen gelten alle.

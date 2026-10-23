@@ -48,7 +48,7 @@ Without `--existing`, `init-project` also creates the starter files (AGENTS.md,
 CONTRIBUTING.md, issue and PR templates) that are missing; afterwards they belong to
 the project and are never overwritten. A template that a kit update adds later does not
 reach an existing project: copy it by hand. For the spec form that is
-`.vendor/workflow-kit/templates/.github/ISSUE_TEMPLATE/spec.yml` to `.github/ISSUE_TEMPLATE/`,
+`.vendor/workflow-kit/templates/<language>/.github/ISSUE_TEMPLATE/spec.yml` (`en` or `de`, the profile language) to `.github/ISSUE_TEMPLATE/`,
 plus the label `spec` (`gh label create spec`), which the form sets.
 
 `init-project` (also with `--existing`) adds the missing lines of `templates/.ignore` to
@@ -210,7 +210,7 @@ comment, a comment for an earlier push does not count, and it works the same for
 a check suite or one that was pushed and checked on another branch first. Put the retro under
 the heading `Retro` (any level, usually `###`), one list line per finding, and, after another
 heading, the review findings with their disposition and, if a reviewer was unavailable or
-stalled, the reviewer, cause and evidence (an optional reviewer only when it found something). Without findings the retro has the single line `Keine Funde`.
+stalled, the reviewer, cause and evidence (an optional reviewer only when it found something). Without findings the retro has the single line `No findings` (`Keine Funde` with `"language": "de"`).
 Only heading, head and author are checked; the content is for the human reviewer.
 With several comments for the head the newest counts. `done ISSUE FILE` posts it unless one for the head exists
 and adds the heading and the `Head:` line itself; FILE holds the rest:
