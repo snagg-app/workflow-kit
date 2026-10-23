@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { parseProfile, projectFeatures, readProfile, readProfileAt, textsFor } from '../project-profile.mjs';
+import { parseProfile, projectFeatures, readProfile, readProfileAt, readProfileLenient, textsFor } from '../project-profile.mjs';
 
 const valid = [
   ['an empty profile gets every default', {}, view => assert.deepEqual([view.language, view.staleHours, view.reviewerGraceMinutes, view.specLabel, view.doneBaseMerge, view.optionalReviewers, view.setup, view.impeccable],
@@ -55,6 +55,7 @@ test('profile: disk and Git ref give the same view and the same message for a br
   mkdirSync(join(root, '.github'));
   writeFileSync(join(root, '.github/workflow-project.json'), '{"staleHours": "soon"');
   assert.throws(() => readProfile(root), /workflow-project\.json is not valid JSON/);
+  assert.deepEqual(readProfileLenient(root), {}, 'the lenient reader falls back instead of throwing');
   const answer = text => path => path.startsWith('repos/o/r/contents/.github/workflow-project.json?ref=main') ? { encoding: 'base64', content: Buffer.from(text).toString('base64') } : assert.fail(path);
   assert.throws(() => readProfileAt(answer('{"staleHours": "soon"'), 'o/r', 'main'), /workflow-project\.json of o\/r on main is not valid JSON/);
   assert.throws(() => readProfileAt(answer('{"staleHours": "soon"}'), 'o/r', 'main'), /staleHours in/);
