@@ -43,8 +43,8 @@ function delivery(t, fixtureOf) {
   return { run, writeIssue, head, file, text, json, git, checkout, env };
 }
 
-test('done prepares and hands off both review status schemas without rewriting the review option on resume (#593)', t => {
-  for (const status of ['Auto review', 'Automated review']) {
+test('done prepares and hands off the review status without rewriting the review option on resume (#593)', t => {
+  for (const status of ['Automated review']) {
     const { run, file, text, json } = delivery(t, handoffFixture);
     writeFileSync(file('status-options.json'), JSON.stringify(['In progress', status, 'Human review']));
     let result = run('done', '1');

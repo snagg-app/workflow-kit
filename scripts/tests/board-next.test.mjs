@@ -139,8 +139,8 @@ test('next lists the own unfinished work, then abandoned and conflicting work, b
   const work = (number, status, hours, mergeStateStatus = 'CLEAN') => ({ ...issue(status), number, issueFieldValues: { nodes: [] }, updatedAt: hoursAgo(hours),
     assignees: { nodes: [{ login: 'worker' }] }, projectItems: { nodes: [{ project: { id: 'P1' }, updatedAt: hoursAgo(hours), status: { name: status } }] },
     closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: number + 100, state: 'OPEN', body: `Agent: claude, Session: ${number === 15 ? 'S1' : 'S2'}`, updatedAt: hoursAgo(hours), mergeStateStatus, repository: { nameWithOwner: 'test/example' } }] } });
-  writeFileSync(join(checkout, 'search.json'), JSON.stringify([{ ...issue('Ready'), number: 10, issueFieldValues: { nodes: [] } }, work(11, 'Auto review', 8), work(12, 'Human review', 1, 'DIRTY'),
-    work(13, 'Human review', 1), work(14, 'In progress', 1), work(15, 'Auto review', 1)]));
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([{ ...issue('Ready'), number: 10, issueFieldValues: { nodes: [] } }, work(11, 'Automated review', 8), work(12, 'Human review', 1, 'DIRTY'),
+    work(13, 'Human review', 1), work(14, 'In progress', 1), work(15, 'Automated review', 1)]));
 
   const result = run('next', '--session', 'S1');
   assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -180,7 +180,7 @@ test('next lists feedback after the handoff: a comment, a push-back, a mention; 
 
   list([row(20, 'Automated review', 'worker', { prComments: [handoff] })]);
   assert.match(section(), /^#20 \[Automated review\] .*back in Automated review after the handoff .*c1$/m, 'a pushed-back issue');
-  list([row(20, 'Auto review', 'worker', { prComments: [handoff] })]);
+  list([row(20, 'Automated review', 'worker', { prComments: [handoff] })]);
   assert.match(section(), /back in Automated review after the handoff .*c1$/m, 'The alias keeps feedback visible');
   list([row(20, 'Automated review', 'worker', { prComments: [handoff], issueComments: [note(5, 'Agent: claude, Session: S1\n\nOn it')] })]);
   assert.equal(section(), '', 'a reply answers the push-back');

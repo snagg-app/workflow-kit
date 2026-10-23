@@ -5,7 +5,7 @@ import { linesOf, result } from './board-result.mjs';
 import { args, command, github, graphql, issueName, issueOwner, issueProject, number, progress, restAll, state, statuses, memory } from './board-context.mjs';
 import { verifyBacklinks } from './board-body.mjs';
 import { check, mayStart, waitReasons } from './board-check.mjs';
-import { decisionWait, isSpec, projectItem, readIssue, specRefusal, statusName } from './board-common.mjs';
+import { decisionWait, isSpec, projectItem, readIssue, specRefusal } from './board-common.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -20,13 +20,13 @@ export const specs = [
 /** Specs are untouched outside a human-invoked spec-review; re-read children immediately before Human review. */
 function guardSpecStatus(issue, { fieldName, option }) {
   if (fieldName !== 'Status' || !isSpec(issue)) return;
-  assert.ok(option.name !== statuses.done, specRefusal(issue.number, 'Status Done is refused'));
+  assert.ok(option.name !== statuses.done, specRefusal(issue.number, `Status ${statuses.done} is refused`));
   assert.ok(command === 'field' && args.flag('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
   if (option.name === statuses.humanReview) {
     const children = restAll(`repos/${issueProject.repository}/issues/${issue.number}/sub_issues`);
     assert.ok(children.every(child => Number.isSafeInteger(child?.number) && ['open', 'closed'].includes(child.state)), 'Spec sub-issues are unreadable');
     const open = children.filter(child => child.state === 'open');
-    assert.ok(!open.length, specRefusal(issue.number, `Human review is refused: open sub-issues ${open.map(child => `#${child.number}`).join(', ')}`));
+    assert.ok(!open.length, specRefusal(issue.number, `${statuses.humanReview} is refused: open sub-issues ${open.map(child => `#${child.number}`).join(', ')}`));
   }
 }
 
@@ -46,8 +46,7 @@ function selectField(fieldName, optionName) {
   const known = () => {
     const found = memory.projectFields.find(candidate => candidate.name === fieldName);
     const names = [...found?.options ?? [], ...found?.issueField?.options ?? []].map(choice => String(choice.name).toLowerCase());
-    return found && (optionName === undefined || names.includes(String(optionName).toLowerCase())
-      || (fieldName === 'Status' && names.some(choice => statusName(choice).toLowerCase() === statusName(optionName).toLowerCase())));
+    return found && (optionName === undefined || names.includes(String(optionName).toLowerCase()));
   };
   if (memory.fieldsCached && !known()) { dropFieldsCache(); ({ fields: memory.projectFields, cached: memory.fieldsCached } = loadFields()); }
   const fields = memory.projectFields;
@@ -77,9 +76,7 @@ function addToProject(issue) {
 /** Look up a field and option; nothing is printed or written. */
 function resolveOption(fieldName, optionName) {
   const { field, linked, choices } = selectField(fieldName, optionName);
-  const normalized = name => String(fieldName === 'Status' ? statusName(name) : name).toLowerCase();
-  const option = choices.find(choice => choice.name.toLowerCase() === String(optionName).toLowerCase())
-    ?? choices.find(choice => normalized(choice.name) === normalized(optionName));
+  const option = choices.find(choice => choice.name.toLowerCase() === String(optionName).toLowerCase());
   assert.ok(option, `${fieldName}: "${optionName}" is not an option; use one of: ${choices.map(choice => choice.name).join(', ')}`);
   return { fieldName, field, linked, option };
 }
@@ -91,7 +88,7 @@ function guardOption(issue, { fieldName, option }) {
   if (fieldName === 'Status' && option.name === statuses.ready) {
     // Ready contradicts an open decision wait: it stays Backlog until the line is removed (#514).
     const decisions = waitReasons(issue.body).blocked.filter(reason => reason.startsWith(decisionWait));
-    if (decisions.length) throw new Error(`#${issue.number} cannot be Ready: ${decisions.join('; ')}`);
+    if (decisions.length) throw new Error(`#${issue.number} cannot be ${statuses.ready}:${decisions.join('; ')}`);
   }
   if (fieldName === 'Status' && option.name === statuses.inProgress) {
     // Assignment first, so a missing assignment is named even when the issue is also blocked.
@@ -105,9 +102,9 @@ function guardOption(issue, { fieldName, option }) {
     // A refusal is an error like the others: its verdict lines become the one ERROR line instead of a second output format.
     const verdict = check(judged);
     if (!mayStart(verdict)) throw new Error(linesOf(verdict).join('; '));
-    if (wasDone) notes.push(`note: #${issue.number} is open again and was Done; it moves to In progress`);
+    if (wasDone) notes.push(`note: #${issue.number} is open again and was ${statuses.done}; it moves to ${statuses.inProgress}`);
   }
-  if (fieldName === 'Status' && statusName(option.name) === statuses.automatedReview) notes.push(...verifyBacklinks(issue));
+  if (fieldName === 'Status' && option.name === statuses.automatedReview) notes.push(...verifyBacklinks(issue));
   return notes;
 }
 
@@ -172,7 +169,7 @@ const fieldWords = () => [...args.values('--field').flatMap(splitPair), ...args.
 /** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing arguments. */
 function fieldPairs() {
   const words = fieldWords();
-  if (words[0].toLowerCase() === 'status' && statusName(words[1]).toLowerCase() === 'automated review') return [words.slice(0, 2)];
+  if (words[0].toLowerCase() === 'status' && String(words[1]).toLowerCase() === statuses.automatedReview.toLowerCase()) return [words.slice(0, 2)];
   assert.ok(words.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
   return Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
 }

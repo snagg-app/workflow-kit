@@ -69,9 +69,7 @@ function loadDeliveries(predecessors) {
 }
 
 const projectItem = issue => issue.projectItems.nodes.find(item => item.project.id === issueProject.id);
-// Existing boards use either spelling; unknown statuses keep their value and fail closed.
-const statusName = name => String(name).toLowerCase() === 'auto review' ? statuses.automatedReview : name;
-const projectStatus = issue => statusName(projectItem(issue)?.status?.name);
+const projectStatus = issue => projectItem(issue)?.status?.name;
 // "specLabel" in the project file (default "spec") marks a spec. Only a human closes a spec or sets it to Done (AGENT_RULES.md, Hard rules).
 
 function isSpec(issue) {
@@ -89,7 +87,7 @@ function isSpec(issue) {
   return false;
 }
 
-const specRefusal = (issueNumber, what) => `BLOCKED: #${issueNumber} is a spec (label "${specLabel}"); ${what}. Only a human closes a spec or sets Done; record the acceptance in a comment on the spec (AGENT_RULES.md, Hard rules).`;
+const specRefusal = (issueNumber, what) => `BLOCKED: #${issueNumber} is a spec (label "${specLabel}"); ${what}. Only a human closes a spec or sets ${statuses.done}; record the acceptance in a comment on the spec (AGENT_RULES.md, Hard rules).`;
 
 /** A conflict in a lower layer locks the whole native stack, so it is a blocker (#412, undoes #405). This is the order that fixes it; `stack-sync` does it. */
 const stackOrderText = 'merge the base into the lowest layer, then each layer into the next one up (merge, never rebase or force-push); `board.mjs stack-sync TOP` does it for the stack';
@@ -149,4 +147,4 @@ const sameLogin = (a, b) => a?.toLowerCase() === b?.toLowerCase();
 
 const defaultBranchName = () => memory.defaultBranch ??= rest(`repos/${project.repository}`).default_branch;
 
-export { predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, statusName, projectStatus, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, feedbackNode, issueFeedback, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, sameLogin, defaultBranchName };
+export { predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, projectStatus, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, feedbackNode, issueFeedback, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, sameLogin, defaultBranchName };

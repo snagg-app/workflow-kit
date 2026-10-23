@@ -44,7 +44,7 @@ function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields 
     assert.ok(pairs.some(([fieldName]) => fieldName.toLowerCase() === required.toLowerCase()), `the project requires ${required}: give a value for it`);
   }
   const plans = planFields(pairs);
-  assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || plans.find(plan => plan.fieldName === 'Status').option.name === statuses.backlog, 'A new spec starts in Backlog; only a human-invoked spec-review changes its status');
+  assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || plans.find(plan => plan.fieldName === 'Status').option.name === statuses.backlog, `A new spec starts in ${statuses.backlog}; only a human-invoked spec-review changes its status`);
   // Open issues over REST, not the search index, which misses one created seconds ago by a parallel session (#618). PRs are listed too.
   memory.repositoryLists ??= { milestones: restAll(`repos/${project.repository}/milestones`), labels: restAll(`repos/${project.repository}/labels`),
     issues: restAll(`repos/${project.repository}/issues`).filter(item => !item.pull_request) };
