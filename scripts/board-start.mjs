@@ -11,11 +11,11 @@ import { pushPlan, targetBranch } from './board-checkout.mjs';
 import { result } from './board-result.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { textInEveryLanguage } from './project-profile.mjs';
-import { args, checkout, git, gitAt, github, issueProject, number, progress, project, projectDirectory, rest, restAll, runShell, sessionOption, state, statuses, step, texts } from './board-context.mjs';
+import { args, checkout, env, git, gitAt, github, issueProject, number, progress, project, projectDirectory, rest, restAll, runShell, sessionOption, state, statuses, step, texts } from './board-context.mjs';
 import { linkIssue } from './board-body.mjs';
 import { baseOf, check, mayStart } from './board-check.mjs';
 import { branchWork, foreignAssignees, isOwn, openPr, ownPr, refsPr, startReasons, workBranches } from './board-claims.mjs';
-import { defaultBranchName, isSpec, projectItem, readIssue, refOf, sameLogin, specRefusal } from './board-common.mjs';
+import { defaultBranchName, isSpec, kitFromEnv, projectItem, readIssue, refOf, sameLogin, specRefusal } from './board-common.mjs';
 import { set } from './board-fields.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
@@ -68,12 +68,12 @@ function setCloneSetting(key, want) {
  * A step that is already done is skipped, so a resume is the same call. The session is the one of `sessionOption`.
  */
 function start() {
-  const agent = detectAgent(), modules = join(projectDirectory, '.gitmodules');
+  const agent = detectAgent(env), modules = join(projectDirectory, '.gitmodules');
   const session = sessionOption();
   assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
   // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
   // #813: a driver in a fresh worktree gets no SessionStart hook, so start itself brings the shared kit to origin/main (fast-forward) and stops when it cannot.
-  const kitHints = kitCheck(projectDirectory, { git: gitAt, update: true, force: true });
+  const kitHints = kitCheck(projectDirectory, { git: gitAt, update: true, force: true, kit: kitFromEnv() });
   [...kitHints, ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
   assert.ok(!kitHints.stuck, `the shared kit could not be brought to origin/main (${kitHints.at(-1) ?? 'another update holds the kit lock'}); nothing was written, fix the kit checkout and run start again`);
   // One checkout-wide setting each, so a commit in a submodule never rides along with a project push and a branch switch follows the submodule pins.

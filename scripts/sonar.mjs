@@ -46,14 +46,13 @@ function requestInWorker(href, token) {
  * for private projects, so a failed read throws (never "clean"). Without a token the count comes from the check
  * run's summary instead (total null when unreadable).
  */
-export function sonarIssues(detailsUrl, prNumber, summary) {
+export function sonarIssues(detailsUrl, prNumber, summary, token) {
   const target = new URL(detailsUrl ?? 'invalid:');
   const key = target.searchParams.get('id');
   const unlinked = `The SonarCloud check does not link PR #${prNumber}'s analysis (${detailsUrl}); open issues are unreadable`;
   assert.ok(sonarHosts.includes(target.origin) && key && target.searchParams.get('pullRequest'), unlinked);
   // Sync PRs with the same head share one analysis, and it links one of them (#640): `merge` answers with a branch update.
   if (target.searchParams.get('pullRequest') !== String(prNumber)) throw new SonarOtherPr(unlinked);
-  const token = process.env.SONAR_TOKEN;
   if (!token) {
     // The check run's own summary names the count ("[0 New issues](…)"); only that is a readable number, else total is null.
     const count = /\[(\d+) New issues?\]/.exec(summary ?? '')?.[1];

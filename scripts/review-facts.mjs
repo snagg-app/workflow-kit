@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { headPushed } from './review-verdict.mjs';
 import { sonarIssues } from './sonar.mjs';
-import { graphql, name, number, owner, project, rest, restAll } from './board-context.mjs';
+import { env, graphql, name, number, owner, project, rest, restAll } from './board-context.mjs';
 import { stackOrderText, prQuery } from './board-common.mjs';
 import { conflictLine } from './board-claims.mjs';
 import { readStacks } from './board-stack.mjs';
@@ -82,7 +82,7 @@ function readFacts(pr, threadsOf) {
       const checks = (pr.commits.nodes[0].commit.statusCheckRollup?.contexts.nodes ?? [])
         .filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && check.conclusion !== 'SKIPPED');
       return new Map(checks.map(check => {
-        try { return [check, sonarIssues(check.detailsUrl, pr.number, check.summary)]; } catch (error) { return [check, { error }]; }
+        try { return [check, sonarIssues(check.detailsUrl, pr.number, check.summary, env.SONAR_TOKEN)]; } catch (error) { return [check, { error }]; }
       }));
     },
     reviewList: () => restAll(`${base}/pulls/${pr.number}/reviews`),
