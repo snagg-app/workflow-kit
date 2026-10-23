@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { externalTool, projectRoot, takeCwd } from './checkout-root.mjs';
-import { statusNames, textsFor } from './project-profile.mjs';
+import { readProfileAt, statusNames, textsFor } from './project-profile.mjs';
 import { createGithub } from './github.mjs';
 import { configError, createOptions, helpOf, listOf, parseArgs, usageOf } from './board-args.mjs';
 import { commandSpecs } from './board-commands.mjs';
@@ -102,9 +102,7 @@ const { graphql, rest, restAll } = github;
 /** The issue lives in another repository when --issue-repo says so: its board and statuses replace the project's (read once, before the modules are made). */
 function useIssueRepo() {
   if (issueRepoOption === undefined || issueRepoOption.toLowerCase() === project.repository.toLowerCase()) return;
-  const file = rest(`repos/${issueRepoOption}/contents/.github/workflow-project.json`);
-  assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${issueRepoOption} is unreadable`);
-  issueProject = { ...JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')), repository: issueRepoOption };
+  issueProject = { ...readProfileAt(rest, issueRepoOption), repository: issueRepoOption };
   [issueOwner, issueName] = issueRepoOption.split('/');
   statuses = statusNames(issueProject);
 }
