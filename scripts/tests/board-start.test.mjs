@@ -184,6 +184,27 @@ test('done opens the branch and the Draft PR with the first push (#643)', t => {
   assert.equal(git(checkout, 'rev-parse', '--abbrev-ref', 'claude/1-fixture@{upstream}'), 'origin/claude/1-fixture', 'the upstream is the branch itself, never the base (#646)');
 });
 
+test('done opens the PR on the base the branch stands on when the Zielrelease changed after the claim (#855)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  const project = JSON.parse(text('.github/workflow-project.json'));
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...project, baseBranch: { field: 'Zielrelease', pattern: 'release/{value}', values: { main: 'main' } } }));
+  writeIssue({ ...issue('Ready'), projectItems: { nodes: [{ ...issue().projectItems.nodes[0], base: { name: '0.1.2' } }] } });
+  git(checkout, 'commit', '--allow-empty', '-q', '-m', 'release only');
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/release/0.1.2');
+  git(checkout, 'reset', '-q', '--hard', 'HEAD~1');
+  assert.equal(run('start', '1', '--session', 'S1').status, 0);
+  // The field now says main and the branch was rebuilt on origin/main; the claim comment still names the release.
+  writeIssue({ ...JSON.parse(text('issue.json')), projectItems: { nodes: [{ ...issue().projectItems.nodes[0], base: { name: 'main' } }] },
+    comments: { nodes: [{ createdAt: new Date().toISOString(), url: 'u', body: 'Beansprucht.\nAgent: claude, Session: S1\nBasis: release/0.1.2\n' }] } });
+  git(checkout, 'reset', '-q', '--hard', 'origin/main');
+  writeFileSync(file('work.txt'), 'x');
+  git(checkout, 'add', 'work.txt');
+  git(checkout, 'commit', '-q', '-m', 'work');
+  const result = run('done', '1');
+  assert.ok(existsSync(file('created-pr')), result.stdout + result.stderr);
+  assert.ok(text('created-pr').includes('base=main'));
+});
+
 // #725: on a release base the closing keyword links nothing, so a PR that exists but is not linked yet looks like "no PR": done must reuse it, not fail with 422.
 for (const [name, existing] of [['opens the PR on a release base', false], ['reuses the open PR of its branch instead of failing with 422', true]]) {
   test(`done without a PR number ${name} (#725)`, t => {
