@@ -1,10 +1,10 @@
 // Zweck: Die eine Stelle der Kit-Prüfung (Kit-Link, Kit-Stand, veralteter Branch, fehlende Abhängigkeiten): Zustand rein, Meldungen raus.
 // Aufruf: import { kitCheck, modulesCheck } (Hook, board.mjs start/next) oder `node scripts/kit.mjs check` (jeder Agent, auch ohne Hooks).
 // Nutzen: Der Hook ist nur eine frühere Ausführung derselben Prüfung; ein Agent ohne Hooks bekommt dieselben Hinweise über board.mjs und `kit check`.
-import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import { hookFiles } from './agents.mjs';
-import { asking, gitIn, patient } from './git-tool.mjs';
+import { asking, gitIn, gitStamp, patient } from './git-tool.mjs';
 import { sharedKit } from './kit-entry.mjs';
 import { locked } from './lock.mjs';
 import { readProfile, textsFor } from './project-profile.mjs';
@@ -80,7 +80,7 @@ export function linkKit(root, kit) {
 }
 
 /** Check one checkout: link it to the shared kit, then update the kit; report what needs a human. */
-function checkKit(git, dir, update, say, state, shared) {
+function checkKit(git, dir, update, say, updated, shared) {
   const top = git(dir, 'rev-parse', '--show-toplevel');
   if (!top.ok || !top.out) {
     if (isDirectory(path.join(dir, '.vendor/workflow-kit')))
@@ -94,7 +94,7 @@ function checkKit(git, dir, update, say, state, shared) {
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
   const kit = shared ?? sharedKit(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out), problem = linkKit(root, kit);
   if (problem) return say(problem, true);
-  if (update && !state.updated.has(kit)) { state.updated.add(kit); updateKit(git, kit, (message, stuck) => { if (stuck) state.updated.delete(kit); say(message, stuck); }, root); } // a failed update is tried again by the next call of this process
+  if (update && !updated.has(kit)) { updated.add(kit); updateKit(git, kit, (message, stuck) => { if (stuck) updated.delete(kit); say(message, stuck); }, root); } // a failed update is tried again by the next call of this process
   return kit;
 }
 
@@ -109,35 +109,33 @@ function kitHead(kit) {
   } catch { return ''; }
 }
 
-const state = { updated: new Set() };
+/** The options the callers take from the environment: the kit checkout named by `WORKFLOW_KIT_DIR` and the stamp's lifetime in ms (`KIT_HOOK_FRESH_SECONDS`, default 10 minutes). */
+export const kitEnvironment = (env = process.env) => ({
+  kit: env.WORKFLOW_KIT_DIR ? path.resolve(env.WORKFLOW_KIT_DIR) : undefined,
+  fresh: Number(env.KIT_HOOK_FRESH_SECONDS ?? 600) * 1000,
+});
 
 /**
- * The kit check of one directory; returns the messages (empty: all in order). After a clean full check the git dir gets a stamp (`kit-ok`). While project commit, kit commit
+ * The kit check of one directory; returns `{ messages, stuck }` (no messages: all in order). After a clean full check the git dir gets a stamp (`kit-ok`). While project commit, kit commit
  * and kit path are unchanged and the stamp is young, the next call skips the check and the pull: one git call plus file reads. Time is only an addition, never the key.
+ * `stuck` (#813): the shared kit could not follow origin (not main, local work, no fast-forward); `start` refuses on it.
  * `update`: also pull the shared kit (the hook at session start); board.mjs and `kit check` read only.
  * `force`: ignore the stamp (`start` must see the real state of origin, #813).
- * `kit`: the kit checkout that runs (`kit setup`), instead of the shared one found next to the project.
+ * `kit`: the kit checkout that runs (`kit setup`, `WORKFLOW_KIT_DIR`), instead of the shared one found next to the project.
+ * `fresh`: how long a stamp counts, in ms. `updated`: kits already pulled by this process (pass one Set to several calls to pull once).
  * `git`: a runner `(dir, ...args) => output` that throws on failure (gitIn); the default is the kit's safe one, the hook and board.mjs pass theirs.
  */
-export function kitCheck(dir, { update = false, force = false, git: run = gitIn(patient, dir), kit: shared } = {}) {
-  // `messages.stuck` (#813): the shared kit could not follow origin (not main, local work, no fast-forward); `start` refuses on it.
-  const git = asking(run), messages = [], say = (message, stuck) => { if (message) messages.push(message); if (stuck) messages.stuck = true; };
-  const fresh = Number(process.env.KIT_HOOK_FRESH_SECONDS ?? 600) * 1000;
+export function kitCheck(dir, { update = false, force = false, git: run = gitIn(patient, dir), kit: shared, fresh = 600_000, updated = new Set() } = {}) {
+  const git = asking(run), messages = [], result = { messages, stuck: false };
+  const say = (message, stuck) => { if (message) messages.push(message); if (stuck) result.stuck = true; };
   const [gitDir, head] = git(dir, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');
-  const file = gitDir && path.join(gitDir, 'kit-ok');
-  if (file && !force) {
-    try {
-      const stamp = JSON.parse(readFileSync(file, 'utf8'));
-      if (stamp.git === gitDir && stamp.head === head && Date.now() - stamp.at < fresh && (stamp.pulled || !update)
-        && (!process.env.WORKFLOW_KIT_DIR || path.resolve(process.env.WORKFLOW_KIT_DIR) === stamp.kit) && (!shared || shared === stamp.kit) && kitHead(stamp.kit) === stamp.kitHead) return messages;
-    } catch { /* no or broken stamp: full check */ }
-  }
-  const kit = checkKit(git, dir, update, say, state, shared);
-  if (file && kit && !messages.length && !messages.stuck) {
-    // The check may have fast-forwarded the project, so the commit is read again.
-    try { writeFileSync(file, JSON.stringify({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() })); } catch { /* best effort */ }
-  }
-  return messages;
+  const stamp = gitStamp(gitDir, 'kit-ok'), known = force ? null : stamp.read();
+  if (known && known.git === gitDir && known.head === head && Date.now() - known.at < fresh && (known.pulled || !update)
+    && (!shared || shared === known.kit) && kitHead(known.kit) === known.kitHead) return result;
+  const kit = checkKit(git, dir, update, say, updated, shared);
+  if (kit && !messages.length && !result.stuck)
+    stamp.write({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() }); // the check may have fast-forwarded the project, so the commit is read again
+  return result;
 }
 
 /** A worktree without node_modules although package.json lists dependencies: Node may resolve modules from a parent checkout. */

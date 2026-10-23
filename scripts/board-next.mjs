@@ -4,12 +4,12 @@ import assert from 'node:assert/strict';
 
 import { shared } from './board-args.mjs';
 import { capped, result } from './board-result.mjs';
-import { kitCheck, modulesCheck } from './kit-check.mjs';
+import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
 import { args, gitAt, graphql, progress, project, projectDirectory, restAll, sessionOption, statuses, texts } from './board-context.mjs';
 import { feedback, heldOnlyByOpenPredecessors, loadPrFeedback, predecessorReasons, waitReasons } from './board-check.mjs';
 import { conflicting, idleMs, isStale, openPr, ownWork, startReasons } from './board-claims.mjs';
 import { commentClaims } from './claim.mjs';
-import { ago, baseField, kitFromEnv, issueFeedback, loadDeliveries, predecessorFields, projectItem, projectStatus } from './board-common.mjs';
+import { ago, baseField, issueFeedback, loadDeliveries, predecessorFields, projectItem, projectStatus } from './board-common.mjs';
 import { dropFieldsCache, selectField } from './board-fields.mjs';
 import { stackBase } from './board-stack.mjs';
 
@@ -21,7 +21,7 @@ export const specs = [
 
 function next() {
   // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
-  [...kitCheck(projectDirectory, { git: gitAt, kit: kitFromEnv() }), ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
+  [...kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt }).messages, ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
   // Advanced issue search understands -is:blocked (open native predecessors). Separate searches keep blocked issues
   // from crowding unblocked ones out of the 1,000-result search cap; read every page of both before sorting. A page costs by its size, not by its hits
   // so it is short. PR feedback is loaded separately, once per actual unique PR.

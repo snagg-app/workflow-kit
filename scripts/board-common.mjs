@@ -2,11 +2,7 @@
 // Its functions run nothing when imported; run-time data comes from board-context.mjs.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { env, github, graphql, issueName, issueOwner, issueProject, number, project, rest, restAll, specLabel, statuses, memory } from './board-context.mjs';
-
-/** The kit checkout this call was told to use (`kit` option of kitCheck), else undefined: kitCheck then looks for the shared one. */
-export const kitFromEnv = () => env.WORKFLOW_KIT_DIR ? resolve(env.WORKFLOW_KIT_DIR) : undefined;
+import { github, graphql, issueName, issueOwner, issueProject, number, project, rest, restAll, specLabel, statuses, memory } from './board-context.mjs';
 
 // GitHub charges a query by its nested lists, not by what they return: every list inside a list (and every node of a list of
 // up to 100) multiplies the cost. So a query asks for little, and the rest is read only where a verdict needs it.

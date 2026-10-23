@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { agentLabels, agents, providers } from './agents.mjs';
+import { gitStamp } from './git-tool.mjs';
 import { checkDirectory } from './write-guard.mjs';
 
 const uiDependencies = ['react', 'react-dom', 'react-native', 'expo', 'vue', 'svelte', 'solid-js', 'preact', 'lit', '@angular/core', 'next', 'astro'];
@@ -30,13 +31,10 @@ function scanForUi(root, ask) {
  */
 function hasUi(root, ask) {
   const [gitDir, head] = ask(root, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');
-  const file = gitDir && head && join(gitDir, 'kit-has-ui');
-  try {
-    const stamp = file && JSON.parse(readFileSync(file, 'utf8'));
-    if (stamp && stamp.head === head && Date.now() - stamp.at < 3600_000) return stamp.ui;
-  } catch { /* no or broken stamp: scan */ }
+  const stamp = gitStamp(head && gitDir, 'kit-has-ui'), known = stamp.read();
+  if (known && known.head === head && Date.now() - known.at < 3600_000) return known.ui;
   const ui = scanForUi(root, ask);
-  try { if (file) writeFileSync(file, JSON.stringify({ head, ui, at: Date.now() })); } catch { /* best effort */ }
+  stamp.write({ head, ui, at: Date.now() });
   return ui;
 }
 
