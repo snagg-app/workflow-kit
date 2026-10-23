@@ -52,18 +52,13 @@ export function agentLabels(names = agentNames) {
   const labels = names.map(name => agents[name].label ?? name);
   return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels.join('');
 }
-/** The agents a project uses (one of their detect paths exists); none found, as in a new project: all of them. */
-export function projectAgents(root) {
-  const found = agentNames.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
-  return found.length ? found : agentNames;
+/** The agents a project uses (one of their detect paths exists), optionally only those that pass the filter (hooks: agent => agent.hooks). none: nothing found, as in a new project; names is then all agents that pass. */
+export function projectAgents(root, filter = () => true) {
+  const candidates = agentNames.filter(name => filter(agents[name])), found = candidates.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
+  return { names: found.length ? found : candidates, none: !found.length };
 }
 /** The agent whose session this process runs in. */
 export const detectAgent = (env = process.env) => Object.keys(agents).find(name => agents[name].detectEnv && env[agents[name].detectEnv]) ?? defaultAgent;
-/** The agents with hooks that a project uses (one of their detect paths exists); none found, as in a new project: all of them. */
-export function hookAgents(root) {
-  const withHooks = agentNames.filter(name => agents[name].hooks), found = withHooks.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
-  return { names: found.length ? found : withHooks, none: !found.length };
-}
 export const hookFiles = Object.values(agents).filter(agent => agent.hooks).map(agent => agent.hooks.file);
 
 /** The project's copy of kit-entry.mjs (written by `kit setup`); hook-commands.json names the same path. */
