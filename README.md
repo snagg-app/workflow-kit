@@ -103,8 +103,8 @@ Every hook of Claude and Codex is a short call of `.agents/workflow-kit-hook.mjs
 (SessionStart and SubagentStart only), then hands over to `scripts/kit-hook.mjs`. Hook notices follow `language` of the profile. The module holds all hook logic and reads the Ponytail, Impeccable and
 minimum Node version from `scripts/versions.json`, the only place they are written (the CI Node stays in `.node-version`). The hooks call personal snapshots.
 They install and update themselves: at SessionStart the module returns at once and starts both installers in a
-detached process (one run per machine, lock in `~/.ponytail/workflow-kit/.install.lock`, log in
-`.install.log` next to it). A missing version, a changed version after a kit update or a removed
+detached process (one run per machine and function through the provider's own lock, log in
+`~/.ponytail/workflow-kit/.install.log`). A missing version, a changed version after a kit update or a removed
 pinned Node is repaired at the next session start and active from the one after. Needs `node` on PATH;
 without it the one-line entry prints a clear message and ends with success. By hand, from the project:
 `node .vendor/workflow-kit/scripts/kit.mjs setup` (it runs both installers).

@@ -22,10 +22,21 @@ export const run = (file, args = [], { input, ...options } = {}) => new Promise(
   child.stdin.end(input);
 });
 
+/** Waits until the hook's background installer is over: `installed()` is true and neither function's lock shows on two looks 300 ms apart (they run one after the other). */
+export async function installersDone(home, timeout, installed = () => true) {
+  const busy = () => !installed() || ['.ponytail/workflow-kit/.ponytail.lock', '.impeccable/workflow-kit/.impeccable.lock'].some(lock => existsSync(join(home, lock)));
+  for (let quiet = 0, waited = 0; quiet < 2; waited += 300) {
+    if (waited >= timeout) throw new Error(`The hook installer was not done after ${timeout} ms`);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    quiet = busy() ? 0 : quiet + 1;
+  }
+}
+
 /** A temporary directory that is removed with the test. */
 export function temporary(t, name) {
   const path = mkdtempSync(join(tmpdir(), name));
-  t.after(() => rmSync(path, { recursive: true, force: true }));
+  // A detached hook installer may still have its working directory in here for a moment; Windows refuses to remove it until it ends.
+  t.after(() => rmSync(path, { recursive: true, force: true, maxRetries: 50, retryDelay: 200 }));
   return path;
 }
 

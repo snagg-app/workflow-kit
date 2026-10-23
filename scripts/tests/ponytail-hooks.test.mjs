@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { snapshotDirectory } from '../provider-ponytail.mjs';
-import { run as exec } from './fixtures.mjs';
+import { installersDone, run as exec } from './fixtures.mjs';
 
 const root = process.env.WORKFLOW_KIT_TARGET || fileURLToPath(new URL('../../', import.meta.url));
 const windows = process.platform === 'win32';
@@ -182,7 +182,7 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const first = (await call('startup')).stdout;
   assert.match(first, /Ponytail hooks are OFF/);
   assert.match(first, /Impeccable hooks are OFF/);
-  for (let wait = 0; (!existsSync(launcher) || existsSync(path.join(home, '.ponytail/workflow-kit/.install.lock'))) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  await installersDone(home, hookTimeout, () => existsSync(launcher));
   assert.ok(existsSync(launcher), 'the hook started the installation, which then released its lock');
   // A resume starts no second installer that would still hold the folder.
   assert.doesNotMatch((await call('resume')).stdout, /Ponytail hooks are OFF/);
@@ -224,8 +224,8 @@ test('a project without UI files neither warns about nor downloads Impeccable', 
   assert.match(first, /Ponytail hooks are OFF/);
   assert.doesNotMatch(first, /Impeccable/);
   // The background installer ends when its lock is gone; it installs Ponytail and, for this project, nothing else.
-  const installed = path.join(home, '.ponytail/workflow-kit', snapshotDirectory(version, project)), lock = path.join(home, '.ponytail/workflow-kit/.install.lock');
-  for (let wait = 0; (!existsSync(installed) || existsSync(lock)) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  const installed = path.join(home, '.ponytail/workflow-kit', snapshotDirectory(version, project));
+  await installersDone(home, hookTimeout, () => existsSync(installed));
   assert.ok(existsSync(installed), 'Ponytail installed');
   assert.equal(existsSync(path.join(home, '.impeccable')), false, 'no engine download');
 });

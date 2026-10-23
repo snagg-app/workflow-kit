@@ -10,7 +10,6 @@ import { agents, agentNames, hookEvents } from './agents.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
-import { locked } from './lock.mjs';
 import { locate, markUsed } from './provider.mjs';
 import impeccableProvider from './provider-impeccable.mjs';
 import ponytailProvider from './provider-ponytail.mjs';
@@ -26,20 +25,18 @@ const agent = rest[rest.indexOf('--agent') + 1];
 /** The checkout both the installer and the launcher lookup read the Ponytail files from. */
 const hookProject = () => projectRoot(process.env.CLAUDE_PROJECT_DIR || undefined);
 
-/** One installer run per machine, for the functions the project uses. */
+/** Runs the installers for the functions the project uses; provider.mjs locks each one per machine, so two sessions install once. */
 function install(names) {
   const home = path.join(homedir(), ...ponytailProvider.install.home);
   mkdirSync(home, { recursive: true });
-  locked(path.join(home, '.install.lock'), 15 * 60_000, () => {
-    const log = openSync(path.join(home, '.install.log'), 'w');
-    try {
-      // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
-      for (const name of names)
-        spawnSync(process.execPath, [path.join(scripts, 'provider.mjs'), name, 'install'], { cwd: hookProject(), stdio: ['ignore', log, log], timeout: 300_000 });
-    } finally {
-      closeSync(log);
-    }
-  });
+  const log = openSync(path.join(home, '.install.log'), 'a');
+  try {
+    // The installers are idempotent: a current installation is verified and left alone, a missing or stale one is replaced.
+    for (const name of names)
+      spawnSync(process.execPath, [path.join(scripts, 'provider.mjs'), name, 'install'], { cwd: hookProject(), stdio: ['ignore', log, log], timeout: 300_000 });
+  } finally {
+    closeSync(log);
+  }
 }
 
 if (event === '--install') { if (rest.length) install(rest); process.exit(0); }
