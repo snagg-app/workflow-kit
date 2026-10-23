@@ -1,5 +1,18 @@
 {
   "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "id": "workflow-kit",
+            "type": "command",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" UserPromptSubmit --agent codex; exit 0",
+            "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.agents/workflow-kit-hook.mjs\"; if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $f)) { $input | node $f UserPromptSubmit --agent codex; exit $LASTEXITCODE }; exit 0",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write|apply_patch",
@@ -51,19 +64,6 @@
             "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; [ -f \"$f\" ] && exec node \"$f\" SubagentStart --agent codex; exit 0",
             "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.agents/workflow-kit-hook.mjs\"; if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Write-Output '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0 }; if (Test-Path -LiteralPath $f) { $input | node $f SubagentStart --agent codex; exit $LASTEXITCODE }; exit 0",
             "timeout": 120
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "id": "workflow-kit",
-            "type": "command",
-            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" UserPromptSubmit --agent codex; exit 0",
-            "commandWindows": "$p = if ($env:CLAUDE_PROJECT_DIR) { $env:CLAUDE_PROJECT_DIR } else { '.' }; $f = \"$p/.agents/workflow-kit-hook.mjs\"; if ((Get-Command node -ErrorAction SilentlyContinue) -and (Test-Path -LiteralPath $f)) { $input | node $f UserPromptSubmit --agent codex; exit $LASTEXITCODE }; exit 0",
-            "timeout": 5
           }
         ]
       }
