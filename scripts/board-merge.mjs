@@ -5,7 +5,8 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SonarOtherPr } from './board-reviews.mjs';
+import { readProfileAt } from './project-profile.mjs';
+import { SonarOtherPr } from './sonar.mjs';
 import { shared } from './board-args.mjs';
 import { failed, isResult, result } from './board-result.mjs';
 
@@ -84,8 +85,7 @@ export function createMerge(env) {
     let work;
     const run = gitAt;
     try {
-      const file = rest(`repos/${project.repository}/contents/.github/workflow-project.json?ref=${merged}`);
-      const commands = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')).push ?? [];
+      const commands = readProfileAt(rest, project.repository, merged).push ?? [];
       if (!commands.length) return;
       run(projectDirectory, 'fetch', '--quiet', 'origin', branch);
       work = mkdtempSync(join(tmpdir(), 'board-push-'));

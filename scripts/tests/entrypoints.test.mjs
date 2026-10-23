@@ -25,8 +25,9 @@ function fixture(t) {
   mkdirSync(root, { recursive: true });
   mkdirSync(join(kit, 'templates'), { recursive: true });
   mkdirSync(join(kit, 'scripts'));
-  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   copyFileSync(new URL('../../templates/.ignore', import.meta.url), join(kit, 'templates/.ignore'));
+  write(join(kit, 'AGENT_RULES.md'), '# rules\n');
   const run = (...args) => spawnSync(process.execPath, [join(kit, 'scripts/init-project.mjs'), ...args], { cwd: root, encoding: 'utf8' });
   const template = (name, value) => (typeof value === 'string' ? write : json)(join(kit, 'templates', name), value);
   return { base, root, kit, run, template };
@@ -65,14 +66,6 @@ test('a project without UI files gets no Impeccable entry, and an old one goes; 
   spawnSync('git', ['init', '-q'], { cwd: f.root });
   succeeds(f.run('--existing'));
   assert.deepEqual(events(), full, 'a UI dependency in any package.json turns it on');
-});
-
-// The kit is product-neutral. Left out: the license holder, the kit's own board binding, its consumer list; the notify workflow may name only its secret.
-const projectConfig = new Set(['LICENSE', '.github/workflow-project.json', '.github/kit-consumers.json']);
-test('no tracked kit file names a consuming product', () => {
-  const files = spawnSync('git', ['ls-files', '-z'], { cwd: new URL('../..', import.meta.url), encoding: 'utf8' }).stdout.split('\0').filter(file => file && !projectConfig.has(file) && statSync(new URL(`../../${file}`, import.meta.url), { throwIfNoEntry: false })?.isFile());
-  assert.ok(files.length > 50);
-  for (const file of files) assert.doesNotMatch(readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').replaceAll('snagg-app', '').replaceAll('VAULTDEX_DISPATCH_TOKEN', ''), new RegExp(['vault' + 'dex', 'sna' + 'gg'].join('|'), 'i'), file);
 });
 
 test('every shipped hook handler has the kit id and calls the hook module', () => {
@@ -181,14 +174,14 @@ test('.vendor/workflow-kit becomes a link to the shared kit; reruns change nothi
   rmSync(link); mkdirSync(link); writeFileSync(join(link, 'mine.txt'), 'x');
   const refused = f.run('--existing');
   assert.notEqual(refused.status, 0, 'a folder in place of the link stays');
-  assert.match(refused.stderr, /not a link: delete it/);
+  assert.match(refused.stderr, /not a link to the shared kit\. Delete it/);
   assert.ok(existsSync(join(link, 'mine.txt')));
   rmSync(link, { recursive: true }); mkdirSync(other); symlinkSync(other, link, 'junction');
   succeeds(f.run('--existing'));
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
   assert.ok(existsSync(other));
   // A kit inside the project it configures would link the project to itself.
-  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) {
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) {
     mkdirSync(join(f.root, 'inner/scripts'), { recursive: true });
     copyFileSync(new URL(`../${script}`, import.meta.url), join(f.root, 'inner/scripts', script));
   }

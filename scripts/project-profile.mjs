@@ -31,6 +31,28 @@ export function statusMismatch(actual, project) {
     + 'Migrate explicitly, preserving option IDs and cards.';
 }
 
+/**
+ * The board `kit setup` copies for a new project: "boardTemplate" ({ owner, number }) of the project's file, else the board of the kit
+ * repository (`kitProject`, the kit's own file). Existing boards are never copied.
+ */
+export function boardTemplate(project, kitProject) {
+  const template = project.boardTemplate ?? kitProject;
+  assert.ok(typeof template?.owner === 'string' && /^[A-Za-z0-9_.-]+$/.test(template.owner) && Number.isInteger(template.number) && template.number > 0,
+    'boardTemplate in .github/workflow-project.json must be {"owner": "ORG", "number": 5}; omit it to copy the board of the kit repository');
+  return { owner: template.owner, number: template.number };
+}
+
+const defaultLabels = [['ci', '1d76db'], ['documentation', '0075ca'], ['testing', '5319e7'], ['security', 'b60205'], ['dependencies', '0366d6'], ['needs-human-input', 'd93f0b'], ['spec', 'c5def5']]
+  .map(([name, color]) => ({ name, color }));
+
+/** The labels `kit setup` creates when missing: "labels" ([{ name, color }]) of the project's file, else the seven defaults. */
+export function projectLabels(project) {
+  const labels = project.labels ?? defaultLabels;
+  assert.ok(Array.isArray(labels) && labels.every(label => typeof label?.name === 'string' && label.name.trim() && /^[0-9a-fA-F]{6}$/.test(label.color)),
+    'labels in .github/workflow-project.json must be a list of {"name": "ci", "color": "1d76db"} (six hex digits); omit it for the default labels');
+  return labels;
+}
+
 const texts = {
   en: {
     handoff: 'Handoff',
@@ -67,6 +89,13 @@ export function textsFor(project) {
   const language = project.language ?? 'en';
   assert.ok(Object.hasOwn(texts, language), `language in .github/workflow-project.json must be one of ${Object.keys(texts).join(', ')}; omit it for "en"`);
   return texts[language];
+}
+
+/** The profile as GitHub has it on `ref` (the repository's default branch without one): the single read of a profile at a branch or commit. `rest` is the github adapter's. */
+export function readProfileAt(rest, repository, ref) {
+  const file = rest(`repos/${repository}/contents/.github/workflow-project.json${ref === undefined ? '' : `?ref=${encodeURIComponent(ref)}`}`);
+  assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${repository}${ref === undefined ? '' : ` on ${ref}`} is unreadable`);
+  return JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
 }
 
 /** The profile of a project directory ({} without a readable file). */
