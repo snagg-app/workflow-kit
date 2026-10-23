@@ -1,6 +1,7 @@
 // Anbieter Ponytail (DietrichGebert/ponytail): Skills und Hook-Quellen, angepasst durch scripts/ponytail/adaptations.patch. Die Engine steht in provider.mjs.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { providers, sharedSkills, sourceProviders } from './agents.mjs';
@@ -24,13 +25,45 @@ export function snapshotDirectory(version, root) {
 }
 const put = (file, content) => { mkdirSync(path.dirname(file), { recursive: true }); writeFileSync(file, content); };
 
-export default {
+/** The installed snapshots are personal and pinned to the Node that installed them, never a PATH lookup. */
+function launcher(file, agent, action, ...extra) {
+  const args = [action, agent, ...extra];
+  return process.platform === 'win32'
+    ? { file: process.env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `""${file}" ${args.join(' ')}"`], options: { windowsVerbatimArguments: true } }
+    : { file: '/bin/sh', args: [file, ...args], options: {} };
+}
+
+/** SessionStart and SubagentStart: the launcher's answer joins the hook's output (`h` is the hook context of kit-hook.mjs). */
+function start(h) {
+  const file = h.installed(self);
+  const command = file && launcher(file, h.agent, h.event === 'SessionStart' ? 'activate' : 'subagent', ...(h.event === 'SessionStart' && !h.fresh ? ['continue'] : []));
+  if (!command) {
+    if (h.event === 'SessionStart') h.say(h.texts().hooksOff(self.label, h.installCommand(self)));
+    return;
+  }
+  const child = spawnSync(command.file, command.args, { ...command.options, input: h.raw, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true });
+  process.exitCode = child.status ?? 0;
+  const text = (child.stdout ?? '').trim();
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed.systemMessage) h.user.push(parsed.systemMessage);
+    if (parsed.hookSpecificOutput?.additionalContext) h.context.push(parsed.hookSpecificOutput.additionalContext);
+  } catch { if (text) h.context.push(text); }
+}
+
+const self = {
   name: 'ponytail',
   label: 'Ponytail',
   source: '.vendor/ponytail',
   // The skills the project has after setup, and the profile switch ("ponytail": false turns the hooks off).
   skills: root => existsSync(path.join(root, sharedSkills)) ? readdirSync(path.join(root, sharedSkills)).filter(name => skillName.test(name)) : [],
   feature: { default: true },
+  // The hook events this provider answers; an entry with `kind` also owns the event's settings (hooks.mjs).
+  hooks: {
+    UserPromptSubmit: { kind: 'simple', timeout: 5, run: h => h.passThrough((file => file && launcher(file, h.agent, 'mode-tracker'))(h.installed(self))) },
+    SessionStart: { run: start },
+    SubagentStart: { run: start },
+  },
 
   build(c, next) {
     const skills = c.git('-C', c.source, 'ls-tree', '-d', '--name-only', `${c.revision}:skills`).trim().split('\n');
@@ -113,3 +146,5 @@ exec /bin/sh "\${0%/*}/launch.sh" "$@"
     await c.setup();
   },
 };
+
+export default self;
