@@ -7,7 +7,7 @@ import { createServer } from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { run as exec, temporary } from './fixtures.mjs';
+import { installersDone, run as exec, temporary } from './fixtures.mjs';
 
 const root = process.env.WORKFLOW_KIT_TARGET || fileURLToPath(new URL('../../', import.meta.url));
 const windows = process.platform === 'win32';
@@ -36,9 +36,8 @@ test('two SessionStart hooks at the same time install Impeccable once, and the n
     { cwd: checkout, env, input: JSON.stringify({ hook_event_name: 'SessionStart', source: 'startup', cwd: checkout }), timeout: hookTimeout });
   const engineHome = path.join(home, '.impeccable/workflow-kit');
   const engine = path.join(engineHome, `engine-${version}`, windows ? 'impeccable.exe' : 'impeccable');
-  const lock = path.join(engineHome, '.impeccable.lock');
   await Promise.all([call(), call()]);
-  for (let wait = 0; (!existsSync(engine) || existsSync(lock)) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  await installersDone(home, hookTimeout, () => existsSync(engine));
   const log = path.join(home, '.ponytail/workflow-kit/.install.log');
   assert.ok(existsSync(engine), `one of the two hooks installed the engine${existsSync(log) ? `: ${readFileSync(log, 'utf8')}` : ''} downloads=${downloads}`);
   assert.equal(downloads, 1, 'exactly one download');
@@ -46,5 +45,5 @@ test('two SessionStart hooks at the same time install Impeccable once, and the n
   assert.doesNotMatch((await call()).stdout, /Impeccable hooks are OFF/, 'the next call finds the installation');
   assert.equal(downloads, 1, 'finding it downloads nothing');
   // The last call started a verifying installer that still holds the folder; Windows cannot remove it before.
-  for (let wait = 0; wait < 500 || (existsSync(lock) && wait < hookTimeout); wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  await installersDone(home, hookTimeout);
 });
