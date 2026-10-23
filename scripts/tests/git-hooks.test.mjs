@@ -2,11 +2,10 @@
 // Nutzen: Ein ausgecheckter Branch führt keinen eigenen Hook-Code aus (Kopie im Git-Verzeichnis); fremde Hooks gehen nie verloren.
 // Jeder Fall hat sein eigenes temporaeres Repository und laeuft neben den anderen (siehe fixtures.mjs).
 import assert from 'node:assert/strict';
-import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { rename } from '../provider-links.mjs';
 import { run as exec, temporary } from './fixtures.mjs';
 
 const script = fileURLToPath(new URL('../install-git-hooks.mjs', import.meta.url));
@@ -171,138 +170,6 @@ test('an own worktree path with a newline is still migrated', { skip: process.pl
   assert.equal(await f.value('--local'), f.hooks);
 });
 
-/** A consumer with the kit as submodule: main pins kit commit one, `other` pins commit two; the kit's own main is a third, newer commit. The installer ran in it. */
-async function kitFixture(t) {
-  const base = temporary(t, 'kit post checkout ');
-  const global = join(base, 'global.gitconfig');
-  // The submodule is a local path; Git blocks that transport for submodules unless allowed.
-  writeFileSync(global, '[protocol "file"]\n\tallow = always\n[user]\n\tname = t\n\temail = t@t\n');
-  const env = { ...process.env, GIT_CONFIG_GLOBAL: global, GIT_CONFIG_NOSYSTEM: '1' };
-  const sh = async (cwd, ...args) => {
-    const result = await exec('git', args, { cwd, env });
-    assert.equal(result.status, 0, result.stderr);
-    return result;
-  };
-  const kit = join(base, 'kit'), repo = join(base, 'repo');
-  for (const dir of [kit, repo]) { mkdirSync(dir); await sh(dir, 'init', '-q', '-b', 'main'); }
-  const pin = async n => { writeFileSync(join(kit, 'AGENT_RULES.md'), `rules ${n}\n`); if (n === 2) writeFileSync(join(kit, 'new.txt'), 'tracked\n'); await sh(kit, 'add', '.'); await sh(kit, 'commit', '-q', '-am', `kit ${n}`); return (await sh(kit, 'rev-parse', 'HEAD')).stdout.trim(); };
-  writeFileSync(join(kit, 'AGENT_RULES.md'), 'rules 0\n');
-  await sh(kit, 'add', '.');
-  const one = await pin(1), two = await pin(2);
-  await pin(3);
-  mkdirSync(join(repo, '.githooks'));
-  writeFileSync(join(repo, '.githooks/pre-push'), '#!/bin/sh\n');
-  const installed = await exec(process.execPath, [script], { cwd: repo, env });
-  assert.equal(installed.status, 0, installed.stderr);
-  await sh(repo, 'submodule', '-q', 'add', kit.replaceAll('\\', '/'), '.vendor/workflow-kit');
-  await sh(repo, '-C', '.vendor/workflow-kit', 'checkout', '-q', one);
-  await sh(repo, 'add', '.');
-  await sh(repo, 'commit', '-q', '-m', 'pin one');
-  await sh(repo, 'switch', '-q', '-c', 'other');
-  await sh(repo, '-C', '.vendor/workflow-kit', 'checkout', '-q', two);
-  await sh(repo, 'commit', '-q', '-am', 'pin two');
-  await sh(repo, 'switch', '-q', 'main');
-  await sh(repo, 'submodule', '-q', 'update', '--init');
-  const rules = join(repo, '.vendor/workflow-kit/AGENT_RULES.md');
-  return { repo, sh, rules, status: async () => (await sh(repo, 'status', '--porcelain')).stdout, switchTo: (branch, extra) => exec('git', ['switch', '-q', branch], { cwd: repo, env: { ...env, ...extra } }) };
-}
-
-test('switching branches with another kit gitlink leaves no modified submodule', async t => {
-  const f = await kitFixture(t);
-  assert.equal(await f.status(), '');
-  assert.equal(readFileSync(f.rules, 'utf8'), 'rules 1\n');
-  assert.equal((await f.switchTo('other')).status, 0);
-  assert.equal(readFileSync(f.rules, 'utf8'), 'rules 2\n');
-  assert.equal(await f.status(), '');
-  assert.equal((await f.switchTo('main')).status, 0);
-  assert.equal(readFileSync(f.rules, 'utf8'), 'rules 1\n');
-  assert.equal(await f.status(), '');
-  // A new worktree starts with an empty kit directory; the same hook fills it.
-  const linked = join(f.repo, '../linked');
-  await f.sh(f.repo, 'worktree', 'add', '-q', '--detach', linked, 'other');
-  assert.equal(readFileSync(join(linked, '.vendor/workflow-kit/AGENT_RULES.md'), 'utf8'), 'rules 2\n');
-});
-
-test('a kit with local changes keeps them, prints a hint and does not fail the switch', async t => {
-  const f = await kitFixture(t);
-  writeFileSync(f.rules, 'my edit\n');
-  const result = await f.switchTo('other');
-  assert.equal(result.status, 0, result.stderr);
-  assert.notEqual(result.stderr.trim(), '', 'a diagnostic is printed');
-  assert.equal(readFileSync(f.rules, 'utf8'), 'my edit\n');
-});
-
-test('a failing kit update prints the command and does not fail the switch', async t => {
-  const f = await kitFixture(t);
-  // The kit is not cloned (empty directory) and its source is gone, so the update cannot succeed.
-  rename(join(f.repo, '../kit'), join(f.repo, '../kit-gone'));
-  rmSync(join(f.repo, '.vendor/workflow-kit'), { recursive: true, force: true });
-  rmSync(join(f.repo, '.git/modules'), { recursive: true, force: true });
-  mkdirSync(join(f.repo, '.vendor/workflow-kit'));
-  const result = await f.switchTo('other');
-  assert.equal(result.status, 0, result.stderr);
-  assert.notEqual(result.stderr.trim(), '', 'a diagnostic is printed');
-});
-
-test('a .git file that points nowhere is cleared when it is the only thing in the kit folder, otherwise reported', async t => {
-  const f = await kitFixture(t);
-  const inner = join(f.repo, '.vendor/workflow-kit');
-  rmSync(join(f.repo, '.git/modules'), { recursive: true });
-  let result = await f.switchTo('other');
-  assert.equal(result.status, 0, result.stderr);
-  assert.notEqual(result.stderr.trim(), '', 'a dangling .git with other files is reported');
-  assert.equal(readFileSync(f.rules, 'utf8'), 'rules 1\n');
-  for (const name of readdirSync(inner)) if (name !== '.git') rmSync(join(inner, name), { recursive: true });
-  mkdirSync(join(f.repo, '.git/modules'));
-  result = await f.switchTo('main');
-  assert.equal(result.status, 0, result.stderr);
-  result = await f.switchTo('other');
-  assert.equal(result.stderr, '');
-  assert.equal(readFileSync(f.rules, 'utf8'), 'rules 2\n');
-});
-
-test('local commits and ignored files are kept; a clean published kit still follows', async t => {
-  const kit = f => join(f.repo, '.vendor/workflow-kit');
-  await Promise.all([
-    async () => {
-      // An unpublished commit would be left behind by the checkout.
-      const a = await kitFixture(t);
-      await a.sh(kit(a), 'commit', '-q', '--allow-empty', '-m', 'local');
-      const local = (await a.sh(kit(a), 'rev-parse', 'HEAD')).stdout;
-      const result = await a.switchTo('other');
-      assert.equal(result.status, 0, result.stderr);
-      assert.notEqual(result.stderr.trim(), '', 'a diagnostic is printed');
-      assert.equal((await a.sh(kit(a), 'rev-parse', 'HEAD')).stdout, local);
-    },
-    async () => {
-      // An ignored file that the target revision tracks would be overwritten without a word.
-      const b = await kitFixture(t);
-      writeFileSync(join(kit(b), 'new.txt'), 'mine\n');
-      appendFileSync(resolve(kit(b), (await b.sh(kit(b), 'rev-parse', '--git-path', 'info/exclude')).stdout.trim()), 'new.txt\n');
-      assert.equal(await b.status(), '');
-      assert.equal((await b.switchTo('other')).status, 0);
-      assert.equal(readFileSync(join(kit(b), 'new.txt'), 'utf8'), 'mine\n');
-    },
-    async () => {
-      // A clean kit that is not the old pin but is published (stale) still follows the new gitlink.
-      const c = await kitFixture(t);
-      await c.sh(kit(c), 'checkout', '-q', 'origin/main');
-      assert.equal((await c.switchTo('other')).status, 0);
-      assert.equal(readFileSync(c.rules, 'utf8'), 'rules 2\n');
-    },
-  ].map(scenario => scenario()));
-});
-
-test('the kit update runs no hooks of the kit clone', async t => {
-  const f = await kitFixture(t), kitDir = join(f.repo, '.vendor/workflow-kit');
-  const hooks = resolve(kitDir, (await f.sh(kitDir, 'rev-parse', '--git-path', 'hooks')).stdout.trim()), marker = join(f.repo, '../hook-ran');
-  mkdirSync(hooks, { recursive: true });
-  writeFileSync(join(hooks, 'post-checkout'), `#!/bin/sh\ntouch "${marker.replaceAll('\\', '/')}"\n`, { mode: 0o755 });
-  assert.equal((await f.switchTo('other')).status, 0);
-  assert.equal(readFileSync(f.rules, 'utf8'), 'rules 2\n', 'the kit was updated');
-  assert.equal(existsSync(marker), false);
-});
-
 test('a branch that changes the tracked hooks does not run them on checkout or push', async t => {
   const f = await fixture(t), tracked = join(f.repo, '.githooks'), commit = message => f.git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-am', message);
   const markers = { checkout: join(f.repo, '../ran-checkout'), push: join(f.repo, '../ran-push') };
@@ -324,22 +191,23 @@ test('a branch that changes the tracked hooks does not run them on checkout or p
     await f.git('switch', '-q', 'evil');
     await f.git('push', '-q', 'origin', 'evil', '--force');
   };
-  // Precondition: with the pre-#194 setting the branch's own hooks run.
+  // Precondition: with a relative setting the branch's own hooks run.
   await f.git('config', '--local', 'core.hooksPath', '.githooks');
   await visit();
   assert.deepEqual(Object.values(markers).map(existsSync), [true, true]);
 
   await f.git('switch', '-q', '--detach', base);
+  await f.git('config', '--local', '--unset', 'core.hooksPath');
   await f.run();
   await visit();
   assert.deepEqual(Object.values(markers).map(existsSync), [false, false]);
   assert.equal(await f.value('--local'), f.hooks);
 });
 
-test('a rerun replaces the hook copy; the project post-checkout wins over the kit one', async t => {
+test('a rerun replaces the hook copy, including a post-checkout of the project', async t => {
   const f = await fixture(t), copy = name => join(f.hooks, name);
   await f.run();
-  assert.deepEqual(readdirSync(f.hooks).sort(), ['post-checkout', 'pre-push']);
+  assert.deepEqual(readdirSync(f.hooks), ['pre-push']);
   writeFileSync(join(f.repo, '.githooks/pre-push'), '#!/bin/sh\necho changed\n');
   assert.equal(readFileSync(copy('pre-push'), 'utf8'), '#!/bin/sh\n');
   await f.run();

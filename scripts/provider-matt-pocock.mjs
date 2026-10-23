@@ -1,8 +1,8 @@
 // Anbieter Matt Pocock (mattpocock/skills): vollstaendige Skill-Baeume, ohne Upstream-Code auszufuehren. Die Engine steht in provider.mjs.
 import assert from 'node:assert/strict';
-import { chmodSync, lstatSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { providers, sourceProviders } from './agents.mjs';
+import { providers, sharedSkills, sourceProviders } from './agents.mjs';
 import { adaptCodeReview } from './code-review-failure-paths.mjs';
 import { checkDirectory } from './provider-links.mjs';
 
@@ -25,6 +25,8 @@ export default {
   name: 'matt-pocock',
   label: 'Matt Pocock',
   source: '.vendor/matt-pocock-skills',
+  // The skills the pinned source gave the project (its ownership manifest); no profile switch: the "skills" choice trims them.
+  skills: root => Object.keys(JSON.parse(readFileSync(join(root, sharedSkills, 'MATT-POCOCK-SOURCES.json'), 'utf8')).skills),
 
   build(c, next) {
     const files = c.git('-C', c.source, 'ls-tree', '-r', '-z', c.revision, '--', 'skills', 'LICENSE')

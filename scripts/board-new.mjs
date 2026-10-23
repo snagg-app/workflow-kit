@@ -43,7 +43,7 @@ export function createNew(env) {
     assert.ok(text, `${bodyFile} is empty`);
     assert.ok(!fields.some(([fieldName]) => ['status', 'priority'].includes(fieldName.toLowerCase())), 'Status and Priority are not field values (give the priority; the command sets Status)');
     const pairs = [['Status', status], ['Priority', priority], ...fields];
-    for (const required of project.requiredFields ?? []) {
+    for (const required of project.requiredFields) {
       assert.ok(pairs.some(([fieldName]) => fieldName.toLowerCase() === required.toLowerCase()), `the project requires ${required}: give a value for it`);
     }
     const plans = planFields(pairs);

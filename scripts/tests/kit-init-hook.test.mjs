@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
-import { hookSettings } from '../agents.mjs';
+import { entryFile, hookSettings } from '../agents.mjs';
 import { rename } from '../provider-links.mjs';
 import { isolatedGit, run as spawn, temporary } from './fixtures.mjs';
 
@@ -58,6 +58,21 @@ test('a fresh project gets the link to the shared kit and a clean git status; th
   result = await f.trial();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(await f.head(), tip, 'the next session start has the new kit commit, without a merge in the project');
+});
+
+test('the hook never runs a git from the project folder (#758)', async t => {
+  const f = await shared(t, 'kit-planted-git ');
+  const planted = join(f.project, process.platform === 'win32' ? 'git.exe' : 'git'), marker = join(f.temp, 'planted-git-ran');
+  copyFileSync(process.execPath, planted);
+  chmodSync(planted, 0o755);
+  // The planted "git" is a copy of node; this preload (loaded by every node child) records that the copy, and only the copy, started.
+  const probe = join(f.temp, 'probe.cjs');
+  writeFileSync(probe, `if (/^git(\\.exe)?$/i.test(require('node:path').basename(process.execPath))) require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+  const key = Object.keys(f.env).find(name => name.toLowerCase() === 'path');
+  const result = await f.trial({ [key]: [f.project, '.', f.env[key]].join(delimiter), NODE_OPTIONS: `--require "${probe.replaceAll('\\', '/')}"` });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(marker), false, 'the git of the project folder was started');
+  assert.ok(f.linked(), 'the real git still did the check');
 });
 
 test('a valid stamp skips the check and the pull; a changed project commit runs the full check again', async t => {
@@ -143,7 +158,7 @@ test('a wrong link is replaced, a leftover submodule folder only reported, a pro
 
   rmSync(link); mkdirSync(link); writeFileSync(join(link, 'mine.txt'), 'x');
   const result = await f.trial();
-  assert.match(result.stdout, /still a submodule or a folder/);
+  assert.match(result.stdout, /a folder or submodule, not a link/);
   assert.ok(existsSync(join(link, 'mine.txt')), 'a real folder stays');
 
   const plain = join(f.temp, 'plain');
@@ -302,7 +317,7 @@ test('a subagent is warned when the base changed the hook settings since the ses
   await git(temp, 'clone', '--quiet', origin, project);
   // `resume` keeps the fingerprint like `startup` but starts no installer.
   const session = (event, session_id, source) => call(event, project, { ...env, CLAUDE_PROJECT_DIR: project }, { session_id, source, cwd: project });
-  const warns = async id => (await session('SubagentStart', id)).stdout.includes('Hooks seit Session-Start geändert: Session neu starten');
+  const warns = async (id, hint = 'Hooks changed since session start: restart the session') => (await session('SubagentStart', id)).stdout.includes(hint);
 
   await session('SessionStart', 'old', 'resume');
   assert.equal(await warns('old'), false, 'unchanged settings stay silent');
@@ -315,6 +330,10 @@ test('a subagent is warned when the base changed the hook settings since the ses
   assert.equal(await warns('old'), true, 'a compaction does not reload hooks, so it keeps the fingerprint');
   await session('SessionStart', 'new', 'resume');
   assert.equal(await warns('new'), false, 'a session that started after the change is not');
+  // The hint follows the profile language (#759).
+  mkdirSync(join(project, '.github'), { recursive: true });
+  writeFileSync(join(project, '.github/workflow-project.json'), '{"language": "de"}');
+  assert.equal(await warns('old', 'Hooks seit Session-Start geändert: Session neu starten'), true);
 });
 
 // The one-line entries of the agent settings: they only find Node and the kit (cloning the shared checkout if it is missing), then hand over to kit-hook.mjs.
@@ -345,7 +364,8 @@ for (const [agent, key, shell, args] of entries) {
     writeFileSync(join(origin, 'AGENT_RULES.md'), 'x');
     writeFileSync(join(origin, 'scripts/kit-hook.mjs'), "import { writeFileSync } from 'node:fs'; writeFileSync(process.env.HOOK_MARKER, process.argv.slice(2).join(' '));\n");
     await git(origin, 'init', '--quiet'); await git(origin, 'add', '.'); await git(origin, 'commit', '--quiet', '-m', 'kit');
-    mkdirSync(project); await git(project, 'init', '--quiet');
+    mkdirSync(join(project, '.agents'), { recursive: true }); await git(project, 'init', '--quiet');
+    copyFileSync(new URL('../kit-entry.mjs', import.meta.url), join(project, entryFile)); // what `kit setup` puts there
     const run = (command, extra) => spawn(shell, [...args, command], { cwd: project, env: { ...env, CLAUDE_PROJECT_DIR: project, ...extra }, input: '{}' });
 
     const noNode = await run(handler('SessionStart'), { PATH: mkdtempSync(join(temp, 'empty ')) });

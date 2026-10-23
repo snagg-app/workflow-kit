@@ -8,49 +8,18 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, rmdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
+import { withLock } from './lock.mjs';
 import { checkDirectory, linkSkills, localDirectory, materialize, moveAside, rename } from './provider-links.mjs';
+import { providerList, providerNamed } from './provider-list.mjs';
 
-// A fourth provider is one file and one line here.
-const providers = {
-  ponytail: () => import('./provider-ponytail.mjs'),
-  impeccable: () => import('./provider-impeccable.mjs'),
-  'matt-pocock': () => import('./provider-matt-pocock.mjs'),
-};
-const sleep = ms => new Promise(done => setTimeout(done, ms));
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
-const abandoned = (lock, stale) => {
-  try { process.kill(Number(readFileSync(join(lock, 'pid'), 'utf8')), 0); } catch (error) { if (error.code === 'ESRCH') return true; }
-  try { return Date.now() - statSync(lock).mtimeMs > stale; } catch { return true; }
-};
-
-/** Runs `work` while it holds the lock directory. A holder that died (its pid is gone) or hung (older than `stale` ms) is taken over; a live one is waited for up to `wait` ms
- * (longer than one 120 s download, so a second run does not give up on the first). */
-export async function withLock(lock, work, { stale = 15 * 60_000, wait = 300_000 } = {}) {
-  for (const give = Date.now() + wait; ;) {
-    try { mkdirSync(lock); break; } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      if (abandoned(lock, stale)) {
-        // shortcut: two takers that find the same dead lock race on the rename; a third run that locks in between is not told apart, upgrade to an owner token if that ever shows.
-        try { renameSync(lock, `${lock}.dead-${process.pid}`); rmSync(`${lock}.dead-${process.pid}`, { recursive: true, force: true }); } catch { /* another run took it first */ }
-        continue;
-      }
-      assert.ok(Date.now() < give, `Another run holds ${lock}; run again when it is done.`);
-      await sleep(100);
-    }
-  }
-  try {
-    writeFileSync(join(lock, 'pid'), String(process.pid));
-    return await work();
-  } finally {
-    rmSync(lock, { recursive: true, force: true });
-  }
-}
+export { withLock };
 
 /** `withLock` on `<dir>/.<name>.lock`; a failure is written to `<dir>/.<name>.log` (replaced every run, removed after a success). */
 export async function guarded(dir, name, work, options) {
@@ -155,20 +124,47 @@ async function bytesOf(name, entry) {
 }
 
 /**
- * Installs the personal files of a provider below `home`. The provider's `install` names the folder (`home` parts, `directory(version, c)`), the wanted files
+ * Where a provider's installation lies and how it starts; the one place that knows (the engine installs there, the hook asks here). The provider's `install` names
+ * the folder (`home` parts, `directory(version, c)`) and its start file (`launcher`); `c` needs `home`, `versions` and, for a project-bound folder, `root`.
+ * `complete`: the start file exists (the folder is published whole, so a missing file means not installed).
+ */
+export function locate(p, c) {
+  const i = p.install, directory = join(c.home, ...i.home, i.directory(c.versions[p.name], c)), entry = join(directory, i.launcher);
+  return { directory, entry, complete: existsSync(entry) };
+}
+
+const unusedDays = 30;
+/** "Last used" is the folder's modification time: every hook call renews it, a folder nobody uses stops being renewed. */
+export function markUsed(directory) {
+  try { const now = new Date(); utimesSync(directory, now, now); } catch { /* a removed or foreign folder: nothing to mark */ }
+}
+/** Removes the installation folders of `parent` that nobody used for `unusedDays` days, never `keep` (the one in use). Returns the removed paths. */
+function pruneUnused(parent, keep) {
+  const removed = [];
+  for (const name of readdirSync(parent)) {
+    const old = join(parent, name), entry = lstatSync(old);
+    if (name.startsWith('.') || old === keep || !entry.isDirectory() || Date.now() - entry.mtimeMs < unusedDays * 86_400_000) continue;
+    rmSync(old, { recursive: true, force: true });
+    removed.push(old);
+  }
+  return removed;
+}
+
+/**
+ * Installs the personal files of a provider below `home` (folder and start file: see `locate`), the wanted files
  * (`files(c, version)`: name -> { bytes } or { url, sha256 }, optional `mode`) and optional `before(c)` / `after(destination, c)` steps.
- * The folder is published whole and atomically; an existing one is only verified, never replaced.
+ * The folder is published whole and atomically; an existing one is only verified, never replaced. Folders unused for 30 days are removed afterwards.
  */
 export async function install(p, c) {
   const i = p.install, version = c.versions[p.name];
-  const parent = join(c.home, ...i.home), destination = join(parent, i.directory(version, c));
+  const destination = locate(p, c).directory, parent = dirname(destination);
   c.outside(destination, `${p.label} installation must be outside Git checkouts. Use a personal home outside any checkout before installing or enabling hooks.`);
   i.before?.(c);
   const wanted = i.files(c, version);
   mkdirSync(parent, { recursive: true });
   await guarded(parent, p.name, async () => {
     if (!existsSync(destination) || !readdirSync(destination).length) {
-      // The folder of a download that failed in an older kit version stays empty.
+      // The folder of a failed download stays empty.
       if (existsSync(destination)) rmdirSync(destination);
       const stage = mkdtempSync(join(parent, '.install-'));
       try {
@@ -197,10 +193,8 @@ export async function install(p, c) {
     }
     await i.after?.(destination, c);
     console.log(`${p.label} hooks installed: ${destination}`);
-    // Name, never delete: other checkouts may still pin an older version, and every start reinstalls what its checkout pins, so deleting would make checkouts on different versions reinstall each other's in turn.
-    const list = dir => readdirSync(dir).filter(name => !name.startsWith('.')).map(name => join(dir, name));
-    const unused = list(dirname(parent)).flatMap(dir => dir === parent ? list(dir).filter(old => old !== destination) : [dir]);
-    if (unused.length) console.log(`Unused older ${p.label} installations, delete when no checkout pins them: ${unused.join(', ')}`);
+    markUsed(destination);
+    for (const old of pruneUnused(parent, destination)) console.log(`${p.label} installation unused for ${unusedDays} days removed: ${old}`);
     console.log('Review and enable the project hooks in your agent; start a fresh session. No hook trust or personal agent settings were changed.');
   });
 }
@@ -209,11 +203,11 @@ if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.nat
   enterCwd();
   const [name, action, ...extra] = process.argv.slice(2);
   const run = { setup, install };
-  if (!(name in providers) || !['setup', 'install', 'update'].includes(action) || extra.length > (action === 'update' ? 1 : 0)) {
-    console.error(`Usage: node <kit>/scripts/provider.mjs [--cwd PROJECT_DIR] <${Object.keys(providers).join('|')}> <setup|install|update [PREVIOUS_UPSTREAM_REVISION]>`);
+  const p = providerNamed(name);
+  if (!p || !['setup', 'install', 'update'].includes(action) || extra.length > (action === 'update' ? 1 : 0)) {
+    console.error(`Usage: node <kit>/scripts/provider.mjs [--cwd PROJECT_DIR] <${providerList().map(provider => provider.name).join('|')}> <setup|install|update [PREVIOUS_UPSTREAM_REVISION]>`);
     process.exit(2);
   }
-  const { default: p } = await providers[name]();
   const c = context();
   assert.ok(action === 'setup' ? p.build : p[action], `${p.label} has no ${action}`);
   if (action === 'update') {

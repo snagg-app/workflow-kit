@@ -103,24 +103,12 @@ export function parseArgs(specs, argv, project) {
   return error ? fail(error) : { spec, args };
 }
 
-/** The values of the project file the commands depend on; a wrong one is refused before any read or write. */
-export function configError(command, project) {
-  const grace = project.reviewerGraceMinutes === undefined ? 3 : project.reviewerGraceMinutes;
-  if (['reviews', 'wait', 'handoff', 'merge', 'done'].includes(command) && !(Number.isFinite(grace) && grace >= 0)) {
-    return 'reviewerGraceMinutes in .github/workflow-project.json must be a number of minutes, 0 or more (0 turns the grace off); omit the field for the default';
-  }
-  const stale = project.staleHours === undefined ? 6 : project.staleHours;
-  if (['next', 'check', 'start'].includes(command) && !(Number.isFinite(stale) && stale >= 0)) {
-    return 'staleHours in .github/workflow-project.json must be a number of hours, 0 or more; omit the field for the default of 6';
-  }
-}
-
 /** The options commands read by name, on top of the parsed arguments. */
 export function createOptions({ project, args }) {
   // "staleHours" in the project file (default 6): after that long without activity the work counts as abandoned and a new session may take it over (#400).
-  const staleHours = project.staleHours === undefined ? 6 : project.staleHours;
-  // "reviewerGraceMinutes" in the project file is the default of --grace; 0 turns the grace off. Only a missing field is allowed.
-  const projectGrace = project.reviewerGraceMinutes === undefined ? 3 : project.reviewerGraceMinutes;
+  const { staleHours } = project;
+  // "reviewerGraceMinutes" in the project file is the default of --grace; 0 turns the grace off.
+  const projectGrace = project.reviewerGraceMinutes;
   const numberOption = args.number;
   // The own session for start, check and next alike: `--session`, else the `agent-<id>` of a Claude Code worktree, else CODEX_THREAD_ID, else CLAUDE_CODE_SESSION_ID (the session itself, not a subagent).
   const sessionOption = () => args.value('--session')

@@ -109,11 +109,7 @@ export function createHandoff(env) {
    * any level; its sub-headings belong to it) must name. Whether a check was good is not judged. Without the field nothing is asked.
    */
   // ponytail: a name counts when the section mentions it, the section is not proof the check ran; replace when a check leaves a trace.
-  function selfReviewChecks() {
-    const checks = project.selfReview === undefined ? [] : project.selfReview; // only a missing field is allowed; null is malformed
-    assert.ok(Array.isArray(checks) && checks.every(check => typeof check === 'string' && check.trim()), 'selfReview must be a list of non-empty check names');
-    return checks;
-  }
+  const selfReviewChecks = () => project.selfReview;
 
   function selfReviewReasons(bodyHtml, checks) {
     if (!checks.length) return [];
@@ -202,7 +198,7 @@ export function createHandoff(env) {
     return finishedPr(Number(state.value), 'handoff', expectedHead, ({ comments, pr }) => {
       const reasons = [];
       const comment = findHandoffComment(comments, viewer, pr.headRefOid);
-      if (!comment) reasons.push(`no handoff comment for head ${pr.headRefOid.slice(0, 7)} on PR #${state.value}: write FILE (<Ergebnis in einem Satz>, then "### Retro" with one list line per finding, or "- Keine Funde"; README: Handoff comment) and run board.mjs done ${number} FILE`);
+      if (!comment) reasons.push(`no handoff comment for head ${pr.headRefOid.slice(0, 7)} on PR #${state.value}: write FILE (${texts.resultHint}, then "### Retro" with one list line per finding, or "- ${texts.noFindings}"; README: Handoff comment) and run board.mjs done ${number} FILE`);
       if (!partial && !connectedIssues(pr).has(issueId)) reasons.push(`PR #${state.value} is not natively linked to issue #${number}`);
       return reasons;
     }, prior);

@@ -9,8 +9,7 @@ Read any existing target AGENTS.md and contribution rules; inspect its remote,
 Git status, board, CI, update bots and agent configuration. Confirm the target, which may
 differ from this checkout. Resolve only missing choices in one compact round:
 
-- **Repository:** a new one from
-  [project-template](https://github.com/snagg-app/project-template), or an existing
+- **Repository:** a new one (from your own template repository or empty), or an existing
   one? Get the exact OWNER/REPO and local path. For a new one, also the owner, name
   and visibility; recommend private.
 - **Board:** an existing GitHub Project number under the same owner, or a copy of
@@ -28,7 +27,7 @@ the user's budget decision first.
 ## 2. Repository
 
 For a new repository run
-`gh repo create OWNER/REPO --template snagg-app/project-template --private`, then
+`gh repo create OWNER/REPO --private` (add `--template OWNER/TEMPLATE` for a template of yours), then
 clone it with `--recurse-submodules`.
 
 With a working kit and `.github/workflow-project.json`, follow
@@ -57,12 +56,12 @@ review, Human review, Done, plus a usable Priority scale. Migrate In review by
 renaming it to Automated review in place and adding Human review before Done;
 preserve option IDs, cards and existing Priority, including organization fields.
 
-`kit setup` runs `setup-github.mjs OWNER/REPO` for the `origin` remote; for another board call
+`kit setup` binds the board for the `origin` remote (the same as `setup-github.mjs OWNER/REPO`); for another board call
 `node .vendor/workflow-kit/scripts/setup-github.mjs OWNER/REPO PROJECT_NUMBER` yourself.
 It copies or reuses the Project and records it in `.github/workflow-project.json`,
-keeping `"start"`. It also checks the six statuses and Priority, links the
-repository, and adds the missing default labels: ci, documentation, testing,
-security, dependencies, needs-human-input, spec.
+keeping `"start"`. A new board is a copy of `"boardTemplate"` (`{"owner": "ORG", "number": 5}`); without it the kit copies its own board (the one in the kit repository's own `.github/workflow-project.json`). It also checks the six statuses and Priority, links the
+repository, and adds the missing labels, by default: ci, documentation, testing,
+security, dependencies, needs-human-input, spec. `"labels"` (`[{"name": "ci", "color": "1d76db"}]`) replaces that list.
 
 If field validation fails, correct that board and repeat the same command; a
 copied board is already recorded, so do not create a replacement. Write and verify
@@ -101,7 +100,7 @@ session take over its PR; a non-number or negative value is an ERROR. The automa
 `"selfReview"` lists the self-checks the PR body must name in its self-review section (`## Self-review`, with `"language": "de"` `## Selbstprüfung`) before
 `board.mjs done` or `merge` passes, for example `"selfReview": ["ponytail-review", "code-review"]`; omit it to ask
 nothing. A `null` or other non-list value is an ERROR.
-`"language"` (`en` by default, or `de`) is the language of the headings and comments `board.mjs` writes and looks for: the handoff heading (`## Handoff` or `## Übergabe`), the self-review section and the sweep comments.
+`"language"` (`en` by default, or `de`) is the language of the headings and comments `board.mjs` writes and looks for: the handoff heading (`## Handoff` or `## Übergabe`), the self-review section, the claim comment, the `next` and hook hints, the sweep comments and the issue and PR templates `init-project` creates for a new project (`templates/<language>/`).
 `"skills"` lists the kit skills the project uses, for example `"skills": ["core", "tdd", "impeccable"]`; `"core"` stands for the ten core skills, which are also all you get when it is omitted (why these: `docs/skill-core.md`), and `"all"` keeps every kit skill. `setup-skills` (also run by `kit setup`) removes the other kit skills again, so agents list fewer descriptions (47 skills are about 2,400 tokens; the core is about 700). `kit setup` also names skills you have as a plugin and the list that leaves the project copy out. A name that is no kit skill is an ERROR; skills of the project itself are never touched.
 `"impeccable"` (`true`, `false` or `"auto"`, the default) and `"ponytail"` (`true`, the default, or `false`) choose which hooks and downloads the project gets. A project without Impeccable has no `PostToolUse` or `Stop` hook entry (no UI check after every edit) and never downloads the 19 MB engine; without Ponytail it has no `UserPromptSubmit` entry and no Ponytail install. `"auto"` switches Impeccable on when the project has UI files: a `.tsx`, `.jsx`, `.vue`, `.svelte` or `.astro` file, or a UI framework (React, React Native, Expo, Vue, Svelte, Solid, Preact, Lit, Angular, Next, Astro) in the dependencies of any `package.json`, among the files Git tracks or would add. If that guesses wrong, set `true` or `false`. The next `init-project` or `kit setup` adds or removes the hook entries to match; an installed engine stays on disk.
 `"statuses"` renames board statuses for `board.mjs` and `setup-github.mjs`: keys `backlog`, `ready`, `inProgress`, `automatedReview`, `humanReview`, `done`, for example `"statuses": {"humanReview": "QA"}`; the board still needs all six, in that order.

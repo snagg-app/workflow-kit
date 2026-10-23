@@ -1,7 +1,7 @@
 // `done ISSUE`: tests, ready, review and handoff.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { runProgram } from './board-process.mjs';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -106,7 +106,6 @@ export function createDone(env) {
     try {
       useBaseSettings({ baseRefName: pull.base.ref });
       gate = baseSettings();
-      assert.ok(gate.doneBaseMerge === undefined || ['always', 'overlap'].includes(gate.doneBaseMerge),'doneBaseMerge must be always or overlap; omit it for always');
     } catch (error) { return failed(`cannot read the base-merge policy: ${error.message}`); }
     // An untested head applies the target base's policy (#558, #579). A conflict is aborted, the branch stays as it was.
     // #656: a head the PR does not show yet is pushed even when its tested marker exists (a run that ended after the tests).
@@ -153,7 +152,7 @@ export function createDone(env) {
       // The green steps of this head are kept (--resume): after a red step the next call runs only the open ones.
       const steps = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-steps'));
       try {
-        execFileSync(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--resume', steps, '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
+        runProgram(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--resume', steps, '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
       } catch { return failed('the targeted tests of the changed files failed (output above; green steps of this head are kept); fix the cause, then run done again (a push starts all steps anew)'); }
       writeFileSync(tested, sha);
     }

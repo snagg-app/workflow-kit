@@ -1,7 +1,6 @@
 // The git rules of the board in one place (#686): where the checkout stands, which branch is the work's target and where a push may go.
 // `start`, `done`, `stack-sync` and `merge` only run what these answer; every git call of the board goes through `git` / `gitAt` here.
-import { execFileSync } from 'node:child_process';
-import { externalTool } from './checkout-root.mjs';
+import { gitIn } from './git-tool.mjs';
 
 /** #646: nothing the board pushes may reach these (private repos have no branch protection). */
 const onBase = ref => ref === 'main' || ref.startsWith('release/');
@@ -45,12 +44,11 @@ export function createCheckout({ projectDirectory, sleep }) {
    * Worktrees of one clone share their remote refs: a `fetch` that meets another's lock on a ref ("cannot lock ref", #566) is repeated
    * after a second, three tries in all; any other failure stays one at once. A failure carries `status` and `stderr` of git.
    */
+  const run = gitIn({}, process.cwd());
   function gitAt(cwd, ...args) {
-    const tool = externalTool('git', process.cwd(), cwd);
     for (let attempt = 1; ; attempt++) {
       try {
-        const output = execFileSync(tool.file, ['-C', cwd, ...args], { encoding: 'utf8', env: tool.env, stdio: ['ignore', 'pipe', 'pipe'] });
-        return args.includes('-z') ? output : output.trim();
+        return run(cwd, ...args);
       } catch (error) {
         if (args[0] !== 'fetch' || attempt === 3 || !/cannot lock ref|unable to update local ref/.test(String(error.stderr || error.message))) throw error;
         sleep(1);

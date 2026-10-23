@@ -26,7 +26,7 @@ test('the GitHub adapter and every board command module select the board tests',
 });
 
 test('a hook change selects the hook tests and nothing slower than needed', () => {
-  assert.deepEqual(names(affectedTests(['scripts/git-hooks/post-checkout'])), ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']);
+  assert.deepEqual(names(affectedTests(['scripts/install-git-hooks.mjs'])), ['git-hooks.test.mjs', 'kit-init-hook.test.mjs', 'text-files.test.mjs']);
 });
 
 test('a changed test runs itself; an unmapped script is reported instead of skipped', () => {

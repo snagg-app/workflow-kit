@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { hookSettings } from '../agents.mjs';
+import { entryFile, hookSettings } from '../agents.mjs';
 
 const write = (path, value) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, value); };
 const json = (path, value) => write(path, JSON.stringify(value, null, 2) + '\n');
@@ -25,8 +25,9 @@ function fixture(t) {
   mkdirSync(root, { recursive: true });
   mkdirSync(join(kit, 'templates'), { recursive: true });
   mkdirSync(join(kit, 'scripts'));
-  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'provider-list.mjs', 'provider-matt-pocock.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'code-review-failure-paths.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'board-process.mjs', 'kit-entry.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   copyFileSync(new URL('../../templates/.ignore', import.meta.url), join(kit, 'templates/.ignore'));
+  write(join(kit, 'AGENT_RULES.md'), '# rules\n');
   const run = (...args) => spawnSync(process.execPath, [join(kit, 'scripts/init-project.mjs'), ...args], { cwd: root, encoding: 'utf8' });
   const template = (name, value) => (typeof value === 'string' ? write : json)(join(kit, 'templates', name), value);
   return { base, root, kit, run, template };
@@ -44,6 +45,21 @@ test('kit handlers are replaced; foreign handlers, groups and settings stay; rer
   const once = readFileSync(path);
   succeeds(f.run('--existing'));
   assert.deepEqual(readFileSync(path), once);
+  assert.deepEqual(readFileSync(join(f.root, entryFile)), readFileSync(new URL('../kit-entry.mjs', import.meta.url)), 'setup puts the entry the hooks call into the project');
+});
+
+test('hooks are written only for agents the project uses; a project with none gets all (#760)', t => {
+  const only = fixture(t), empty = fixture(t);
+  mkdirSync(join(only.root, '.claude'));
+  const said = result => (succeeds(result), result.stdout);
+  assert.match(said(only.run('--existing')), /agents found: claude\./);
+  assert.ok(existsSync(join(only.root, '.claude/settings.json')));
+  assert.equal(existsSync(join(only.root, '.codex')), false);
+  assert.match(said(empty.run('--existing')), /No agent found.*claude, codex|No agent found.*codex, claude/);
+  assert.ok(existsSync(join(empty.root, '.claude/settings.json')) && existsSync(join(empty.root, '.codex/hooks.json')));
+  const once = readFileSync(join(empty.root, '.codex/hooks.json'));
+  succeeds(empty.run('--existing'));
+  assert.deepEqual(readFileSync(join(empty.root, '.codex/hooks.json')), once);
 });
 
 test('a project without UI files gets no Impeccable entry, and an old one goes; UI or the switch bring it back', t => {
@@ -67,35 +83,23 @@ test('a project without UI files gets no Impeccable entry, and an old one goes; 
   assert.deepEqual(events(), full, 'a UI dependency in any package.json turns it on');
 });
 
-// The kit is product-neutral. Left out: the license holder, the kit's own board binding, its consumer list.
-const projectConfig = new Set(['LICENSE', '.github/workflow-project.json', '.github/kit-consumers.json']);
-test('no tracked kit file names a consuming product', () => {
-  const files = spawnSync('git', ['ls-files', '-z'], { cwd: new URL('../..', import.meta.url), encoding: 'utf8' }).stdout.split('\0').filter(file => file && !projectConfig.has(file) && statSync(new URL(`../../${file}`, import.meta.url), { throwIfNoEntry: false })?.isFile());
-  assert.ok(files.length > 50);
-  for (const file of files) assert.doesNotMatch(readFileSync(new URL(`../../${file}`, import.meta.url), 'utf8').replaceAll('snagg-app', ''), new RegExp(['vault' + 'dex', 'sna' + 'gg'].join('|'), 'i'), file);
-});
-
 test('every shipped hook handler has the kit id and calls the hook module', () => {
   for (const [file, settings] of [['claude', hookSettings('claude')], ['codex', hookSettings('codex')], ['.claude/settings.json', read(new URL('../../.claude/settings.json', import.meta.url))], ['.codex/hooks.json', read(new URL('../../.codex/hooks.json', import.meta.url))]]) {
     const handlers = Object.values(settings.hooks).flat().flatMap(group => group.hooks);
     assert.ok(handlers.length >= 5, file);
-    for (const handler of handlers) assert.ok(handler.id === 'workflow-kit' && handler.command.includes('kit-hook.mjs'), file);
+    for (const handler of handlers) assert.ok(handler.id === 'workflow-kit' && handler.command.includes('workflow-kit-hook.mjs'), file);
   }
 });
 
-test('retired hook files lose only kit handlers', t => {
-  // Copilot (.github/hooks) and Cursor (.cursor/hooks.json) are no longer supported; their kit handlers retire.
-  const f = fixture(t), mixed = join(f.root, '.github/hooks/old.json'), owned = join(f.root, '.github/hooks/gone.json');
-  const cursor = join(f.root, '.cursor/hooks.json');
-  json(mixed, { version: 1, hooks: { sessionStart: [kitHook('old'), foreign] } });
-  json(owned, { version: 1, hooks: { sessionStart: [kitHook('old')] } });
-  json(cursor, { version: 1, hooks: { sessionStart: [kitHook('old')], beforeSubmitPrompt: [kitHook('old')] } });
-  json(join(f.root, '.github/workflow-kit.json'), { files: {}, hooks: {} });
+test('hook files of agents the kit does not support stay untouched', t => {
+  const f = fixture(t), old = join(f.root, '.github/hooks/old.json'), cursor = join(f.root, '.cursor/hooks.json'), receipt = join(f.root, '.github/workflow-kit.json');
+  json(old, { version: 1, hooks: { sessionStart: [kitHook('old'), foreign] } });
+  json(cursor, { version: 1, hooks: { sessionStart: [kitHook('old')] } });
+  json(receipt, { files: {}, hooks: {} });
   succeeds(f.run('--existing'));
-  assert.deepEqual(read(mixed), { version: 1, hooks: { sessionStart: [foreign] } });
-  assert.equal(existsSync(owned), false);
-  assert.equal(existsSync(cursor), false);
-  assert.equal(existsSync(join(f.root, '.github/workflow-kit.json')), false, 'The old ownership receipt is retired');
+  assert.deepEqual(read(old), { version: 1, hooks: { sessionStart: [kitHook('old'), foreign] } });
+  assert.equal(read(cursor).hooks.sessionStart.length, 1);
+  assert.ok(existsSync(receipt));
 });
 
 test('templates start new projects and are never overwritten', t => {
@@ -111,14 +115,24 @@ test('templates start new projects and are never overwritten', t => {
   assert.equal(readFileSync(rules, 'utf8'), 'project rules\n');
 });
 
+test('the PR template is the one of the profile language, English without a profile (#759)', t => {
+  const f = fixture(t), file = join(f.root, '.github/PULL_REQUEST_TEMPLATE.md');
+  f.template('en/.github/PULL_REQUEST_TEMPLATE.md', 'english\n');
+  f.template('de/.github/PULL_REQUEST_TEMPLATE.md', 'deutsch\n');
+  succeeds(f.run());
+  assert.equal(readFileSync(file, 'utf8'), 'english\n');
+  assert.equal(existsSync(join(f.root, 'en')) || existsSync(join(f.root, 'de')), false, 'The language folders are not copied');
+  rmSync(file);
+  json(join(f.root, '.github/workflow-project.json'), { language: 'de' });
+  succeeds(f.run());
+  assert.equal(readFileSync(file, 'utf8'), 'deutsch\n');
+});
+
 test('discovery files become trackable while custom ignores and private state stay', t => {
   const f = fixture(t), ignore = join(f.root, '.gitignore');
-  write(ignore, '/.agents/hooks\n/.claude/skills/ponytail*\n/.pi/skills/impeccable\n'
-    + '/.codex/agents/impeccable_*.toml\n/custom-cache/\n/.claude/skills/private/\n');
+  write(ignore, '/custom-cache/\n/.claude/skills/private/\n');
   succeeds(f.run('--existing'));
   const lines = readFileSync(ignore, 'utf8').split('\n');
-  for (const removed of ['/.agents/hooks', '/.claude/skills/ponytail*', '/.pi/skills/impeccable', '/.codex/agents/impeccable_*.toml'])
-    assert.ok(!lines.includes(removed), removed);
   for (const kept of ['/custom-cache/', '/.claude/skills/private/', '/.workflow-kit/', '/.scratch/', '.claude/settings.local.json', '**/skills/impeccable/scripts/bin/'])
     assert.ok(lines.includes(kept), kept);
   const once = readFileSync(ignore);
@@ -156,6 +170,20 @@ test('--cwd names the project to initialize, not the working directory', t => {
   assert.equal(spawnSync(process.execPath, [join(f.kit, 'scripts/init-project.mjs'), '--cwd', join(f.base, 'missing')], { cwd: other }).status, 2);
 });
 
+test('--cwd works after other arguments; unknown or repeated arguments stop the run (#784)', t => {
+  const f = fixture(t), other = join(f.base, 'other');
+  mkdirSync(join(other, '.git'), { recursive: true });
+  const script = join(f.kit, 'scripts/init-project.mjs');
+  const run = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: other, encoding: 'utf8' });
+  succeeds(run('--existing', '--cwd', f.root));
+  assert.ok(existsSync(join(f.root, '.gitignore')));
+  assert.equal(existsSync(join(other, '.gitignore')), false);
+  assert.equal(run('--existing', '--cwd').status, 2);
+  assert.equal(run('--cwd', f.root, '--existing', '--cwd', f.root).status, 2);
+  assert.equal(run('--cwd', f.root, '--exsting').status, 2);
+  assert.equal(existsSync(join(other, '.gitignore')), false);
+});
+
 test('writes stay inside the owning checkout', t => {
   const f = fixture(t), outside = join(f.base, 'outside');
   mkdirSync(outside);
@@ -173,43 +201,18 @@ test('.vendor/workflow-kit becomes a link to the shared kit; reruns change nothi
   succeeds(f.run('--existing'));
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
   rmSync(link); mkdirSync(link); writeFileSync(join(link, 'mine.txt'), 'x');
-  assert.notEqual(f.run('--existing').status, 0, 'a folder with files that is no kit clone stays');
+  const refused = f.run('--existing');
+  assert.notEqual(refused.status, 0, 'a folder in place of the link stays');
+  assert.match(refused.stderr, /not a link to the shared kit\. Delete it/);
   assert.ok(existsSync(join(link, 'mine.txt')));
   rmSync(link, { recursive: true }); mkdirSync(other); symlinkSync(other, link, 'junction');
   succeeds(f.run('--existing'));
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
   assert.ok(existsSync(other));
   // A kit inside the project it configures would link the project to itself.
-  for (const script of ['init-project.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs']) {
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'provider-list.mjs', 'provider-matt-pocock.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'code-review-failure-paths.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'board-process.mjs', 'kit-entry.mjs']) {
     mkdirSync(join(f.root, 'inner/scripts'), { recursive: true });
     copyFileSync(new URL(`../${script}`, import.meta.url), join(f.root, 'inner/scripts', script));
   }
   assert.notEqual(spawnSync(process.execPath, [join(f.root, 'inner/scripts/init-project.mjs'), '--cwd', f.root, '--existing']).status, 0);
-});
-
-test('a submodule from the pin era is replaced: gitlink, .gitmodules entry and clone go, but never unpublished work', t => {
-  const f = fixture(t), link = join(f.root, '.vendor/workflow-kit');
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_CONFIG_GLOBAL: join(f.base, 'gitconfig'), GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'protocol.file.allow', GIT_CONFIG_VALUE_0: 'always' };
-  writeFileSync(env.GIT_CONFIG_GLOBAL, '');
-  const git = (cwd, ...args) => {
-    const result = spawnSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...args], { cwd, env, encoding: 'utf8' });
-    assert.equal(result.status, 0, result.stderr);
-    return result.stdout.trim();
-  };
-  const old = join(f.base, 'old-kit');
-  mkdirSync(old); git(old, 'init', '--quiet'); writeFileSync(join(old, 'AGENT_RULES.md'), 'x'); git(old, 'add', '.'); git(old, 'commit', '--quiet', '-m', 'kit');
-  rmSync(join(f.root, '.git'), { recursive: true }); git(f.root, 'init', '--quiet');
-  git(f.root, 'submodule', '--quiet', 'add', old.replaceAll('\\', '/'), '.vendor/workflow-kit');
-  git(f.root, 'commit', '--quiet', '-m', 'consumer');
-  git(link, 'commit', '--quiet', '--allow-empty', '-m', 'mine');
-  const refused = f.run('--existing');
-  assert.notEqual(refused.status, 0);
-  assert.match(refused.stderr, /unpublished commits/);
-  assert.ok(existsSync(join(link, 'AGENT_RULES.md')), 'nothing was removed');
-  git(link, 'reset', '--quiet', '--hard', 'origin/HEAD');
-  succeeds(f.run('--existing'));
-  assert.ok(lstatSync(link).isSymbolicLink());
-  assert.equal(git(f.root, 'ls-files', '-s', '--', '.vendor'), '', 'no gitlink');
-  assert.ok(!existsSync(join(f.root, '.gitmodules')), 'no .gitmodules entry');
-  assert.ok(!existsSync(join(f.root, '.git/modules/.vendor/workflow-kit')), 'the old clone is gone');
 });

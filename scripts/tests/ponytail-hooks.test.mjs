@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { snapshotDirectory } from '../provider-ponytail.mjs';
-import { run as exec } from './fixtures.mjs';
+import { installersDone, run as exec } from './fixtures.mjs';
 
 const root = process.env.WORKFLOW_KIT_TARGET || fileURLToPath(new URL('../../', import.meta.url));
 const windows = process.platform === 'win32';
@@ -168,11 +168,9 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-ensure-'));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
-  for (const from of ['.agents/hooks', '.agents/skills/ponytail', 'scripts/impeccable'])
+  for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
-  for (const file of ['kit-hook', 'kit-check', 'provider', 'provider-ponytail', 'provider-impeccable', 'provider-links', 'agents', 'checkout-root', 'project-profile'])
-    copyFileSync(path.join(root, `scripts/${file}.mjs`), path.join(checkout, `scripts/${file}.mjs`));
-  copyFileSync(path.join(root, 'scripts/versions.json'), path.join(checkout, 'scripts/versions.json'));
+  cpSync(path.join(root, 'scripts'), path.join(checkout, 'scripts'), { recursive: true, filter: file => path.basename(file) !== 'tests' });
   mkdirSync(path.join(checkout, '.git'));
   mkdirSync(path.join(checkout, '.github'));
   writeFileSync(path.join(checkout, '.github/workflow-project.json'), '{"impeccable":true}');
@@ -184,7 +182,7 @@ test('SessionStart installs a missing snapshot on its own and the next call find
   const first = (await call('startup')).stdout;
   assert.match(first, /Ponytail hooks are OFF/);
   assert.match(first, /Impeccable hooks are OFF/);
-  for (let wait = 0; (!existsSync(launcher) || existsSync(path.join(home, '.ponytail/workflow-kit/.install.lock'))) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  await installersDone(home, hookTimeout, () => existsSync(launcher));
   assert.ok(existsSync(launcher), 'the hook started the installation, which then released its lock');
   // A resume starts no second installer that would still hold the folder.
   assert.doesNotMatch((await call('resume')).stdout, /Ponytail hooks are OFF/);
@@ -226,8 +224,44 @@ test('a project without UI files neither warns about nor downloads Impeccable', 
   assert.match(first, /Ponytail hooks are OFF/);
   assert.doesNotMatch(first, /Impeccable/);
   // The background installer ends when its lock is gone; it installs Ponytail and, for this project, nothing else.
-  const installed = path.join(home, '.ponytail/workflow-kit', snapshotDirectory(version, project)), lock = path.join(home, '.ponytail/workflow-kit/.install.lock');
-  for (let wait = 0; (!existsSync(installed) || existsSync(lock)) && wait < hookTimeout; wait += 100) await new Promise(resolve => setTimeout(resolve, 100));
+  const installed = path.join(home, '.ponytail/workflow-kit', snapshotDirectory(version, project));
+  await installersDone(home, hookTimeout, () => existsSync(installed));
   assert.ok(existsSync(installed), 'Ponytail installed');
   assert.equal(existsSync(path.join(home, '.impeccable')), false, 'no engine download');
+});
+
+test('an installation nobody used for 30 days is removed, the one a hook used stays', async t => {
+  const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-prune-'));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home'), base = path.join(home, '.ponytail/workflow-kit');
+  for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
+    cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
+  assert.equal(spawnSync(git, ['init', '--quiet', checkout]).status, 0);
+  const env = { ...process.env, HOME: home, USERPROFILE: home, CLAUDE_PROJECT_DIR: checkout };
+  const installer = fileURLToPath(new URL('../provider.mjs', import.meta.url));
+  const install = () => assert.equal(spawnSync(process.execPath, [installer, 'ponytail', 'install'], { cwd: checkout, env, encoding: 'utf8' }).status, 0);
+  const age = (directory, days) => { const when = new Date(Date.now() - days * 86_400_000); utimesSync(directory, when, when); };
+  const hookFile = path.join(checkout, '.agents/hooks/ponytail-activate.js'), original = readFileSync(hookFile), second = 'throw new Error("second state");\n';
+
+  install();
+  const used = path.join(base, snapshotDirectory(version, checkout));
+  writeFileSync(hookFile, second);
+  install();
+  const current = path.join(base, snapshotDirectory(version, checkout));
+  assert.notEqual(current, used);
+  const unused = path.join(base, 'unused'), recent = path.join(base, 'recent');
+  mkdirSync(unused);
+  mkdirSync(recent);
+  for (const directory of [used, current, unused]) age(directory, 31);
+
+  // A checkout in the first state calls its hook: that marks its installation as used.
+  writeFileSync(hookFile, original);
+  const call = await exec(process.execPath, [kitHook, 'UserPromptSubmit', '--agent', 'claude'], { cwd: checkout, env, input: JSON.stringify({ prompt: 'hello' }), timeout: hookTimeout });
+  assert.equal(call.status, 0, call.stderr);
+  assert.ok(Date.now() - statSync(used).mtimeMs < 60_000, 'the hook marked its installation');
+
+  writeFileSync(hookFile, second);
+  install();
+  assert.equal(existsSync(unused), false, 'unused for 31 days: removed');
+  for (const directory of [used, current, recent]) assert.equal(existsSync(directory), true, directory);
 });

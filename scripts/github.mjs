@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { isRateLimited, quotaOf, retryAt, splitResponse, untilText } from './quota.mjs';
+import { isRateLimited, quotaOf, retryAt, splitResponse, untilText, waitInterval } from './quota.mjs';
 
 // Commands that sleep until the quota reset instead of failing, with the points they keep in reserve.
 export const sleepers = { wait: 300, reviews: 50, handoff: 50, done: 50, 'quota-wait': 300 };
@@ -106,6 +106,36 @@ export function createGithub({ tool, command, projectDirectory, sleep }) {
       if (batch.length < 100) return items;
     }
   };
+
+  /**
+   * What GraphQL shows of the PR changes only when REST shows a change too (head, state, draft, merge state, update time, check runs,
+   * check suites, commit statuses), so a round that finds the same marker reads GraphQL no more: comments, reviews and reactions are
+   * REST reads anyway and the clock is the current one. `head` is the commit the marker names; `pull`, `runs` and `statuses` are what
+   * REST answered (pausedRound shows them). Undefined when REST cannot say.
+   * ponytail: checks stop at 100 like the GraphQL query; replace when that query paginates.
+   */
+  github.changeMarker = (repository, prNumber) => {
+    try {
+      const pull = github.rest(`repos/${repository}/pulls/${prNumber}`), commit = `repos/${repository}/commits/${pull.head.sha}`;
+      const listed = (path, key) => github.rest(`${commit}/${path}?per_page=100`)[key];
+      const [runs, suites, statuses] = [listed('check-runs', 'check_runs'), listed('check-suites', 'check_suites'), listed('status', 'statuses')];
+      return { head: pull.head.sha, pull, runs, statuses, text: JSON.stringify([pull.head.sha, pull.updated_at, pull.state, pull.draft, pull.mergeable_state,
+        runs.map(run => [run.id, run.status, run.conclusion]), suites.map(suite => [suite.id, suite.status, suite.conclusion]),
+        statuses.map(status => [status.context, status.state, status.description])]) };
+    } catch { return undefined; } // a failed marker read is a full read, never a verdict
+  };
+
+  // The last full read of a run (the marker REST showed before it, the PR and its unresolved threads), shared by every command of the run.
+  // A full read is repeated after this long even without a change, so a GraphQL answer that lagged behind REST heals. Not kept across runs (#694).
+  let lastRead;
+  const fullReadEvery = 5 * 60_000;
+  /** The last full read when `marker` is the one it was made under and it is still fresh, else undefined. */
+  github.recallRead = (marker, now = Date.now()) => marker && lastRead?.marker.text === marker.text && now - lastRead.at < fullReadEvery ? lastRead : undefined;
+  /** Keeps a full read (`{ marker, pr, threads, at }`); a falsy value forgets the last one. */
+  github.keepRead = read => { lastRead = read || undefined; };
+
+  /** Seconds to pause between two reads of a wait: longer with every quiet read and while little quota is left (`paused`: REST is read in place of GraphQL). */
+  github.pause = (quietReads, paused) => waitInterval(quietReads, paused ? undefined : github.quota?.remaining);
 
   // Field and option ids of the Project change rarely: kept in the clone's Git directory (shared by its worktrees) and read again only when
   // a name or option is missing from them or a write with them fails. One read costs a point; every run used to pay it.

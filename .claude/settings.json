@@ -8,7 +8,7 @@
           {
             "id": "workflow-kit",
             "type": "command",
-            "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" PostToolUse --agent claude; exit 0",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" PostToolUse --agent claude; exit 0",
             "timeout": 120,
             "shell": "bash",
             "statusMessage": "Impeccable UI check (verified user installation)"
@@ -22,7 +22,7 @@
           {
             "id": "workflow-kit",
             "type": "command",
-            "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" Stop --agent claude; exit 0",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" Stop --agent claude; exit 0",
             "timeout": 120,
             "shell": "bash",
             "statusMessage": "Impeccable UI check (verified user installation)"
@@ -36,7 +36,7 @@
           {
             "id": "workflow-kit",
             "type": "command",
-            "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; if [ ! -f \"$f\" ]; then k=\"$WORKFLOW_KIT_DIR\"; [ -n \"$k\" ] || { c=\"$(git -C \"$p\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)\" && k=\"$(dirname \"$(dirname \"$c\")\")/workflow-kit\"; }; [ -z \"$k\" ] || [ -f \"$k/scripts/kit-hook.mjs\" ] || GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true SSH_ASKPASS=true git -c credential.interactive=false -c core.hooksPath=/dev/null clone --quiet https://github.com/snagg-app/workflow-kit.git \"$k\" >/dev/null 2>&1; f=\"$k/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || { printf '%s\\n' '{\"systemMessage\":\"The shared Workflow Kit checkout is missing and could not be cloned (offline?). Clone https://github.com/snagg-app/workflow-kit.git to a folder named workflow-kit next to the project, or set WORKFLOW_KIT_DIR.\"}'; exit 0; }; fi; exec node \"$f\" SessionStart --agent claude",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; [ -f \"$f\" ] && exec node \"$f\" SessionStart --agent claude; exit 0",
             "timeout": 120,
             "shell": "bash"
           }
@@ -49,7 +49,7 @@
           {
             "id": "workflow-kit",
             "type": "command",
-            "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; if [ ! -f \"$f\" ]; then k=\"$WORKFLOW_KIT_DIR\"; [ -n \"$k\" ] || { c=\"$(git -C \"$p\" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)\" && k=\"$(dirname \"$(dirname \"$c\")\")/workflow-kit\"; }; [ -z \"$k\" ] || [ -f \"$k/scripts/kit-hook.mjs\" ] || GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=true SSH_ASKPASS=true git -c credential.interactive=false -c core.hooksPath=/dev/null clone --quiet https://github.com/snagg-app/workflow-kit.git \"$k\" >/dev/null 2>&1; f=\"$k/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || { printf '%s\\n' '{\"systemMessage\":\"The shared Workflow Kit checkout is missing and could not be cloned (offline?). Clone https://github.com/snagg-app/workflow-kit.git to a folder named workflow-kit next to the project, or set WORKFLOW_KIT_DIR.\"}'; exit 0; }; fi; exec node \"$f\" SubagentStart --agent claude",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 || { printf '%s\\n' '{\"systemMessage\":\"Node is missing from PATH, so the Workflow Kit hooks (kit check, Ponytail, Impeccable) do not run. Install Node (the version in .node-version) and restart the session.\"}'; exit 0; }; [ -f \"$f\" ] && exec node \"$f\" SubagentStart --agent claude; exit 0",
             "timeout": 120,
             "shell": "bash"
           }
@@ -62,7 +62,7 @@
           {
             "id": "workflow-kit",
             "type": "command",
-            "command": "p=\"${CLAUDE_PROJECT_DIR:-.}\"; f=\"$p/.vendor/workflow-kit/scripts/kit-hook.mjs\"; [ -f \"$f\" ] || f=\"$p/scripts/kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" UserPromptSubmit --agent claude; exit 0",
+            "command": "f=\"${CLAUDE_PROJECT_DIR:-.}/.agents/workflow-kit-hook.mjs\"; command -v node >/dev/null 2>&1 && [ -f \"$f\" ] && exec node \"$f\" UserPromptSubmit --agent claude; exit 0",
             "timeout": 5,
             "shell": "bash"
           }

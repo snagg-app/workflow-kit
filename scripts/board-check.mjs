@@ -2,6 +2,7 @@
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import assert from 'node:assert/strict';
 import { result } from './board-result.mjs';
+import { textInEveryLanguage } from './project-profile.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -11,7 +12,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createCheck(env) {
-  const { baseSetting, claimOf, commentClaims, decisionWait, feedbackNode, graphql, handoffHeading, issueFeedback, issueProject, logins, project, projectDirectory, projectItem, projectStatus, readIssue, refOf, replyLine, rest, sessionOption, state, statuses, validTagName } = env;
+  const { baseSetting, claimOf, commentClaims, decisionWait, feedbackNode, graphql, handoffHeading, issueFeedback, issueProject, logins, project, projectDirectory, projectItem, projectStatus, readIssue, refOf, replyLine, rest, sessionOption, state, statuses, texts, validTagName } = env;
   const { currentIssuePr, isOwn, openPrs, ownWork, stackBase, startReasons } = env.later;
 
   /** Why native predecessors still hold an issue: open, closed without delivery, or unreadable. */
@@ -34,30 +35,35 @@ export function createCheck(env) {
 
   function waitReasons(body) {
     const blocked = [], unknown = [], values = [];
+    // The line is read in the words of every profile language: a ticket keeps the words it was written in.
+    const labels = textInEveryLanguage('waitsUntil'), label = texts.waitsUntil;
+    const strictLine = new RegExp(`^\\s*(?:[-*]\\s+)?(?:${labels.map(RegExp.escape).join('|')}):(.*)$`, 'i');
+    const looseLine = new RegExp(`^[\\s>*_+\\-[\\]xX\\d.#|\`~=()]*(?:${labels.map(name => name.split(' ').map(RegExp.escape).join('\\s+')).join('|')})\\b`, 'i');
+    const decision = new RegExp(`^(?:${textInEveryLanguage('decision').map(RegExp.escape).join('|')})[ \\t]+`);
     for (const line of String(body ?? '').split(/\r?\n/)) {
-      const strict = /^\s*(?:[-*]\s+)?Wartet bis:(.*)$/i.exec(line);
-      // Nur ASCII-Trenner weg: trim() würde ein gültiges Unicode-Leerzeichen am Tagnamen entfernen.
+      const strict = strictLine.exec(line);
+      // Only ASCII separators go: trim() would strip a valid Unicode space from the tag name.
       if (strict) values.push(strict[1].replace(/^[ \t]+|[ \t]+$/g, ''));
-      // Formatierte Varianten (**Wartet bis:**, > …, 1. …, - [ ] …) sind keine lesbare Bedingung, aber auch kein Freibrief.
-      else if (/^[\s>*_+\-[\]xX\d.#|`~=()]*wartet\s+bis\b/i.test(line)) unknown.push(`unreadable line "${line.trim()}": write it as "Wartet bis: <tag or UTC time>"`);
+      // Formatted variants (bold, quoted, numbered, checkbox) are not a readable condition, but no free pass either.
+      else if (looseLine.test(line)) unknown.push(`unreadable line "${line.trim()}": write it as "${label}: <tag or UTC time>"`);
     }
     for (const wanted of values) {
-      // Zurückgestellt bis zu einer Entscheidung: offen, solange die Zeile steht; wer entscheidet, entfernt sie (#514).
-      if (/^Entscheidung[ \t]+\S/.test(wanted)) blocked.push(`${decisionWait} ${wanted.replace(/^Entscheidung[ \t]+/, '')} (remove the line "Wartet bis: ${wanted}" once decided)`);
+      // Deferred until a decision: held while the line stands; whoever decides removes it (#514).
+      if (new RegExp(`${decision.source}\\S`).test(wanted)) blocked.push(`${decisionWait} ${wanted.replace(decision, '')} (remove the line "${label}: ${wanted}" once decided)`);
       else if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/.test(wanted)) {
         const at = Date.parse(wanted);
-        // Ein Datum wie 2026-02-30 rollt über; nur der unveränderte Wert zählt.
-        if (!Number.isFinite(at) || `${new Date(at).toISOString().slice(0, 16)}Z` !== wanted) unknown.push(`invalid "Wartet bis: ${wanted}": no such UTC time`);
+        // A date such as 2026-02-30 rolls over; only the unchanged value counts.
+        if (!Number.isFinite(at) || `${new Date(at).toISOString().slice(0, 16)}Z` !== wanted) unknown.push(`invalid "${label}: ${wanted}": no such UTC time`);
         else if (Date.now() < at) blocked.push(`waits until ${wanted} (UTC)`);
       } else if (validTagName(wanted)) {
         try {
-          // matching-refs liefert Präfix-Treffer (v0.1.1 findet v0.1.10); nur der genaue Tag zählt.
+          // matching-refs returns prefix matches (v0.1.1 finds v0.1.10); only the exact tag counts.
           const tags = rest(`repos/${project.repository}/git/matching-refs/tags/${wanted.split('/').map(encodeURIComponent).join('/')}`);
           if (!tags.some(tag => tag.ref === `refs/tags/${wanted}`)) blocked.push(`waits for tag ${wanted} (not found)`);
         } catch (error) {
           unknown.push(`cannot read tag ${wanted}: ${String(error.stderr || error.message).trim()}`);
         }
-      } else unknown.push(`invalid "Wartet bis: ${wanted}": use a tag name or a UTC time such as 2026-10-12T18:51Z`);
+      } else unknown.push(`invalid "${label}: ${wanted}": use a tag name or a UTC time such as 2026-10-12T18:51Z`);
     }
     return { blocked, unknown };
   }

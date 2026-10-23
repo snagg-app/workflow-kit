@@ -40,15 +40,14 @@ each. Skill folders may hold other agents' metadata (`agents/openai.yaml`); it s
 through the link and ignores it.
 
 `init-project` links `.vendor/workflow-kit` to the shared checkout (a junction on Windows,
-else a symlink), adds it to `.gitignore`, and removes a leftover kit submodule of earlier
-versions (gitlink, `.gitmodules` entry and clone; it stops if that clone holds local
-changes or unpublished commits). From then on the hooks do the rest, see [Hooks](#hooks).
+else a symlink) and adds it to `.gitignore`. It stops at a folder or submodule in that place:
+delete it, then rerun. From then on the hooks do the rest, see [Hooks](#hooks).
 
 Without `--existing`, `init-project` also creates the starter files (AGENTS.md,
 CONTRIBUTING.md, issue and PR templates) that are missing; afterwards they belong to
 the project and are never overwritten. A template that a kit update adds later does not
 reach an existing project: copy it by hand. For the spec form that is
-`.vendor/workflow-kit/templates/.github/ISSUE_TEMPLATE/spec.yml` to `.github/ISSUE_TEMPLATE/`,
+`.vendor/workflow-kit/templates/<language>/.github/ISSUE_TEMPLATE/spec.yml` (`en` or `de`, the profile language) to `.github/ISSUE_TEMPLATE/`,
 plus the label `spec` (`gh label create spec`), which the form sets.
 
 `init-project` (also with `--existing`) adds the missing lines of `templates/.ignore` to
@@ -66,18 +65,14 @@ about the new kit.
 The kit has hook adapters only for Codex and Claude Code. Any other agent works at level 0
 (`AGENTS.md`, skills, `board.mjs`, `kit.mjs check`; see [Hooks](AGENT_RULES.md#hooks)); an
 agent without hooks has `hooks: null` in `scripts/agents.mjs`, and `kit setup` then names the one
-line for its `AGENTS.md`. Projects from earlier kit versions keep
-their copies for Antigravity, Cursor, OpenCode, Pi and Copilot: `init-project` removes
-only the kit's handlers from `.cursor/hooks.json` and `.github/hooks/*.json`, and the
-kit never deletes other project files. Delete `.agent/`, `.cursor/`, `.opencode/`,
-`.pi/`, `.github/skills/`, `.github/agents/` and `.github/hooks/` by hand (keep files
-of your own), or leave them unused.
+line for its `AGENTS.md`. The kit no longer touches files of other agents (Antigravity, Cursor,
+OpenCode, Pi, Copilot) or its own old ones; delete them by hand (keep files of your own).
 
 ### Generated files and ownership
 
 The kit owns every hook handler with the id `workflow-kit` (keep personal hooks elsewhere), and upstream skills, agents and
 commands by name. Generated discovery files are ordinary committed files in
-`.agents`, `.claude/skills/impeccable` and `.claude/agents`, plus `.codex/agents`; the other Claude Code skills are local links to `.agents/skills`. Equal files stay untouched; changed
+`.agents`, `.claude/skills/impeccable` and `.claude/agents`, plus `.codex/agents`; of `.claude/skills/impeccable` only the files that differ from `.agents/skills/impeccable` are committed (setup copies the others; a generated `.gitignore` in that folder names them), and `impeccable_*.toml` is committed only in `.codex/agents`; the other Claude Code skills are local links to `.agents/skills`. Equal files stay untouched; changed
 content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
 A fresh clone/worktree discovers the committed files without generation or dependency
@@ -102,12 +97,14 @@ file, means committed outputs were stale.
 
 ## Hooks
 
-Every hook of Claude and Codex is a one-line call of `scripts/kit-hook.mjs <Event> --agent <claude|codex>`
-(hook JSON on stdin, answer on stdout). The module holds all hook logic and reads the Ponytail, Impeccable and
+Every hook of Claude and Codex is a short call of `.agents/workflow-kit-hook.mjs <Event> --agent <claude|codex>`
+(hook JSON on stdin, answer on stdout), plus the "Node is missing" notice at SessionStart and SubagentStart. That file is a copy of
+`scripts/kit-entry.mjs` that `kit setup` writes: it is the one place that finds the shared kit and clones it when missing
+(SessionStart and SubagentStart only), then hands over to `scripts/kit-hook.mjs`. Hook notices follow `language` of the profile. The module holds all hook logic and reads the Ponytail, Impeccable and
 minimum Node version from `scripts/versions.json`, the only place they are written (the CI Node stays in `.node-version`). The hooks call personal snapshots.
 They install and update themselves: at SessionStart the module returns at once and starts both installers in a
-detached process (one run per machine, lock in `~/.ponytail/workflow-kit/.install.lock`, log in
-`.install.log` next to it). A missing version, a changed version after a kit update or a removed
+detached process (one run per machine and function through the provider's own lock, log in
+`~/.ponytail/workflow-kit/.install.log`). A missing version, a changed version after a kit update or a removed
 pinned Node is repaired at the next session start and active from the one after. Needs `node` on PATH;
 without it the one-line entry prints a clear message and ends with success. By hand, from the project:
 `node .vendor/workflow-kit/scripts/kit.mjs setup` (it runs both installers).
@@ -132,18 +129,16 @@ branch you trust (the default branch), and again after every change to a hook:
 node .vendor/workflow-kit/scripts/install-git-hooks.mjs          # --check only reports
 ```
 
-It copies `.githooks/` of the current checkout, plus the kit's `post-checkout`, into
+It copies `.githooks/` of the current checkout into
 `workflow-kit-hooks/` in the clone's Git directory and sets `core.hooksPath` to that absolute
 path, shared by all worktrees of the clone. Git then runs the copy, never the working
 tree: a branch that changes or adds a file in `.githooks/` does not get that code run on
 checkout or push. Only an explicit rerun replaces the copy (and drops hooks that no longer
 exist); hooks no longer follow the branch you are on, so a hook change reaches a clone
 only through that rerun, for example by rerunning the project's bootstrap. Symlinks in
-`.githooks/` are not copied. A `post-checkout` of the project's own is used instead of the
-kit's and reported; integrate `scripts/git-hooks/post-checkout` there by hand.
+`.githooks/` are not copied.
 
-The earlier settings, the relative `.githooks` and absolute paths into this
-repository's worktrees with matching `config.worktree` overrides, become the new path.
+Absolute paths into this repository's worktrees with matching `config.worktree` overrides become the new path.
 Git resolves relative paths per worktree, so any other relative value counts as foreign.
 It changes a config file only when every `core.hooksPath` entry there (including
 `include` files) points to this repository's hooks and is written in that file itself.
@@ -151,18 +146,6 @@ Because Git evaluates `includeIf` per worktree and branch, it changes nothing wh
 `includeIf` target, whatever its condition, sets a foreign path. Anything else, such as a
 foreign path in local, global or system config, stays and is reported: integrate
 `.githooks` there yourself. Without `.githooks/` it does nothing.
-
-Only a project that still holds the kit as a submodule needs this (`init-project` ends that, see above): after a branch checkout (third argument `1`) the kit's `post-checkout` runs
-`git submodule update --init --checkout .vendor/workflow-kit`, so the kit follows the gitlink of the
-new branch instead of showing `M .vendor/workflow-kit`. It touches only the kit, not other submodules
-or `submodule.recurse`, disables Git's own prompts like the SessionStart hook (ssh may still ask on the terminal) and runs none of the kit clone's own hooks. Like any checkout it applies the user's Git configuration, including filters.
-A kit with local changes, ignored or untracked files, or commits no remote has
-(a clean, published kit behind or ahead of the old pin still follows) is not touched: the hook prints a hint
-and the checkout continues; any failure only prints the command. Without a kit gitlink, as in this repository,
-it does nothing. Known limit: where the kit has `core.filemode=false`, a purely local mode change is invisible to
-Git and the update may reset it.
-Migrating from the earlier design (a committed `.githooks/post-checkout`): delete that file, then rerun
-the installer, so the kit's current one is copied.
 
 ## Board commands
 
@@ -210,7 +193,7 @@ comment, a comment for an earlier push does not count, and it works the same for
 a check suite or one that was pushed and checked on another branch first. Put the retro under
 the heading `Retro` (any level, usually `###`), one list line per finding, and, after another
 heading, the review findings with their disposition and, if a reviewer was unavailable or
-stalled, the reviewer, cause and evidence (an optional reviewer only when it found something). Without findings the retro has the single line `Keine Funde`.
+stalled, the reviewer, cause and evidence (an optional reviewer only when it found something). Without findings the retro has the single line `No findings` (`Keine Funde` with `"language": "de"`).
 Only heading, head and author are checked; the content is for the human reviewer.
 With several comments for the head the newest counts. `done ISSUE FILE` posts it unless one for the head exists
 and adds the heading and the `Head:` line itself; FILE holds the rest:
@@ -301,7 +284,7 @@ node --test scripts/tests/<affected>.test.mjs    # add --test-name-pattern for o
 node scripts/affected-tests.mjs    # test files for the changed files (--run runs them); new scripts need a row in its table
 ```
 
-The agents the kit serves are listed once, in `scripts/agents.mjs` (skill folder, agent-definition folder, hook file and hook shape per agent); the setup scripts and `init-project` read only that table, and the hook settings of `.claude/settings.json` and `.codex/hooks.json` are generated from it with the command texts of `scripts/hook-commands.json`. A new agent is a new entry plus its regenerated files; the CI regeneration diff covers them.
+The agents the kit serves are listed once, in `scripts/agents.mjs` (skill folder, agent-definition folder, hook file and hook shape per agent); the setup scripts and `init-project` read only that table, and the hook settings of `.claude/settings.json` and `.codex/hooks.json` are generated from it with the command texts of `scripts/hook-commands.json`. `detect` lists the project paths that show an agent is in use (`.claude`, `.codex`); `kit setup` writes hooks only for those agents and, when none is found (a new project), for all of them and says so. A new agent is a new entry plus its regenerated files; the CI regeneration diff covers them.
 
 Locally run only the affected tests; CI runs the commands above plus the full
 `node --test scripts/tests` in one Linux job: about 20

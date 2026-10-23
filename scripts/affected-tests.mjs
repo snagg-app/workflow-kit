@@ -25,6 +25,7 @@ const NOT_BOARD = /^(?!board-).*\.test\.mjs$/;
 // A changed test file always runs itself; a file that matches no row is reported on stderr.
 export const TABLE = [
   [/^scripts\/(board(-[a-z]+)?|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
+  [/^scripts\/(review-facts|review-verdict|sonar)\.mjs$|^scripts\/tests\/fake-sonar\.mjs$/, [BOARD, 'review-verdict.test.mjs']],
   [/^scripts\/tests\/(gh-shapes\.mjs$|gh-shapes\/)/, [BOARD, 'gh-shapes.test.mjs']],
   [/^scripts\/record-gh-shapes\.mjs$/, ['gh-shapes.test.mjs']],
   [/^scripts\/quota-sample\.mjs$/, ['quota-sample.test.mjs']],
@@ -32,8 +33,9 @@ export const TABLE = [
   [/^scripts\/worktree-gc\.mjs$/, ['worktree-gc.test.mjs']],
   [/^scripts\/checkout-root\.mjs$/, [ALL]],
   [/^scripts\/provider-links\.mjs$/, [NOT_BOARD]],
+  [/^scripts\/lock\.mjs$/, ['provider.test.mjs', 'ponytail-hooks.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs']],
   [/^scripts\/tests\/fixtures\.mjs$/, ['git-hooks', 'kit-init-hook', 'kit-setup', 'ponytail-batch', 'ponytail-hooks', 'renovate-regenerate', 'setup'].map(n => `${n}.test.mjs`)],
-  [/^scripts\/(install-git-hooks\.mjs|git-hooks\/)/, ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']],
+  [/^scripts\/install-git-hooks\.mjs$/, ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']],
   [/^scripts\/project-profile\.mjs$/, ['entrypoints.test.mjs', 'kit-setup.test.mjs', 'ponytail-hooks.test.mjs']],
   [/^scripts\/(init-project|agents)\.mjs$|^scripts\/hook-commands\.json$|^templates\//, ['entrypoints.test.mjs', 'kit-init-hook.test.mjs', 'impeccable-update.test.mjs', 'matt-pocock.test.mjs']],
   [/^scripts\/provider\.mjs$/, ['provider.test.mjs', 'ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', 'matt-pocock.test.mjs', 'setup.test.mjs', 'impeccable-update.test.mjs']],
@@ -41,7 +43,9 @@ export const TABLE = [
   [/^scripts\/(ponytail-patch\.mjs|ponytail\/)/, ['update-ponytail.test.mjs', 'ponytail-batch.test.mjs']],
   [/^scripts\/versions\.json$|^\.agents\/hooks\/|^\.github\/hooks\/ponytail\.json$/, ['ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
   [/^scripts\/kit\.mjs$/, ['kit-setup.test.mjs']],
+  [/^scripts\/github-board\.mjs$/, ['github-board.test.mjs', 'kit-setup.test.mjs']],
   [/^scripts\/kit-hook\.mjs$/,['kit-init-hook.test.mjs', 'ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
+  [/^scripts\/(git-tool|kit-check|kit-entry)\.mjs$/, ['git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', 'kit-setup.test.mjs']],
   [/^scripts\/plugin-skills\.mjs$/, ['skill-core.test.mjs']],
   [/^scripts\/(impeccable-release\.mjs|impeccable\/)|^\.vendor\/impeccable$/, ['impeccable-update.test.mjs']],
   [/^scripts\/provider-impeccable\.mjs$/, ['provider.test.mjs', 'impeccable-update.test.mjs', 'impeccable-hooks.test.mjs', 'matt-pocock.test.mjs']],
@@ -127,7 +131,7 @@ export function quiet(verbose, command, args, options, { summary, noise, ok, lab
 }
 
 if (process.argv[1] && realpathSync.native(fileURLToPath(import.meta.url)) === realpathSync.native(process.argv[1])) {
-  enterCwd(); // `--cwd PROJECT_DIR` as the first argument; file arguments are relative to it
+  enterCwd(); // `--cwd PROJECT_DIR` at any position; file arguments are relative to it
   const { values, positionals: given } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, verbose: { type: 'boolean' }, resume: { type: 'string' }, base: { type: 'string', default: 'origin/main' } } });
   // A project that uses the kit through .vendor/workflow-kit: kit tests follow the kit's own changes, the project map the project's.
   const root = projectRoot(), inKit = realpathSync.native(root) === realpathSync.native(kit);

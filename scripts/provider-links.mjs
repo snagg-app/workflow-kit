@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict';
 import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
-import { agents, ownSkills, sharedSkills } from './agents.mjs';
+import { agents, sharedSkills } from './agents.mjs';
+import { ownSkills } from './provider-list.mjs';
 
 const present = path => lstatSync(path, { throwIfNoEntry: false });
 const stamp = new Date().toISOString().replaceAll(':', '-');
@@ -90,7 +91,7 @@ export function linkSkills(root) {
   checkDirectory(root, shared);
   for (const { skills } of Object.values(agents).filter(agent => agent.linksShared)) {
     localDirectory(root, join(root, skills));
-    for (const name of readdirSync(shared).filter(name => !ownSkills.includes(name))) {
+    for (const name of readdirSync(shared).filter(name => !ownSkills().includes(name))) {
       const source = join(shared, name), path = join(root, skills, name);
       if (lstatSync(source).isFile()) {
         if (same(path, source)) rmSync(path);

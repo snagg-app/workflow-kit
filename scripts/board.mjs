@@ -1,16 +1,16 @@
 // Board commands, so agents don't rediscover Project, priority and dependency APIs on every task.
 // Run in the project: `board.mjs help` lists the commands, `board.mjs help COMMAND` shows one (derived from the descriptions in board-commands.mjs).
-// `--cwd PATH` as the first argument runs it for the project in PATH from any directory: without it the
+// `--cwd PATH` anywhere in the arguments runs it for the project in PATH from any directory: without it the
 // working directory decides the project, and a driver in another project would read and write the wrong board.
 // This file only translates the call: it reads the project, checks the arguments and runs one command. Each command is a module
 // `board-<name>.mjs` with its description (`specs`) and a factory `createX(env)` that runs nothing when imported; the modules reach each other through `env.later`.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { externalTool, projectRoot, takeCwd } from './checkout-root.mjs';
-import { statusNames, textsFor } from './project-profile.mjs';
+import { readProfile, readProfileAt, textsFor } from './project-profile.mjs';
 import { createGithub } from './github.mjs';
-import { configError, createOptions, helpOf, listOf, parseArgs, usageOf } from './board-args.mjs';
+import { createOptions, helpOf, listOf, parseArgs, usageOf } from './board-args.mjs';
 import { commandSpecs } from './board-commands.mjs';
 import { createProcess } from './board-process.mjs';
 import { createCheckout } from './board-checkout.mjs';
@@ -62,21 +62,20 @@ if (!existsSync(projectFile)) {
   output.diagnostic(`${projectFile} is missing: run board.mjs inside the project, or name it with --cwd PROJECT_DIR`);
   process.exit(2);
 }
-const project = JSON.parse(readFileSync(projectFile, 'utf8'));
+let project;
+try { project = readProfile(projectDirectory); } catch (error) {
+  output.diagnostic(error.message);
+  process.exit(2);
+}
 const [owner, name] = project.repository.split('/');
 // The repository and board of the issue: the project's own unless --issue-repo names another one (read once by useIssueRepo, before start and done).
 let issueProject = project, [issueOwner, issueName] = [owner, name];
 // The status names of the issue's board and the texts written into issues and PRs (`statuses`, `language` in the project file).
-let statuses = statusNames(project);
+let statuses = project.statuses;
 const texts = textsFor(project);
 const commandNames = commandSpecs.map(spec => spec.name);
 // A call the description does not allow ends here with the reason and the usage of that one command, before any read or write.
 const parsed = parseArgs(commandSpecs, call, project);
-const configProblem = parsed.args && configError(command, project);
-if (configProblem) {
-  output.diagnostic(configProblem);
-  process.exit(2);
-}
 if (!parsed.args) {
   output.diagnostic([parsed.error, parsed.spec ? usageOf(parsed.spec) : listOf(commandSpecs)].filter(Boolean).join('\n'));
   process.exit(2);
@@ -102,11 +101,9 @@ const { graphql, rest, restAll } = github;
 /** The issue lives in another repository when --issue-repo says so: its board and statuses replace the project's (read once, before the modules are made). */
 function useIssueRepo() {
   if (issueRepoOption === undefined || issueRepoOption.toLowerCase() === project.repository.toLowerCase()) return;
-  const file = rest(`repos/${issueRepoOption}/contents/.github/workflow-project.json`);
-  assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${issueRepoOption} is unreadable`);
-  issueProject = { ...JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')), repository: issueRepoOption };
+  issueProject = { ...readProfileAt(rest, issueRepoOption), repository: issueRepoOption };
   [issueOwner, issueName] = issueRepoOption.split('/');
-  statuses = statusNames(issueProject);
+  statuses = issueProject.statuses;
 }
 
 // field and new report a failure as one "ERROR - reason" line, and they print only their result (no progress), so no failed call shows a write or a check

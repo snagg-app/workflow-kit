@@ -262,6 +262,8 @@ function api(argv, input, stdout, stderr, exit) {
       stdout('{}');
       exit(0);
     }
+    // The labels of the repository (labels.json: names, the default is none), as the board setup reads them (--paginate --slurp).
+    if (parts[3] === 'labels' && argv.includes('--slurp')) { stdout(JSON.stringify([(fs.existsSync('labels.json') ? JSON.parse(fs.readFileSync('labels.json')) : []).map(name => ({ name }))])); exit(0); }
     if (parts[3] === 'branches' && parts.length === 4) {
       // The branches of the repository (branches.json: names, the default is none), as `next` reads them.
       stdout(JSON.stringify((fs.existsSync('branches.json') ? JSON.parse(fs.readFileSync('branches.json')) : []).map(name => ({ name }))));
@@ -571,9 +573,28 @@ function issue(argv) {
   fs.writeFileSync('branches.json', JSON.stringify([...known, argv[argv.indexOf('--name') + 1]]));
 }
 
+/**
+ * gh auth|repo|project|label …: what the board setup (github-board.mjs) asks. Every call is kept in setup-calls; a copied board is number 9.
+ * The board has the six statuses and a Priority of four choices.
+ */
+function setup(argv, input, stdout, stderr, exit) {
+  fs.appendFileSync('setup-calls', argv.slice(1).join(' ') + '\n');
+  const [command, action] = argv.slice(1);
+  const board = { number: 9, id: 'PVT_new', url: 'https://github.com/orgs/acme/projects/9' };
+  if (command === 'repo' && action === 'view') stdout('{"viewerPermission":"ADMIN","url":"https://github.com/acme/app"}');
+  if (command === 'project' && ['copy', 'view'].includes(action)) stdout(JSON.stringify(board));
+  if (command === 'project' && action === 'field-list') {
+    const option = name => ({ id: name, name });
+    stdout(JSON.stringify({ fields: [
+      { id: 'F1', name: 'Status', options: ['Backlog', 'Ready', 'In progress', 'Automated review', 'Human review', 'Done'].map(option) },
+      { id: 'F2', name: 'Priority', options: ['Urgent', 'High', 'Medium', 'Low'].map(option) },
+    ] }));
+  }
+}
+
 /** Runs gh with ARGS (the arguments after "gh") and returns its stdout, or throws like execFileSync on a non-zero exit. */
 export function fakeGh(args, input = '') {
-  const script = { api, pr, issue }[args[0]];
+  const script = { api, pr, issue, auth: setup, repo: setup, project: setup, label: setup }[args[0]];
   if (!script) throw new Error(`The fake gh knows no command "${args[0]}"`);
   const out = [], err = [];
   try {

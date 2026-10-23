@@ -24,7 +24,7 @@ Its `launch.sh` and `launch.cmd` use the installer's absolute Node binary:
 - `NODE_OPTIONS` and `NODE_PATH` are cleared.
 - A Node inside a checkout is refused.
 - If that Node is removed later, SessionStart reports the hooks as off and reinstalls them for the next start.
-- The installers list older installations they no longer need; they never delete them.
+- Every hook call marks the installation it uses as used now. The installers remove installation folders nobody used for 30 days, never the one in use.
 
 Snapshots are immutable and named by version plus a hash of the copied files, so checkouts at different states install side by side; a snapshot that differs from its name is refused.
 New versions change hook commands and need trust again. Execution policies stay

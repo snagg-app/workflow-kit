@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
+import { readProfile } from './project-profile.mjs';
 
 const norm = path => resolve(path).replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
 
@@ -142,11 +143,9 @@ async function main() {
 
   // Volumes
   let prefixes = option['volume-prefix'] ?? [], protect = option['volume-protect'] ?? [];
-  try {
-    const project = JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8'));
-    prefixes = [...prefixes, ...(project.worktreeVolumePrefixes ?? [])];
-    protect = [...protect, ...(project.worktreeVolumeProtect ?? [])];
-  } catch { /* no project file */ }
+  const project = readProfile(root);
+  prefixes = [...prefixes, ...project.worktreeVolumePrefixes];
+  protect = [...protect, ...project.worktreeVolumeProtect];
   if (!prefixes.length || only) return;
   const docker = { file: 'docker', env: process.env };
   const names = await exec(docker, ['volume', 'ls', '-q']);

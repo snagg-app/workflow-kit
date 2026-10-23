@@ -5,7 +5,8 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SonarOtherPr } from './board-reviews.mjs';
+import { readProfileAt } from './project-profile.mjs';
+import { SonarOtherPr } from './sonar.mjs';
 import { shared } from './board-args.mjs';
 import { failed, isResult, result } from './board-result.mjs';
 
@@ -73,7 +74,7 @@ export function createMerge(env) {
 
   /**
    * After a merge into main or a release branch the `push` commands of `.github/workflow-project.json` as on the merge commit run here, in the
-   * foreground (sweep, release sync, pin). They run with BRANCH in a throwaway worktree on that commit, without setup (the kit is a submodule fetch or a link
+   * foreground (sweep, release sync, pin). They run with BRANCH in a throwaway worktree on that commit, without setup (the kit is a link
    * to the kit checkout that runs this, as the session hook does), and a project without such commands touches no git at all. A merge is never undone by a failure here;
    * it returns the note that says so.
    * ponytail: the commands run in bash, on Windows the one of Git for Windows (not WSL's), elsewhere /bin/bash; the 30 minutes kill bash, not the children it started;
@@ -84,20 +85,19 @@ export function createMerge(env) {
     let work;
     const run = gitAt;
     try {
-      const file = rest(`repos/${project.repository}/contents/.github/workflow-project.json?ref=${merged}`);
-      const commands = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')).push ?? [];
+      const commands = readProfileAt(rest, project.repository, merged).push;
       if (!commands.length) return;
       run(projectDirectory, 'fetch', '--quiet', 'origin', branch);
       work = mkdtempSync(join(tmpdir(), 'board-push-'));
       run(projectDirectory, 'worktree', 'add', '--quiet', '--detach', work, merged);
-      // the scripts need the kit: a submodule is fetched, a project without one gets the link the session hook makes (kit-hook.mjs checkKit)
-      if (run(work, 'ls-files', '--stage', '--', '.vendor/workflow-kit').startsWith('160000')) run(work, 'submodule', 'update', '--init', '.vendor/workflow-kit');
-      else { mkdirSync(join(work, '.vendor'), { recursive: true }); symlinkSync(kitRoot, join(work, '.vendor/workflow-kit'), 'junction'); }
+      // the scripts need the kit: the link the session hook makes (kit-hook.mjs checkKit)
+      mkdirSync(join(work, '.vendor'), { recursive: true });
+      symlinkSync(kitRoot, join(work, '.vendor/workflow-kit'), 'junction');
       for (const command of commands) runShell(run(projectDirectory, '--exec-path'), work, command, { BRANCH: branch });
     } catch (error) {
       return `note: the push commands of ${branch} failed (${String(error.message).split('\n')[0]})`;
     } finally {
-      if (work) try { try { rmSync(join(work, '.vendor/workflow-kit'), { force: true }); } catch { /* a submodule folder: the recursive remove below */ } rmSync(work, { recursive: true, force: true }); run(projectDirectory, 'worktree', 'prune'); } catch { /* only tidiness */ }
+      if (work) try { rmSync(join(work, '.vendor/workflow-kit'), { force: true }); rmSync(work, { recursive: true, force: true }); run(projectDirectory, 'worktree', 'prune'); } catch { /* only tidiness */ }
     }
   }
 

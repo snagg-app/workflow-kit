@@ -1,0 +1,81 @@
+// Zweck: bindet ein Projekt an sein GitHub-Board: kopiert oder prüft das Project, verknüpft das Repository, legt fehlende Labels an.
+// Aufruf: import { setupBoard } (kit.mjs setup) oder `node scripts/setup-github.mjs OWNER/REPO [NUMMER]`. Jeder GitHub-Aufruf läuft über github.mjs.
+// Vorlage und Labels stehen im Profil des Projekts ("boardTemplate", "labels"); ohne sie gelten das Board des Kits und die sieben Standard-Labels.
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, sep } from 'node:path';
+import { externalTool } from './checkout-root.mjs';
+import { boardTemplate, projectLabels, readProfile, statusMismatch } from './project-profile.mjs';
+
+const kitRoot = fileURLToPath(new URL('..', import.meta.url));
+
+/** OWNER/REPO of the `origin` remote, or undefined when it is no GitHub remote. */
+function originRepository(root) {
+  const git = externalTool('git', root);
+  const remote = spawnSync(git.file, ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8', env: git.env }).stdout.trim();
+  return /github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(remote)?.[1];
+}
+
+/**
+ * Binds the project in `root` to its board. `repo` and `number` name the target by hand; without `repo` the `origin` remote decides and a
+ * project that is already bound stays as it is: no network, no GraphQL quota (#730). Returns { status, note, text }; a failed check throws.
+ */
+export function setupBoard({ root, github, repo, number: requestedNumber, kitProject }) {
+  const marker = join(root, '.github/workflow-project.json');
+  const byHand = repo !== undefined;
+  repo ??= originRepository(root);
+  if (!repo) return { status: 1, stderr: 'no GitHub remote "origin"' };
+  const saved = existsSync(marker) ? readProfile(root) : null;
+  if (!byHand && saved?.repository?.toLowerCase() === repo.toLowerCase() && saved.number && saved.id)
+    return { status: 0, note: `already bound to project #${saved.number}; run setup-github.mjs ${repo} to redo it` };
+  try { github.run(['auth', 'status'], { stdio: 'pipe' }); } catch { return { status: 1, stderr: 'gh is not signed in' }; }
+
+  const gh = (...args) => github.run(args, { stdio: 'pipe' }).trim();
+  const [owner, name] = repo.split('/');
+  const outside = path => path !== root && !path.startsWith(root + sep);
+  const directory = dirname(marker);
+  const present = path => lstatSync(path, { throwIfNoEntry: false });
+  assert.ok(!present(directory) || !outside(realpathSync(directory)), 'Project directory leaves checkout');
+  assert.ok(!present(marker) || present(marker).isFile(), 'Project marker must be a regular file');
+  // GitHub names are case-insensitive: a remote written acme/app is the recorded acme/App.
+  if (saved?.repository) assert.equal(saved.repository.toLowerCase(), repo.toLowerCase(), 'Recorded project belongs to another repository');
+  const meta = JSON.parse(gh('repo', 'view', repo, '--json', 'viewerPermission,url'));
+  assert.ok(['ADMIN', 'MAINTAIN', 'WRITE'].includes(meta.viewerPermission), 'Repository write permission required');
+  const number = requestedNumber ?? saved?.number;
+  if (number) assert.match(String(number), /^\d+$/, 'Recorded project number must be numeric');
+  const template = number ? undefined : boardTemplate(saved ?? {}, kitProject ?? readProfile(kitRoot));
+  const project = number
+    ? JSON.parse(gh('project', 'view', String(number), '--owner', owner, '--format', 'json'))
+    : JSON.parse(gh('project', 'copy', String(template.number), '--source-owner', template.owner, '--target-owner', owner, '--title', name, '--format', 'json'));
+  const saveProject = () => {
+    mkdirSync(directory, { recursive: true });
+    // Keep project-owned settings such as "start"; only the board binding is rewritten.
+    writeFileSync(marker, JSON.stringify({ ...saved?.raw, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
+  };
+  // Retain newly copied boards on failure so retry cannot create duplicates.
+  if (!number) saveProject();
+  const fields = JSON.parse(gh('project', 'field-list', String(project.number), '--owner', owner, '--format', 'json', '--limit', '100'));
+  const status = fields.fields.find(f => f.name === 'Status');
+  const mismatch = statusMismatch(status?.options?.map(o => o.name) ?? [], saved ?? {});
+  assert.ok(!mismatch, mismatch);
+  const priority = fields.fields.find(f => f.name === 'Priority');
+  assert.ok(priority, 'Existing board lacks Priority; add a usable priority scale without replacing foreign fields');
+  // Organization issue fields expose their choices on issueField rather than Project options.
+  const priorityOptions = priority.options?.length ? priority.options : github.graphql(
+    'query($id:ID!) { node(id:$id) { ... on ProjectV2SingleSelectField { issueField { ... on IssueFieldSingleSelect { options { name } } } } } }',
+    { id: priority.id }).node?.issueField?.options;
+  assert.ok(priorityOptions?.length >= 2, 'Priority needs a usable explicit scale; configure/verify its choices before completing setup');
+  gh('project', 'link', String(project.number), '--owner', owner, '--repo', repo);
+  const labels = new Set(JSON.parse(gh('api', `repos/${repo}/labels?per_page=100`, '--paginate', '--slurp')).flat().map(l => l.name));
+  for (const { name: label, color } of projectLabels(saved ?? {}))
+    if (!labels.has(label)) gh('label', 'create', label, '--repo', repo, '--color', color);
+  saveProject();
+  return {
+    status: 0, note: `bound to project #${project.number}`,
+    text: `Project linked: ${project.url}\nLabels configured; existing labels preserved.\n`
+      + `Remaining account settings: enable only the chosen reviewers; configure Project Auto-add for repo:${repo} is:issue.\n`
+      + 'Verify native automation, permissions and required checks in GitHub; configuration is not proof of an active integration.',
+  };
+}
