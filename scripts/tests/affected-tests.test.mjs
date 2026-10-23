@@ -30,9 +30,9 @@ test('a hook change selects the hook tests and nothing slower than needed', () =
 });
 
 test('a changed test runs itself; an unmapped script is reported instead of skipped', () => {
-  const result = affectedTests(['scripts/tests/setup.test.mjs', 'scripts/setup-github.mjs']);
+  const result = affectedTests(['scripts/tests/setup.test.mjs', 'scripts/measure-base-load.mjs']);
   assert.ok(names(result).includes('setup.test.mjs'));
-  assert.deepEqual(result.unmapped, ['scripts/setup-github.mjs']);
+  assert.deepEqual(result.unmapped, ['scripts/measure-base-load.mjs']);
 });
 
 test('a project map names the commands of the changed paths, each once', () => {
