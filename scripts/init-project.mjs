@@ -67,7 +67,7 @@ export function initProject({ root, existing = false, log = console.log }) {
   log(noAgentFound ? `No agent found in the project; hooks written for all: ${hookNames.join(', ')}.` : `Hooks written for the agents found: ${hookNames.join(', ')}.`);
 
   const patterns = ['/.vendor/workflow-kit', '/.workflow-kit/', '/.scratch/','/.impeccable/vendor/', '/.impeccable/setup-*/',
-    '.claude/settings.local.json', '**/.impeccable/config.local.json', '**/skills/impeccable/scripts/bin/',
+    ...Object.values(agents).map(agent => agent.localSettings).filter(Boolean), '**/.impeccable/config.local.json', '**/skills/impeccable/scripts/bin/',
     // Skills an agent reads through links stay out of Git; its own skills are committed.
     ...Object.values(agents).filter(agent => agent.linksShared).flatMap(({ skills }) => [`/${skills}/*`, ...ownSkills().map(skill => `!/${skills}/${skill}/`)])];
   const ignore = existsSync(safe('.gitignore')) ? text(safe('.gitignore')) : '';

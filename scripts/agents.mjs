@@ -5,7 +5,8 @@
 // label: the name messages use. sessionEnv: the variable that names the agent's session (claims, #789).
 // sessionFromDirectory: a pattern on the working directory whose first group is the session, for an agent whose worktrees carry it (#810).
 // detect: project paths that show a project uses this agent (kit setup writes hooks only for detected agents; none detected: for all).
-// hooks: settings file, PostToolUse matcher and handler shape (shell key for bash handlers, a PowerShell variant, file description; description: the settings file takes a description line, its text comes from the provider; fingerprint: where a session keeps the settings fingerprint, absent for an agent that reloads hooks itself); null for an agent without hooks (level 0 of AGENT_RULES: AGENTS.md, skills, board.mjs, kit check).
+// localSettings: the agent's personal settings file (kept out of Git). plugins: its plugin list under the home directory (#815).
+// hooks: settings file, trust: the command a human uses to trust the hooks, PostToolUse matcher and handler shape (shell key for bash handlers, a PowerShell variant, file description; description: the settings file takes a description line, its text comes from the provider; fingerprint: where a session keeps the settings fingerprint, absent for an agent that reloads hooks itself); null for an agent without hooks (level 0 of AGENT_RULES: AGENTS.md, skills, board.mjs, kit check).
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
@@ -21,7 +22,7 @@ export const agents = {
     skills: sharedSkills,
     agents: '.codex/agents',
     upstreamAgents: '.agents/skills/impeccable/agents',
-    hooks: { file: '.codex/hooks.json', matcher: 'Edit|Write|apply_patch', windows: true },
+    hooks: { file: '.codex/hooks.json', matcher: 'Edit|Write|apply_patch', windows: true, trust: '/hooks' },
   },
   claude: {
     label: 'Claude Code',
@@ -32,8 +33,10 @@ export const agents = {
     linksShared: true,
     agents: '.claude/agents',
     upstreamAgents: '.claude/agents',
+    localSettings: '.claude/settings.local.json',
+    plugins: '.claude/plugins/installed_plugins.json',
     hooks: {
-      file: '.claude/settings.json', matcher: 'Edit|Write', shell: 'bash',
+      file: '.claude/settings.json', matcher: 'Edit|Write', shell: 'bash', trust: '/hooks',
       fingerprint: { configEnv: 'CLAUDE_CONFIG_DIR', configDir: '.claude' }, description: true,
     },
   },
