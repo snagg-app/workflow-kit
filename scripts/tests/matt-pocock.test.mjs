@@ -31,7 +31,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
   git(fixture, 'add', '.gitmodules');
   git(fixture, 'update-index', '--add', '--cacheinfo', `160000,${revision},.vendor/matt-pocock-skills`);
   mkdirSync(join(fixture, 'scripts'));
-  for (const name of ['setup-skills.mjs', 'provider.mjs', 'provider-matt-pocock.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'lock.mjs', 'provider-links.mjs', 'write-guard.mjs', 'provider-list.mjs', 'project-profile.mjs', 'git-tool.mjs', 'board-process.mjs', 'agents.mjs', 'versions.json'])
+  for (const name of ['setup-skills.mjs', 'provider.mjs', 'provider-matt-pocock.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'lock.mjs', 'provider-links.mjs', 'write-guard.mjs', 'provider-list.mjs', 'project-profile.mjs', 'git-tool.mjs', 'run-program.mjs', 'agents.mjs', 'versions.json'])
     copyFileSync(join(kit, 'scripts', name), join(fixture, 'scripts', name));
   for (const name of ['ponytail', 'impeccable'])
     write(join(fixture, 'scripts', `provider-${name}.mjs`), `import {writeFileSync} from "node:fs"; export default { name: "${name}", label: "${name}", source: ".vendor/${name}", skills: [], build() { writeFileSync("other-generator-ran", ""); return { outputs: [], message: "" }; } };\n`);

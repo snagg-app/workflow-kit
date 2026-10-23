@@ -1,21 +1,20 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { externalTool, projectRoot } from './checkout-root.mjs';
+import { projectRoot } from './checkout-root.mjs';
+import { gitResultIn } from './git-tool.mjs';
 
 // Explicit setup, per clone: copies the project's .githooks into the clone's
 // Git directory and points core.hooksPath there, so a checked-out branch cannot replace the hooks Git runs (#194).
 // Only a rerun updates the copy. Automatic hooks never run this file. --check only reports.
 /** Copies the project's .githooks into the clone's Git directory and points core.hooksPath there; `check` only reports. Prints what it did. */
 export function installGitHooks({ root, check = false, log = console.log }) {
-  const git = externalTool('git', root);
   // Inherited repository selection (e.g. when called from a Git hook) would redirect Git away from root.
-  for (const name of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR']) delete git.env[name];
+  const git = gitResultIn({ env: { GIT_DIR: undefined, GIT_WORK_TREE: undefined, GIT_COMMON_DIR: undefined } }, root);
   const run = (...args) => {
-    const result = spawnSync(git.file, args, { cwd: root, env: git.env, encoding: 'utf8' });
+    const result = git(root, ...args);
     assert.equal(result.error, undefined, result.error?.message);
     return result;
   };

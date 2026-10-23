@@ -5,7 +5,7 @@ import childProcess from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { format } from 'node:util';
 import { workerData } from 'node:worker_threads';
-import { useProcessAdapter } from '../board-process.mjs';
+import { useProcessAdapter } from '../run-program.mjs';
 import { useGhAdapter } from '../github.mjs';
 import { useSonarAdapter } from '../sonar.mjs';
 import { fakeGh, fakeWrite } from './fake-gh.mjs';
