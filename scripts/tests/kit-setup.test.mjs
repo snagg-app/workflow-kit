@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { statusMismatch } from '../project-profile.mjs';
@@ -43,6 +43,16 @@ test('kit setup sets up an empty project and a second run changes nothing', { sk
   const second = run();
   assert.equal(second.status, 0, second.stdout + second.stderr);
   assert.deepEqual([snapshot(project), snapshot(home)], before);
+});
+
+test('kit setup does not write the profile through a link that leaves the project (#797)', { skip: skipWithoutSubmodules() }, t => {
+  const { project, run } = setup(t), outside = temporary(t, 'kit setup outside ');
+  writeFileSync(join(project, 'AGENTS.md'), 'own\n');
+  symlinkSync(outside, join(project, '.github'), 'junction');
+  const result = run();
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /FAIL {2}profile/);
+  assert.deepEqual(readdirSync(outside), [], 'nothing was written through the link');
 });
 
 test('kit setup leaves a project that is already bound to its board alone, without any network call (#730)', { skip: skipWithoutSubmodules() }, t => {

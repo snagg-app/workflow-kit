@@ -32,7 +32,7 @@ export const TABLE = [
   [/^scripts\/affected-tests\.mjs$/, ['affected-tests.test.mjs']],
   [/^scripts\/worktree-gc\.mjs$/, ['worktree-gc.test.mjs']],
   [/^scripts\/checkout-root\.mjs$/, [ALL]],
-  [/^scripts\/provider-links\.mjs$/, [NOT_BOARD]],
+  [/^scripts\/(provider-links|write-guard)\.mjs$/, [NOT_BOARD]],
   [/^scripts\/lock\.mjs$/, ['provider.test.mjs', 'ponytail-hooks.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs']],
   [/^scripts\/tests\/fixtures\.mjs$/, ['git-hooks', 'kit-init-hook', 'kit-setup', 'ponytail-batch', 'ponytail-hooks', 'renovate-regenerate', 'setup'].map(n => `${n}.test.mjs`)],
   [/^scripts\/install-git-hooks\.mjs$/, ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']],

@@ -1,62 +1,12 @@
 // Provider discovery files are ordinary, committable files. Replaced local content stays recoverable.
 import assert from 'node:assert/strict';
-import { cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { cpSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { agents, sharedSkills } from './agents.mjs';
 import { ownSkills } from './provider-list.mjs';
+import { checkDirectory, localDirectory, moveAside } from './write-guard.mjs';
 
 const present = path => lstatSync(path, { throwIfNoEntry: false });
-const stamp = new Date().toISOString().replaceAll(':', '-');
-
-/** Assert `path` lies below `root` and no existing component on the way is a link or a file (no redirected state). */
-export function checkDirectory(root, path) {
-  const inside = relative(root, path);
-  assert.ok(!isAbsolute(inside) && inside.split(sep)[0] !== '..', `Directory leaves checkout: ${path}`);
-  let current = root;
-  for (const part of inside.split(sep).filter(Boolean)) {
-    current = join(current, part);
-    const entry = present(current);
-    if (!entry) break;
-    assert.ok(entry.isDirectory(), `Refusing linked or non-directory path: ${relative(root, current)}`);
-  }
-}
-
-/** Create `path` as a directory below `root` after `checkDirectory`. */
-export function localDirectory(root, path) {
-  checkDirectory(root, path);
-  mkdirSync(path, { recursive: true });
-}
-
-/** renameSync that waits out the short locks Windows antivirus and indexers put on fresh files. */
-export function rename(from, to) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return renameSync(from, to);
-    } catch (error) {
-      if (attempt === 30 || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code)) throw error;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 100);
-    }
-  }
-}
-
-/** Move whatever is at `path` to .workflow-kit/replaced/<stamp>/, keeping it for the user. */
-export function moveAside(root, path, log = console.log) {
-  // Through a linked ancestor, `path` would name an entry somewhere else.
-  checkDirectory(root, dirname(path));
-  const entry = present(path);
-  if (!entry) return;
-  const destination = join(root, '.workflow-kit/replaced', stamp, relative(root, path));
-  localDirectory(root, dirname(destination));
-  const target = entry.isSymbolicLink() ? readlinkSync(path) : null;
-  if (process.platform !== 'win32' && target && !isAbsolute(target)) {
-    // Moving a relative link verbatim would break recovery. Keep its original target
-    // without reading through it; remove the old link only after the backup exists.
-    // Preserve `..` after symlink components rather than normalizing it lexically.
-    symlinkSync(dirname(path) + sep + target, destination);
-    unlinkSync(path);
-  } else rename(path, destination);
-  log(`Moved ${relative(root, path)} to ${relative(root, destination)}`);
-}
 
 /** Compare ordinary files/directories without following a previous provider link. */
 function same(path, source) {

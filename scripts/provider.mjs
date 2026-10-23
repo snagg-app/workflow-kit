@@ -14,7 +14,8 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { withLock } from './lock.mjs';
-import { checkDirectory, linkSkills, localDirectory, materialize, moveAside, rename } from './provider-links.mjs';
+import { linkSkills, materialize } from './provider-links.mjs';
+import { checkDirectory, localDirectory, moveAside, rename } from './write-guard.mjs';
 import { providerList, providerNamed } from './provider-list.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');

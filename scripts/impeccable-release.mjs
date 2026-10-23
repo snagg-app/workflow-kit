@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { externalTool } from './checkout-root.mjs';
 import { providers } from './agents.mjs';
-import { checkDirectory } from './provider-links.mjs';
+import { checkDirectory } from './write-guard.mjs';
 
 const assets = ['impeccable-darwin-arm64', 'impeccable-darwin-x64',
   'impeccable-linux-arm64', 'impeccable-linux-x64', 'impeccable-windows-x64.exe'];

@@ -2,20 +2,19 @@
 // Aufruf: Bei Einrichtung oder Kit-Updates, aus dem gemeinsamen Kit-Checkout (--cwd PROJEKT); --existing lässt die Vorlagen weg.
 // Nutzen: .vendor/workflow-kit zeigt auf den gemeinsamen Checkout; Kit-Handler werden an ihrer Kennung ersetzt; fremde Hooks und Einstellungen bleiben.
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { agents, entryFile, hookAgents } from './agents.mjs';
 import { hookSettings } from './hooks.mjs';
 import { linkKit } from './kit-check.mjs';
-import { checkDirectory } from './provider-links.mjs';
 import { ownSkills } from './provider-list.mjs';
 import { languages, projectFeatures, readProfile } from './project-profile.mjs';
+import { projectFile, writeProjectFile } from './write-guard.mjs';
 
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
-const present = p => lstatSync(p, { throwIfNoEntry: false });
 // Every kit handler carries this id; the template files stay the only place that names it.
 const ours = handler => handler.id === 'workflow-kit';
 
@@ -23,19 +22,8 @@ const ours = handler => handler.id === 'workflow-kit';
 export function initProject({ root, existing = false, log = console.log }) {
   // The kit is the shared checkout; it configures itself or the project named by --cwd, never a project that contains the kit.
   assert.ok(root === kit || !(kit + sep).startsWith(root + sep), 'Run init-project from the shared kit checkout (a clone next to the project, not inside it): node <kit>/scripts/init-project.mjs --cwd <project>');
-  /** A project file below the checkout, reached without links, that is a plain file if it exists. */
-  function safe(file) {
-    const target = join(root, file);
-    checkDirectory(root, dirname(target));
-    assert.ok(!present(target) || present(target).isFile(), `Refusing non-file target: ${file}`);
-    return target;
-  }
-
-  function write(file, value) {
-    const target = safe(file);
-    mkdirSync(dirname(target), { recursive: true });
-    if (!existsSync(target) || text(target) !== value) writeFileSync(target, value);
-  }
+  const safe = file => projectFile(root, file);
+  const write = (file, value) => writeProjectFile(root, file, value);
 
   /** Replace the kit's handlers in a hook file; foreign handlers, groups and settings stay. */
   function mergeHooks(name, template) {

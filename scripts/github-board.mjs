@@ -3,11 +3,12 @@
 // Vorlage und Labels stehen im Profil des Projekts ("boardTemplate", "labels"); ohne sie gelten das Board des Kits und die sieben Standard-Labels.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, sep } from 'node:path';
+import { join } from 'node:path';
 import { externalTool } from './checkout-root.mjs';
 import { boardTemplate, projectLabels, readProfile, statusMismatch } from './project-profile.mjs';
+import { projectFile, writeProjectFile } from './write-guard.mjs';
 
 const kitRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -23,7 +24,7 @@ function originRepository(root) {
  * project that is already bound stays as it is: no network, no GraphQL quota (#730). Returns { status, note, text }; a failed check throws.
  */
 export function setupBoard({ root, github, repo, number: requestedNumber, kitProject }) {
-  const marker = join(root, '.github/workflow-project.json');
+  const markerName = '.github/workflow-project.json', marker = join(root, markerName);
   const byHand = repo !== undefined;
   repo ??= originRepository(root);
   if (!repo) return { status: 1, stderr: 'no GitHub remote "origin"' };
@@ -34,11 +35,7 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
 
   const gh = (...args) => github.run(args, { stdio: 'pipe' }).trim();
   const [owner, name] = repo.split('/');
-  const outside = path => path !== root && !path.startsWith(root + sep);
-  const directory = dirname(marker);
-  const present = path => lstatSync(path, { throwIfNoEntry: false });
-  assert.ok(!present(directory) || !outside(realpathSync(directory)), 'Project directory leaves checkout');
-  assert.ok(!present(marker) || present(marker).isFile(), 'Project marker must be a regular file');
+  projectFile(root, markerName); // refuses a path that leaves the checkout or a marker that is no plain file
   // GitHub names are case-insensitive: a remote written acme/app is the recorded acme/App.
   if (saved?.repository) assert.equal(saved.repository.toLowerCase(), repo.toLowerCase(), 'Recorded project belongs to another repository');
   const meta = JSON.parse(gh('repo', 'view', repo, '--json', 'viewerPermission,url'));
@@ -50,9 +47,8 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
     ? JSON.parse(gh('project', 'view', String(number), '--owner', owner, '--format', 'json'))
     : JSON.parse(gh('project', 'copy', String(template.number), '--source-owner', template.owner, '--target-owner', owner, '--title', name, '--format', 'json'));
   const saveProject = () => {
-    mkdirSync(directory, { recursive: true });
     // Keep project-owned settings such as "start"; only the board binding is rewritten.
-    writeFileSync(marker, JSON.stringify({ ...saved?.raw, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
+    writeProjectFile(root, markerName, JSON.stringify({ ...saved?.raw, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
   };
   // Retain newly copied boards on failure so retry cannot create duplicates.
   if (!number) saveProject();
