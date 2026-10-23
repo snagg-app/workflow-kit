@@ -2,7 +2,8 @@
 // skills: where the agent finds skills. agents: where it finds agent definitions; upstreamAgents: where Impeccable ships them.
 // linksShared: the agent reads the shared skills through links (junction or symlink, never committed), not copies.
 // detectEnv: an environment variable only this agent's session sets; defaultAgent is the one without.
-// sessionEnv: the variable that names the agent's session (claims, #789).
+// label: the name messages use. sessionEnv: the variable that names the agent's session (claims, #789).
+// sessionFromDirectory: a pattern on the working directory whose first group is the session, for an agent whose worktrees carry it (#810).
 // detect: project paths that show a project uses this agent (kit setup writes hooks only for detected agents; none detected: for all).
 // hooks: settings file, PostToolUse matcher and handler shape (shell key for bash handlers, a PowerShell variant, file description; description: the settings file takes a description line, its text comes from the provider; fingerprint: where a session keeps the settings fingerprint, absent for an agent that reloads hooks itself); null for an agent without hooks (level 0 of AGENT_RULES: AGENTS.md, skills, board.mjs, kit check).
 import { existsSync } from 'node:fs';
@@ -13,6 +14,7 @@ export const sharedSkills = '.agents/skills';
 
 export const agents = {
   codex: {
+    label: 'Codex',
     detectEnv: 'CODEX_THREAD_ID',
     sessionEnv: 'CODEX_THREAD_ID',
     detect: ['.codex'],
@@ -22,6 +24,8 @@ export const agents = {
     hooks: { file: '.codex/hooks.json', matcher: 'Edit|Write|apply_patch', windows: true },
   },
   claude: {
+    label: 'Claude Code',
+    sessionFromDirectory: /[\\/]agent-(\w+)(?:[\\/]|$)/,
     sessionEnv: 'CLAUDE_CODE_SESSION_ID',
     detect: ['.claude'],
     skills: '.claude/skills',
@@ -40,6 +44,16 @@ export const providers = Object.values(agents).map(agent => dirname(agent.skills
 /** Provider folders that hold real skill copies; the others link to them. */
 export const sourceProviders = Object.values(agents).filter(agent => !agent.linksShared).map(agent => dirname(agent.skills));
 export const agentNames = Object.keys(agents);
+/** "A", "A and B", "A, B and C": the labels of the given agents (default: all of the table) for a message. */
+export function agentLabels(names = agentNames) {
+  const labels = names.map(name => agents[name].label ?? name);
+  return labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels.join('');
+}
+/** The agents a project uses (one of their detect paths exists); none found, as in a new project: all of them. */
+export function projectAgents(root) {
+  const found = agentNames.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
+  return found.length ? found : agentNames;
+}
 /** The agent whose session this process runs in. */
 export const detectAgent = (env = process.env) => Object.keys(agents).find(name => agents[name].detectEnv && env[agents[name].detectEnv]) ?? defaultAgent;
 /** The agents with hooks that a project uses (one of their detect paths exists); none found, as in a new project: all of them. */

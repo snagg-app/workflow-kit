@@ -6,12 +6,13 @@ import { claimIn, claimLine, commentClaims, isReply, ownSession, withClaim } fro
 
 // #789: a new agent is one entry in the table; its claim is written, found and its session read without another edit.
 test('an agent added to the table claims and is recognised as own', () => {
-  agents.gemini = { detectEnv: 'GEMINI_SESSION', sessionEnv: 'GEMINI_SESSION' };
+  agents.gemini = { detectEnv: 'GEMINI_SESSION', sessionEnv: 'GEMINI_SESSION', sessionFromDirectory: /[\\/]gem-(\w+)(?:[\\/]|$)/ };
   try {
     const env = { GEMINI_SESSION: 'G1' };
     assert.equal(detectAgent(env), 'gemini');
     const session = ownSession(undefined, env, '/work');
     assert.equal(session, 'G1');
+    assert.equal(ownSession(undefined, {}, '/x/gem-zz9'), 'zz9', 'the directory rule of the new agent');
     const line = claimLine(session, detectAgent(env));
     assert.equal(line, 'Agent: gemini, Session: G1');
     const issue = { comments: { nodes: [{ body: `Claimed.\n${line}\nBasis: main\n` }] } };

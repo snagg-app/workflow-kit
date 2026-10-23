@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { agents, providers } from './agents.mjs';
+import { agentLabels, agents, providers } from './agents.mjs';
 import { checkDirectory } from './write-guard.mjs';
 
 const uiDependencies = ['react', 'react-dom', 'react-native', 'expo', 'vue', 'svelte', 'solid-js', 'preact', 'lit', '@angular/core', 'next', 'astro'];
@@ -116,7 +116,7 @@ const self = {
     return {
       outputs: [...skills, ...fresh].map(file => [file, file]),
       retire: stale.map(file => join(c.root, file)),
-      message: `Impeccable ${c.revision.slice(0, 7)}: committed Codex and Claude Code skills and companions refreshed.\n`
+      message: `Impeccable ${c.revision.slice(0, 7)}: committed ${agentLabels()} skills and companions refreshed.\n`
         + `Hook engine ${version} is installed by "provider.mjs impeccable install" and needs personal trust.`,
     };
   },

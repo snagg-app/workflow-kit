@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { providers, sharedSkills, sourceProviders } from './agents.mjs';
+import { agentLabels, providers, sharedSkills, sourceProviders } from './agents.mjs';
 
 const patch = 'scripts/ponytail/adaptations.patch';
 const skillName = /^ponytail(?:-[a-z0-9]+)*$/;
@@ -83,7 +83,7 @@ const self = {
     // Skills dropped upstream, including a project's files at a kit-owned name, move aside.
     const retire = providers.map(p => path.join(c.root, p, 'skills')).filter(existsSync)
       .flatMap(dir => readdirSync(dir).filter(name => skillName.test(name) && !skills.includes(name)).map(name => path.join(dir, name)));
-    return { outputs, retire, message: `Ponytail ${c.revision.slice(0, 7)}: committed Codex and Claude Code skills and hook sources refreshed.` };
+    return { outputs, retire, message: `Ponytail ${c.revision.slice(0, 7)}: committed ${agentLabels()} skills and hook sources refreshed.` };
   },
 
   install: {
