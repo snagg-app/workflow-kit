@@ -16,7 +16,7 @@ test('review status aliases select the live option and keep validation and backl
       rmSync(file('mutations'), { force: true });
       const refused = run('field', '1', 'Status', requested);
       assert.equal(refused.status, 2, refused.stdout + refused.stderr);
-      assert.match(refused.stdout, /needs the PR number/);
+      assert.match(refused.stdout, /braucht die PR-Nummer/);
       assert.equal(existsSync(file('mutations')), false, 'The alias must not bypass backlinks');
       const result = run('field', '1', 'Status', requested, '7');
       assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -175,7 +175,7 @@ test('Automated review requires the declared open PR and every issue backlink be
   };
   writePR();
   writeBacklink(1, []);
-  assert.match(reject('field', '1', 'Status', 'Automated review').stdout, /needs the PR number: field ISSUE Status "Automated review" PR/);
+  assert.match(reject('field', '1', 'Status', 'Automated review').stdout, /braucht die PR-Nummer: field ISSUE Status "Automated review" PR/);
   reject('field', '1', 'Status', 'Automated review');
   reject('field', '1', 'Status', 'Automated review', '--oops');
   reject('field', '1', 'Status', 'Automated review', '0');

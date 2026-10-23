@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { shared } from './board-args.mjs';
 import { result } from './board-result.mjs';
+import { textsFor } from './project-profile.mjs';
 import { args, blockerRepository, github, graphql, issueProject, name, number, owner, project, rest, restAll, sleep, state, validBlocker } from './board-context.mjs';
 import { isPartialPr } from './board-claims.mjs';
 import { isSpec, lines, readIssue, specRefusal } from './board-common.mjs';
@@ -44,10 +45,11 @@ const findBacklink = (comments, prUrl) => comments.find(comment => (comment.body
 function verifyBacklinks(issue) {
   const lines = [];
   const [prRef, ...extraIssues] = state.delivered ?? fieldWords().slice(2);
-  assert.ok(prRef !== undefined, 'Automated review needs the PR number: field ISSUE Status "Automated review" PR [OTHER_ISSUE...]');
+  const texts = textsFor(project), review = project.statuses.automatedReview;
+  assert.ok(prRef !== undefined, texts.reviewNeedsPr(review));
   const positive = ref =>/^\d+$/.test(ref ?? '') && Number.isSafeInteger(Number(ref)) && Number(ref) > 0;
   assert.ok(positive(prRef) && extraIssues.every(ref => validBlocker(ref) && positive(ref.slice(ref.lastIndexOf('#') + 1))),
-    'Automated review requires PR [OTHER_ISSUE...]; post and read back every issue backlink first.');
+    texts.reviewNeedsLinks(review));
   const prNumber = Number(prRef);
   const { pullRequest: pr } = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
   pullRequest(number:$number){number url state isDraft body}}}`, { owner, name, number: prNumber }).repository;

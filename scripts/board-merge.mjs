@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readProfileAt } from './project-profile.mjs';
+import { readProfileAt, textsFor } from './project-profile.mjs';
 import { SonarOtherPr } from './sonar.mjs';
 import { shared } from './board-args.mjs';
 import { failed, isResult, result } from './board-result.mjs';
@@ -227,7 +227,7 @@ async function merge() {
         for (let read = 1; (open = rest(path).state !== 'closed') && read < 5; read++) sleep(numberOption('--interval', 3));
         if (open) {
           github.write('POST', `${path}/comments`,
-            { body: `Geschlossen von \`board.mjs merge --stack\`: PR #${layer} ist in ${memory.stackState.trunk} gemergt, GitHub hat das Issue nicht selbst geschlossen.\n` });
+            { body: `${textsFor(project).closedByMerge(layer, memory.stackState.trunk)}\n` });
           github.write('PATCH', path, { fields: { state: 'closed', state_reason: 'completed' } });
         }
         notes.push(`issue #${issueNumber} (PR #${layer}): closed`);

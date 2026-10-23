@@ -48,7 +48,7 @@ test('start prints the kit hints of the session hook, so an agent without hooks 
   env.WORKFLOW_KIT_DIR = join(dirname(checkout), 'no-such-kit');
   const result = run('start', '1', '--session', 'S1');
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /shared Workflow Kit checkout .* is missing or incomplete/);
+  assert.match(result.stdout + result.stderr, /Workflow-Kit-Checkout .* fehlt oder ist unvollständig/);
   assert.equal(readFileSync(file('stored'), 'utf8'), 'In progress');
 });
 

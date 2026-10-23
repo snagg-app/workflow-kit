@@ -183,7 +183,7 @@ test('handoff passes a Refs PR beside the one closing PR through its own gate an
   writeFileSync(join(checkout, 'issues-comments.json'), '[]');
   const uncommented = attempt(links(link(8)));
   assert.equal(uncommented.status, 1);
-  assert.match(uncommented.stdout, /no handoff comment/);
+  assert.match(uncommented.stdout, /kein Übergabe-Kommentar/);
 
   // Two open closing PRs stay unknown, and so does a PR that nothing links.
   const two = attempt(links(link(8), link(9)));
@@ -272,7 +272,7 @@ test('handoff names every missing point at once, issue side and PR side together
   writeFileSync(join(checkout, 'issues-comments.json'), JSON.stringify([]));
   const result = run('handoff', '1', '7', '--interval', '0');
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  for (const part of [/not assigned/, /no handoff comment/, /not natively linked/]) assert.match(result.stdout, part);
+  for (const part of [/not assigned/, /kein Übergabe-Kommentar/, /not natively linked/]) assert.match(result.stdout, part);
   assert.equal(existsSync(join(checkout, 'mutations')), false);
 });
 
