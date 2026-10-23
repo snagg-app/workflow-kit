@@ -76,10 +76,10 @@ function currentIssuePr(issue) {
 const isPartialPr = (issue, prNumber) => { const { number } = currentIssuePr(issue); return number !== undefined && number !== prNumber; };
 // ponytail: sessions are told apart by the id the driver passes, not authenticated; Claude and Codex share one login.
 /** The open PR of the issue whose claim names SESSION. */
-const ownPr = (issue, session) => session ? openPrs(issue).find(pr => claimOf(pr)?.[2] === session) : undefined;
+const ownPr = (issue, session) => session ? openPrs(issue).find(pr => claimOf(pr)?.session === session) : undefined;
 
 /** Whether the claim of the issue is SESSION's: the open PR's, else the newest claim comment. */
-const isOwn = (issue, session) => Boolean(session) && (openPrs(issue).length ? Boolean(ownPr(issue, session)) : commentClaims(issue).at(-1)?.[2] === session);
+const isOwn = (issue, session) => Boolean(session) && (openPrs(issue).length ? Boolean(ownPr(issue, session)) : commentClaims(issue).at(-1)?.session === session);
 
 /**
  * Work of someone on the issue: an open PR that closes it (a Draft too) or a branch `<agent>/<number>-…`. Only the claim of the
@@ -92,11 +92,11 @@ function workReasons(issue, session, takeover) {
   const claim = prs.length ? undefined : commentClaims(issue).at(-1);
   const mayTake = session && (prs.length || claim) && (takeover || isStale(issue));
   const heads = new Set(prs.map(pr => pr.headRefName));
-  const describe = pr => `open PR ${refOf(pr.repository, pr.number)}${pr.headRefName ? ` (branch ${pr.headRefName}${claimOf(pr) ? `, ${claimOf(pr)[0]}` : ''})` : ''}`;
+  const describe = pr => `open PR ${refOf(pr.repository, pr.number)}${pr.headRefName ? ` (branch ${pr.headRefName}${claimOf(pr) ? `, ${claimOf(pr).line}` : ''})` : ''}`;
   const blocked = mayTake ? [] : prs.map(pr => `${describe(pr)} closes this issue; ${own}`);
   const why = isStale(issue) ? `stale %: no activity for ${ago(idleMs(issue))}` : '%: --takeover';
   const notes = mayTake ? prs.map(pr => `${why.replace('%', describe(pr))}; start takes it over`) : [];
-  if (claim) (mayTake ? notes : blocked).push(mayTake ? `${why.replace('%', `claim of session ${claim[2]}`)}; start takes it over` : `claimed by ${claim[1]} (session ${claim[2]}) without a PR yet; ${own}`);
+  if (claim) (mayTake ? notes : blocked).push(mayTake ? `${why.replace('%', `claim of session ${claim.session}`)}; start takes it over` : `claimed by ${claim.agent} (session ${claim.session}) without a PR yet; ${own}`);
   // A branch without an open PR (#504): without own commits it holds nothing, without a commit for staleHours it is orphaned (a note), else it holds.
   for (const branch of workBranches(issue).filter(branch => !heads.has(branch))) {
     const { ahead, idle } = branchWork(issue, branch), agent = branch.split('/')[0];
@@ -130,7 +130,7 @@ const foreignAssignees = issue => issue.assignees.nodes.map(user => user.login).
 /** What the open PRs, branches and assignees of an issue hold against a start by SESSION: one rule for `check` and `next`. */
 function startReasons(issue, session, takeover) {
   // An open PR of another repository that names the session is no claim of this issue (#588).
-  if (session && openPrs(issue).length ? claimOf(openPr(issue) ?? {})?.[2] === session : isOwn(issue, session)) return { blocked: [], notes: [] };
+  if (session && openPrs(issue).length ? claimOf(openPr(issue) ?? {})?.session === session : isOwn(issue, session)) return { blocked: [], notes: [] };
   const found = workReasons(issue, session, takeover), others = foreignAssignees(issue);
   if (others.length && !takeover) found.blocked.push(`assigned to ${others.join(', ')}; pass --takeover to take it over`);
   return found;

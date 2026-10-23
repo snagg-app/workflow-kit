@@ -11,14 +11,21 @@ const claimField = () => new RegExp(`(?<![\\w\`])Agent:[ \\t]*(${agentNames().jo
 
 /** The claim line `start` writes for this agent (default: the one running) and session. */
 export const claimLine = (session, agent = detectAgent()) => `Agent: ${agent}, Session: ${session}`;
-/** The claim match (`[0]` the line, `[1]` agent, `[2]` session or undefined) in a text, or null. */
-export const claimIn = text => claimField().exec(text ?? '');
+/** The claim in a text as { line, agent, session (undefined without one), text (the whole text, for the lines beside the claim) }, or null. */
+export const claimIn = text => {
+  const found = claimField().exec(text ?? '');
+  return found && { line: found[0], agent: found[1], session: found[2], text: found.input };
+};
 export const hasClaim = text => claimField().test(text ?? '');
 /** The body with its claim line replaced, or the line appended when it has none. */
 export const withClaim = (body, line) => hasClaim(body) ? body.replace(claimField(), line) : `${body}\n${line}\n`;
 export const claimOf = pr => claimIn(pr.body);
 /** Claim comments of the issue, oldest first; a reply line without a session is no claim. ponytail: reads the comments the query holds (the newest 50 of an issue, 10 in lists). */
-export const commentClaims = issue => (issue.comments?.nodes ?? []).map(comment => claimIn(comment.body)).filter(found => found?.[2]);
+export const commentClaims = issue => (issue.comments?.nodes ?? []).map(comment => claimIn(comment.body)).filter(found => found?.session);
+
+// The handoff comment's head line (#819): built by `done`, read by the handoff and stack gates; the one place that knows its format.
+export const handoffHeadLine = head => `Head: ${head.slice(0, 7)}`;
+export const hasHandoffHead = (text, head) => new RegExp(`^Head:\\s*${head.slice(0, 7)}`, 'im').test(text ?? '');
 /** A comment that starts with the agent's reply line (a session is not needed). */
 export const isReply = text => new RegExp(`^Agent:[ \\t]*(${agentNames().join('|')})\\b`, 'im').test(text ?? '');
 
