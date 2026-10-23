@@ -11,6 +11,7 @@ import { failed, isResult, result } from './board-result.mjs';
 import { pushPlan } from './board-checkout.mjs';
 import { args, checkout, git, github, graphql, issueName, issueOwner, issueProject, localHead, number, progress, project, projectDirectory, rest, restAll, state, statuses, step, texts } from './board-context.mjs';
 import { postBacklink, tickAcceptance, writeBody } from './board-body.mjs';
+import { handoffHeadLine } from './claim.mjs';
 import { currentIssuePr, isPartialPr } from './board-claims.mjs';
 import { isSpec, lines, projectStatus, readIssue, specRefusal } from './board-common.mjs';
 import { resolveOption, set } from './board-fields.mjs';
@@ -187,7 +188,7 @@ async function done() {
     step(written);
   }
   if (file && !findHandoffComment(polled.comments, issue.viewer, head)) {
-    github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\nHead: ${head.slice(0, 7)}\n\n${lines(file)}\n` });
+    github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\n${handoffHeadLine(head)}\n\n${lines(file)}\n` });
   }
   return handoff();
 }

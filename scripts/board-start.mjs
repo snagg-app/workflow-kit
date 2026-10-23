@@ -38,17 +38,17 @@ function openFirstPr(issue) {
   // A merged PR (squash: its commits are not in the base) means the work is delivered: the FILE-only path reports it.
   if (!claim || issue.closedByPullRequestsReferences?.nodes.some(pr => pr?.state === 'MERGED')) return;
   git('fetch', 'origin');
-  const base = new RegExp(`^(?:${textInEveryLanguage('base').join('|')}):[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(claim.input)?.[1] ?? (baseOf(issue).branch || defaultBranchName());
+  const base = new RegExp(`^(?:${textInEveryLanguage('base').join('|')}):[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(claim.text)?.[1] ?? (baseOf(issue).branch || defaultBranchName());
   const here = checkout.stand(base);
   if (here.ahead === 0) return;
-  const { branch, create } = targetBranch({ number, title: issue.title, agent: claim[1], session: claim[2], branch: here.branch, taken: takenFor(issue) });
+  const { branch, create } = targetBranch({ number, title: issue.title, agent: claim.agent, session: claim.session, branch: here.branch, taken: takenFor(issue) });
   if (create) git('switch', '-c', branch, '--no-track');
   const plan = pushPlan({ stand: { ...here, branch }, number });
   assert.ok(!plan.refuse, plan.refuse);
   git(...plan.args);
   // #725: a branch with an open PR the issue does not list yet (on a release base the closing keyword links nothing, so a run that stopped before the link left exactly that) gets no second PR (GitHub answers 422).
   const open = rest(`repos/${project.repository}/pulls?head=${project.repository.split('/')[0]}:${branch}&state=open`)[0]?.number;
-  const pr = open ?? JSON.parse(github.write('POST', `repos/${project.repository}/pulls`, { fields: { title: issue.title, head: branch, base, draft: true }, body: `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n` })).number;
+  const pr = open ?? JSON.parse(github.write('POST', `repos/${project.repository}/pulls`, { fields: { title: issue.title, head: branch, base, draft: true }, body: `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim.line}\n` })).number;
   linkIssue(number, pr, false, issue).forEach(progress);
   progress(open ? `done: branch ${branch} already has PR #${pr}; linked it` : `done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
   return pr;
@@ -128,7 +128,7 @@ function start() {
     if (!ownPr(issue, session)) {
       const path = `repos/${project.repository}/pulls/${current.number}`, body = rest(path).body ?? '';
       github.write('PATCH', path, { body: withClaim(body, line) });
-      assert.equal(claimOf(rest(path))?.[2], session, 'Claim in the PR body read-back differs');
+      assert.equal(claimOf(rest(path))?.session, session, 'Claim in the PR body read-back differs');
     }
   } else {
     git('fetch', 'origin');
@@ -144,7 +144,7 @@ function start() {
     if (!isOwn(fresh, session)) {
       github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
       const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).findLast(comment => hasClaim(comment.body));
-      assert.equal(claimIn(posted?.body)?.[2], session, 'Claim comment read-back differs');
+      assert.equal(claimIn(posted?.body)?.session, session, 'Claim comment read-back differs');
     }
   }
   const final = readIssue();

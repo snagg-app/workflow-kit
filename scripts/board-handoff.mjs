@@ -6,6 +6,7 @@ import { failed, isResult, result } from './board-result.mjs';
 import { args, graphql, handoffHeading, issueProject, name, number, numberOption, owner, project, rest, sleep, stallOption, state, statuses, step, texts } from './board-context.mjs';
 import { connectedIssues } from './board-body.mjs';
 import { check, mayStart } from './board-check.mjs';
+import { hasHandoffHead } from './claim.mjs';
 import { isPartialPr } from './board-claims.mjs';
 import { isSpec, projectItem, projectStatus, readIssue, specRefusal, text } from './board-common.mjs';
 import { set } from './board-fields.mjs';
@@ -96,7 +97,7 @@ function handoffIssue(issue, viewer, reviewedHead, currentPrNumber) {
  * happened, which no timestamp reliably tells. With several matching comments the newest counts.
  */
 const findHandoffComment = (comments, viewer, headRefOid) => comments.findLast(comment => comment.user?.login?.toLowerCase() === viewer.login.toLowerCase()
-  && handoffHeading.test(comment.body ?? '') && new RegExp(`^Head:\\s*${headRefOid.slice(0, 7)}`, 'im').test(comment.body ?? ''));
+  && handoffHeading.test(comment.body ?? '') && hasHandoffHead(comment.body, headRefOid));
 const headingText = part => text(part.match(/^<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/)?.[1] ?? '');
 
 /** A quoted template is no section: drop quotes (innermost first, so nesting works) before searching. */

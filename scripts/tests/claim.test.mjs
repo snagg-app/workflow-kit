@@ -16,8 +16,8 @@ test('an agent added to the table claims and is recognised as own', () => {
     const line = claimLine(session, detectAgent(env));
     assert.equal(line, 'Agent: gemini, Session: G1');
     const issue = { comments: { nodes: [{ body: `Claimed.\n${line}\nBasis: main\n` }] } };
-    assert.equal(commentClaims(issue).at(-1)[2], session, 'check sees the claim as its own');
-    assert.equal(claimIn('Closes #1\nAgent: gemini, Session: OLD\n')[1], 'gemini');
+    assert.equal(commentClaims(issue).at(-1).session, session, 'check sees the claim as its own');
+    assert.equal(claimIn('Closes #1\nAgent: gemini, Session: OLD\n').agent, 'gemini');
     assert.equal(withClaim('Closes #1\nAgent: gemini, Session: OLD\nMore', line), 'Closes #1\nAgent: gemini, Session: G1\nMore');
     assert.ok(isReply('Agent: gemini\n\nDone'));
   } finally { delete agents.gemini; }

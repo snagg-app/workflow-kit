@@ -241,11 +241,11 @@ function check(issue = readIssue(), claims, currentPrNumber) {
   if (claims) lines.push(...baseLines(issue, state.stackedOn));
   if (claims) {
     const linked = issue.closedByPullRequestsReferences;
-    const prs = openPrs(issue).map(pr => `${refOf(pr.repository, pr.number)} (Session ${claimOf(pr)?.[2] ?? 'unknown'})`);
+    const prs = openPrs(issue).map(pr => `${refOf(pr.repository, pr.number)} (Session ${claimOf(pr)?.session ?? 'unknown'})`);
     // A list cut at 100 is never presented as complete.
     const cut = linked?.totalCount > linked?.nodes?.length ? ` (first ${linked.nodes.length} of ${linked.totalCount})` : '';
     if (prs.length) lines.push(`open PR: ${prs.join(', ')}${cut}`);
-    else if (commentClaims(issue).length) lines.push(`claim: session ${commentClaims(issue).at(-1)[2]} (no PR yet)`);
+    else if (commentClaims(issue).length) lines.push(`claim: session ${commentClaims(issue).at(-1).session} (no PR yet)`);
   }
   const children = [];
   if (claims && issue.subIssues?.nodes?.length) {

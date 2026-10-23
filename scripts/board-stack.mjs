@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { failed, result } from './board-result.mjs';
 import { gitAt, graphql, name, number, owner, progress, project, projectDirectory, rest, restAll, statuses, texts, memory } from './board-context.mjs';
 import { isSpec, loadDeliveries, projectItem, readIssue, stackOrderText } from './board-common.mjs';
+import { handoffHeadLine } from './claim.mjs';
 import { findHandoffComment, finishedPr, selfReviewChecks, selfReviewReasons } from './board-handoff.mjs';
 import { filesText, readPr, unresolvedThreads } from './board-reviews.mjs';
 
@@ -154,7 +155,7 @@ function layerReasons(layer, viewer) {
   if (pr.state !== 'OPEN' || pr.isDraft) return ['is not an open, non-draft PR'];
   const reasons = [];
   if (!findHandoffComment(restAll(`repos/${project.repository}/issues/${layer}/comments`), viewer, pr.headRefOid)) {
-    reasons.push(`has no handoff comment for head ${pr.headRefOid.slice(0, 7)} (a "## ${texts.handoff}" heading and a "Head: ${pr.headRefOid.slice(0, 7)}" line)`);
+    reasons.push(`has no handoff comment for head ${pr.headRefOid.slice(0, 7)} (a "## ${texts.handoff}" heading and a "${handoffHeadLine(pr.headRefOid)}" line)`);
   }
   const threads = unresolvedThreads(layer, pr.reviewThreads);
   if (threads.length) reasons.push(`has ${threads.length} unresolved review thread${threads.length === 1 ? '' : 's'}`);
