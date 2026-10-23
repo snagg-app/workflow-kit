@@ -4,7 +4,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agentLabels, agents, hookAgents, projectAgents } from './agents.mjs';
+import { agentLabels, agents, projectAgents } from './agents.mjs';
 import { setupBoard } from './github-board.mjs';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { createGithub } from './github.mjs';
@@ -41,7 +41,7 @@ const tasks = [];
 const humans = [];
 // Read before the steps: skills and hooks create agent folders, which would make every agent look used.
 // No agent found: hooks go to all, but no agent is named.
-const used = hookAgents(root);
+const used = projectAgents(root, agent => agent.hooks);
 const trust = (used.none ? [] : used.names).filter(name => agents[name].hooks.trust).map(name => `${agents[name].hooks.trust} in ${agents[name].label ?? name}`);
 
 // Local steps decide the exit code; a step that needs the network or the user's home reports an open step instead.
@@ -58,7 +58,7 @@ step('profile .github/workflow-project.json', true, () => {
   if (!existsSync(profile)) writeProjectFile(root, '.github/workflow-project.json', '{\n  "language": "en"\n}\n');
   return ok();
 });
-step(`skills for ${agentLabels(projectAgents(root))}`, true, async log => { await setupSkills({ log }); return ok(); });
+step(`skills for ${agentLabels()}`, true, async log => { await setupSkills({ log }); return ok(); });
 step('git hooks (.githooks)', true, log => { installGitHooks({ root, log }); return ok(); });
 // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
 for (const provider of featureProviders().filter(provider => provider.install))

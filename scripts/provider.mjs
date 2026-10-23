@@ -17,6 +17,7 @@ import { withLock } from './lock.mjs';
 import { linkSkills, materialize } from './provider-links.mjs';
 import { checkDirectory, localDirectory, moveAside, rename } from './write-guard.mjs';
 import { providerList, providerNamed } from './provider-list.mjs';
+import { readVersions } from './versions.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -58,7 +59,7 @@ export function context({ kit = resolve(dirname(fileURLToPath(import.meta.url)),
     kit, root, home, log, outside: outsideCheckouts,
     git: (...args) => run(root, ...args),
     text: path => readFileSync(path, 'utf8').replaceAll('\r\n', '\n'),
-    versions: JSON.parse(readFileSync(join(kit, 'scripts/versions.json'), 'utf8')),
+    versions: readVersions(kit),
   };
 }
 

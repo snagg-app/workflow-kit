@@ -6,7 +6,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync } from '
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
-import { agents, entryFile, hookAgents } from './agents.mjs';
+import { agents, entryFile, projectAgents } from './agents.mjs';
 import { hookSettings } from './hooks.mjs';
 import { linkKit } from './kit-check.mjs';
 import { ownSkills } from './provider-list.mjs';
@@ -60,7 +60,7 @@ export function initProject({ root, existing = false, log = console.log }) {
   }
   // The kit's handlers come from the agent table, the agents the project uses (detect) and its functions (profile).
   const features = projectFeatures(root);
-  const { names: hookNames, none: noAgentFound } = hookAgents(root);
+  const { names: hookNames, none: noAgentFound } = projectAgents(root, agent => agent.hooks);
   // The hook entries call this small copy of kit-entry.mjs, which finds or clones the kit when it is missing.
   write(entryFile, text(join(kit, 'scripts/kit-entry.mjs')));
   for (const name of hookNames) mergeHooks(agents[name].hooks.file, hookSettings(name, features));
