@@ -1,6 +1,6 @@
 // `merge PR [--stack]`: the merge gate, the head-bound merge, the branch update and what follows a merge (branch delete, push commands).
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +67,26 @@ function deleteHeadBranch(pr) {
     return `branch gone: ${branch}`;
   }
   return `branch deleted: ${branch}`;
+}
+
+/**
+ * Delete the folder of an agent worktree (under `.claude/worktrees`) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
+ * (node_modules, .vendor, links). `rmSync` unlinks a junction or symlink without entering it, so a link's target stays. Never the folder this run works in. Returns the line to report, or nothing.
+ */
+function removeAgentWorktree(branch) {
+  if (!existsSync(join(projectDirectory, '.git')) || (statSync(join(projectDirectory, '.git')).isDirectory() && !existsSync(join(projectDirectory, '.git/HEAD')))) return;
+  try {
+    const here = process.cwd().replaceAll('\\', '/').toLowerCase();
+    for (const block of gitAt(projectDirectory, 'worktree', 'list', '--porcelain').split(/\r?\n\r?\n/)) {
+      const path = /^worktree (.+)$/m.exec(block)?.[1];
+      if (!path || !block.includes(`\nbranch refs/heads/${branch}`) || !/\/\.claude\/worktrees\/[^/]+$/.test(path.replaceAll('\\', '/'))) continue;
+      const own = path.replaceAll('\\', '/').toLowerCase();
+      if (here === own || here.startsWith(`${own}/`)) return `worktree kept: ${path} is the folder of this run`;
+      rmSync(path, { recursive: true, force: true });
+      gitAt(projectDirectory, 'worktree', 'prune');
+      return `worktree deleted: ${path}`;
+    }
+  } catch (error) { return `note: worktree of ${branch} not deleted (${String(error.message).split('\n')[0]})`; }
 }
 
 /**
@@ -234,6 +254,8 @@ async function merge() {
     }
   }
   dropBranch(gate.pr);
+  const folder = removeAgentWorktree(gate.pr.headRefName);
+  if (folder) notes.push(folder);
   const pushed = runPush(stack ? memory.stackState.trunk : gate.pr.baseRefName, mergeCommit?.oid);
   if (pushed) notes.push(pushed);
   // A layer below that is not merged with the top is an error, whatever the top did.

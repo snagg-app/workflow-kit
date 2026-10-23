@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fixture, handoffComment, handoffPr, issue, pushedAt, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
@@ -495,4 +495,26 @@ test('merge runs the push commands of the project file as of the merge commit, o
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.equal(readFileSync(env.PUSHED, 'utf8').trim().replaceAll('\r', ''), 'main\nkit', 'the commands ran with the branch and found the kit in a project without submodule, the one after the failure did not');
   assert.match(merged.stdout, /^note: the push commands of main failed/m);
+});
+
+test('merge deletes the whole folder of the agent worktree of the merged branch, and a link in it only goes itself, not its target', t => {
+  const { checkout, run, show } = mergeFixture(t);
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
+  git(checkout, 'init', '-q', '-b', 'main');
+  git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'start');
+  const agent = join(checkout, '.claude/worktrees/agent-1'), other = join(checkout, '.claude/worktrees/agent-2'), target = join(dirname(checkout), 'link-target');
+  git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic', agent);
+  git(checkout, 'worktree', 'add', '-q', '-b', 'claude/8-other', other);
+  mkdirSync(join(agent, 'node_modules'));
+  writeFileSync(join(agent, 'node_modules/untracked'), 'x');
+  mkdirSync(target);
+  writeFileSync(join(target, 'kept'), 'x');
+  symlinkSync(target, join(agent, 'link'), 'junction');
+  show();
+  const merged = run('merge', '7');
+  assert.equal(merged.status, 0, merged.stdout + merged.stderr);
+  assert.equal(existsSync(agent), false, 'the folder is gone');
+  assert.equal(existsSync(join(target, 'kept')), true, 'the target of the link stays');
+  assert.equal(existsSync(other), true, 'another worktree stays');
+  assert.doesNotMatch(git(checkout, 'worktree', 'list'), /agent-1/);
 });
