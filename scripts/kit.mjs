@@ -4,7 +4,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agents } from './agents.mjs';
+import { agentLabels, agents, projectAgents } from './agents.mjs';
 import { setupBoard } from './github-board.mjs';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { createGithub } from './github.mjs';
@@ -54,7 +54,7 @@ step('profile .github/workflow-project.json', true, () => {
   if (!existsSync(profile)) writeProjectFile(root, '.github/workflow-project.json', '{\n  "language": "en"\n}\n');
   return ok();
 });
-step('skills for Codex and Claude Code', true, async log => { await setupSkills({ log }); return ok(); });
+step(`skills for ${agentLabels(projectAgents(root))}`, true, async log => { await setupSkills({ log }); return ok(); });
 step('git hooks (.githooks)', true, log => { installGitHooks({ root, log }); return ok(); });
 // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
 for (const provider of featureProviders().filter(provider => provider.install))

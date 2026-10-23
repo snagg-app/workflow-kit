@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { chmodSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { providers, sharedSkills, sourceProviders } from './agents.mjs';
+import { agentLabels, providers, sharedSkills, sourceProviders } from './agents.mjs';
 import { adaptCodeReview } from './code-review-failure-paths.mjs';
 import { checkDirectory } from './write-guard.mjs';
 
@@ -88,6 +88,6 @@ export default {
     }, null, 2) + '\n');
     const outputs = sourceProviders.flatMap(provider => [...names, 'MATT-POCOCK-LICENSE.md', 'MATT-POCOCK-SOURCES.json']
       .map(name => [`${provider}/skills/${name}`, name]));
-    return { outputs, retire, message: `Matt Pocock ${c.revision.slice(0, 7)}: ${skills.length} complete skill trees published for Codex and Claude Code.` };
+    return { outputs, retire, message: `Matt Pocock ${c.revision.slice(0, 7)}: ${skills.length} complete skill trees published for ${agentLabels()}.` };
   },
 };

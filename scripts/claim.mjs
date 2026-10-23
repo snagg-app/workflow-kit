@@ -23,11 +23,12 @@ export const commentClaims = issue => (issue.comments?.nodes ?? []).map(comment 
 export const isReply = text => new RegExp(`^Agent:[ \\t]*(${agentNames().join('|')})\\b`, 'im').test(text ?? '');
 
 /**
- * The own session: `--session` (`explicit`), else the variable of an agent that only its own session sets (CODEX_THREAD_ID), else the `agent-<id>` of a Claude Code worktree,
+ * The own session: `--session` (`explicit`), else the variable of an agent that only its own session sets (CODEX_THREAD_ID), else the session an agent's `sessionFromDirectory` finds in the working directory,
  * else the variable of the other agents (CLAUDE_CODE_SESSION_ID: the session itself, not a subagent).
  */
 export function ownSession(explicit, env = process.env, cwd = process.cwd()) {
   const fromEnv = names => names.map(name => env[agents[name].sessionEnv]).find(Boolean);
+  const fromDirectory = dir => agentNames().map(name => agents[name].sessionFromDirectory?.exec(dir)?.[1]).find(Boolean);
   const marked = agentNames().filter(name => agents[name].detectEnv);
-  return explicit ?? fromEnv(marked) ?? /[\\/]agent-(\w+)(?:[\\/]|$)/.exec(cwd)?.[1] ?? fromEnv(agentNames().filter(name => !marked.includes(name)));
+  return explicit ?? fromEnv(marked) ?? fromDirectory(cwd) ?? fromEnv(agentNames().filter(name => !marked.includes(name)));
 }
