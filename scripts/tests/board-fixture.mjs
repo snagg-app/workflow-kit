@@ -29,7 +29,7 @@ export function fixture(t) {
   // By default the driver has posted the handoff comment long after any push; tests about it replace this file.
   writeFileSync(join(checkout, 'issues-comments.json'), JSON.stringify([handoffComment()]));
   // The session variables of the running agent must not reach board.mjs; a test names its own session.
-  const env = { CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '', BOARD_FIELD_CACHE: '0', BOARD_TRACE: '' };
+  const env = { CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '', BOARD_FIELD_CACHE: '0', BOARD_TRACE: '', SONAR_TOKEN: '' }; // no token of the developer's own environment: the Sonar count comes from the fake check summary
   const board = {
     checkout, env,
     // A call that hangs (a `wait` that never ends) would block the whole file silently: it is cut off and named with its test.
