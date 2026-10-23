@@ -35,7 +35,7 @@ export const TABLE = [
   [/^scripts\/provider-links\.mjs$/, [NOT_BOARD]],
   [/^scripts\/lock\.mjs$/, ['provider.test.mjs', 'ponytail-hooks.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs']],
   [/^scripts\/tests\/fixtures\.mjs$/, ['git-hooks', 'kit-init-hook', 'kit-setup', 'ponytail-batch', 'ponytail-hooks', 'renovate-regenerate', 'setup'].map(n => `${n}.test.mjs`)],
-  [/^scripts\/(install-git-hooks\.mjs|git-hooks\/)/, ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']],
+  [/^scripts\/install-git-hooks\.mjs$/, ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']],
   [/^scripts\/project-profile\.mjs$/, ['entrypoints.test.mjs', 'kit-setup.test.mjs', 'ponytail-hooks.test.mjs']],
   [/^scripts\/(init-project|agents)\.mjs$|^scripts\/hook-commands\.json$|^templates\//, ['entrypoints.test.mjs', 'kit-init-hook.test.mjs', 'impeccable-update.test.mjs', 'matt-pocock.test.mjs']],
   [/^scripts\/provider\.mjs$/, ['provider.test.mjs', 'ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', 'matt-pocock.test.mjs', 'setup.test.mjs', 'impeccable-update.test.mjs']],

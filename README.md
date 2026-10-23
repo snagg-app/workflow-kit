@@ -127,15 +127,14 @@ branch you trust (the default branch), and again after every change to a hook:
 node .vendor/workflow-kit/scripts/install-git-hooks.mjs          # --check only reports
 ```
 
-It copies `.githooks/` of the current checkout, plus the kit's `post-checkout`, into
+It copies `.githooks/` of the current checkout into
 `workflow-kit-hooks/` in the clone's Git directory and sets `core.hooksPath` to that absolute
 path, shared by all worktrees of the clone. Git then runs the copy, never the working
 tree: a branch that changes or adds a file in `.githooks/` does not get that code run on
 checkout or push. Only an explicit rerun replaces the copy (and drops hooks that no longer
 exist); hooks no longer follow the branch you are on, so a hook change reaches a clone
 only through that rerun, for example by rerunning the project's bootstrap. Symlinks in
-`.githooks/` are not copied. A `post-checkout` of the project's own is used instead of the
-kit's and reported; integrate `scripts/git-hooks/post-checkout` there by hand.
+`.githooks/` are not copied.
 
 Absolute paths into this repository's worktrees with matching `config.worktree` overrides become the new path.
 Git resolves relative paths per worktree, so any other relative value counts as foreign.
@@ -145,16 +144,6 @@ Because Git evaluates `includeIf` per worktree and branch, it changes nothing wh
 `includeIf` target, whatever its condition, sets a foreign path. Anything else, such as a
 foreign path in local, global or system config, stays and is reported: integrate
 `.githooks` there yourself. Without `.githooks/` it does nothing.
-
-Only a project that still holds the kit as a submodule needs this (`init-project` ends that, see above): after a branch checkout (third argument `1`) the kit's `post-checkout` runs
-`git submodule update --init --checkout .vendor/workflow-kit`, so the kit follows the gitlink of the
-new branch instead of showing `M .vendor/workflow-kit`. It touches only the kit, not other submodules
-or `submodule.recurse`, disables Git's own prompts like the SessionStart hook (ssh may still ask on the terminal) and runs none of the kit clone's own hooks. Like any checkout it applies the user's Git configuration, including filters.
-A kit with local changes, ignored or untracked files, or commits no remote has
-(a clean, published kit behind or ahead of the old pin still follows) is not touched: the hook prints a hint
-and the checkout continues; any failure only prints the command. Without a kit gitlink, as in this repository,
-it does nothing. Known limit: where the kit has `core.filemode=false`, a purely local mode change is invisible to
-Git and the update may reset it.
 
 ## Board commands
 
