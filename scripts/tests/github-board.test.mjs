@@ -17,7 +17,7 @@ function bind(t, profile, kitProject = { owner: 'kitorg', number: 5 }) {
   if (profile) writeFileSync(join(root, '.github/workflow-project.json'), JSON.stringify(profile));
   useGhAdapter(fakeGh);
   t.after(() => useGhAdapter(undefined));
-  const github = createGithub({ tool: {}, command: 'setup', projectDirectory: root, sleep() {} });
+  const github = createGithub({ tool: {}, projectDirectory: root, sleep() {} });
   const result = setupBoard({ root, github, repo: 'acme/app', kitProject });
   const calls = readFileSync(join(root, 'setup-calls'), 'utf8').split('\n');
   return { result, calls, saved: JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8')) };

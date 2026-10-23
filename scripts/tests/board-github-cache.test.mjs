@@ -7,7 +7,7 @@ test('the GitHub access keeps the last full read for every command of a run unti
   useGhAdapter(([, path]) => JSON.stringify(path.includes('/pulls/') ? { head: { sha: 'abc' }, updated_at: updated, state: 'open' }
     : path.includes('check-runs') ? { check_runs: [] } : path.includes('check-suites') ? { check_suites: [] } : { statuses: [] }));
   try {
-    const github = createGithub({ tool: {}, command: 'done', projectDirectory: '.', sleep() {} });
+    const github = createGithub({ tool: {}, projectDirectory: '.', sleep() {} });
     const marker = github.changeMarker('o/r', 7);
     assert.equal(github.recallRead(marker), undefined, 'nothing read yet');
     github.keepRead({ marker, pr: { number: 7 }, threads: [], at: Date.now() });

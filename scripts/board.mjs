@@ -10,6 +10,7 @@ import { join } from 'node:path';
 import { externalTool, projectRoot, takeCwd } from './checkout-root.mjs';
 import { readProfile, readProfileAt, textsFor } from './project-profile.mjs';
 import { createGithub } from './github.mjs';
+import { sleepers } from './quota.mjs';
 import { createOptions, helpOf, listOf, parseArgs, usageOf } from './board-args.mjs';
 import { commandSpecs } from './board-commands.mjs';
 import { createProcess } from './board-process.mjs';
@@ -95,7 +96,7 @@ const checkout = createCheckout({ projectDirectory, sleep });
 const { git, gitAt, localHead } = checkout;
 
 const startedAt = Date.now();
-const github = createGithub({ tool: gh, command, projectDirectory, sleep });
+const github = createGithub({ tool: gh, reserve: sleepers[command], pauses: command === 'wait', projectDirectory, sleep });
 const { graphql, rest, restAll } = github;
 
 /** The issue lives in another repository when --issue-repo says so: its board and statuses replace the project's (read once, before the modules are made). */

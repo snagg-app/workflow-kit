@@ -1,7 +1,7 @@
 // `wait`, `quota-wait` and the polling they share.
 // Its functions run nothing when imported; run-time data comes from board-context.mjs, helpers of other commands by import.
-import { QuotaPause, StillWaiting, sleepers } from './github.mjs';
-import { untilText } from './quota.mjs';
+import { QuotaPause, StillWaiting } from './github.mjs';
+import { sleepers, untilText } from './quota.mjs';
 import { shared } from './board-args.mjs';
 import { isResult, result } from './board-result.mjs';
 import { args, command, github, graphql, number, numberOption, progress, project, rest, stallOption, startedAt } from './board-context.mjs';

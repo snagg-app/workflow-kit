@@ -1,6 +1,9 @@
 // GitHub's GraphQL quota is 5000 points an hour for the whole account, shared by every agent on it.
 // Pure helpers for board.mjs, kept apart so tests can call them without running a command.
 
+// Commands that sleep until the quota reset instead of failing, with the points they keep in reserve.
+export const sleepers = { wait: 300, reviews: 50, handoff: 50, done: 50, 'quota-wait': 300 };
+
 /** A failed `gh api graphql` call: GitHub's error type RATE_LIMITED, its message, or a secondary limit. */
 export const isRateLimited = text => /RATE_LIMIT|API rate limit|secondary rate limit/i.test(text);
 
