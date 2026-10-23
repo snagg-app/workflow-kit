@@ -2,11 +2,10 @@
 // Aufruf: import { setupBoard } (kit.mjs setup) oder `node scripts/setup-github.mjs OWNER/REPO [NUMMER]`. Jeder GitHub-Aufruf läuft über github.mjs.
 // Vorlage und Labels stehen im Profil des Projekts ("boardTemplate", "labels"); ohne sie gelten das Board des Kits und die sieben Standard-Labels.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { externalTool } from './checkout-root.mjs';
+import { gitResultIn } from './git-tool.mjs';
 import { boardTemplate, projectLabels, readProfile, statusMismatch } from './project-profile.mjs';
 import { projectFile, writeProjectFile } from './write-guard.mjs';
 
@@ -14,8 +13,7 @@ const kitRoot = fileURLToPath(new URL('..', import.meta.url));
 
 /** OWNER/REPO of the `origin` remote, or undefined when it is no GitHub remote. */
 function originRepository(root) {
-  const git = externalTool('git', root);
-  const remote = spawnSync(git.file, ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8', env: git.env }).stdout.trim();
+  const remote = gitResultIn()(root, 'remote', 'get-url', 'origin').stdout.trim();
   return /github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(remote)?.[1];
 }
 

@@ -2,13 +2,19 @@
 // The old patch is replayed onto the previous upstream files and 3-way merged with the new upstream files,
 // like `quilt refresh`; a real conflict stops with the file name instead of guessing.
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
 import { closeSync, constants, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
+import { gitResultIn } from './git-tool.mjs';
 import { checkDirectory } from './write-guard.mjs';
 
-const git = (cwd, ...args) => execFileSync('git', ['-c', 'core.autocrlf=false', ...args], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const run = gitResultIn();
+/** Raw stdout (file contents keep their last newline); throws with git's error output on a non-zero exit. */
+const git = (cwd, ...args) => {
+  const result = run(cwd, '-c', 'core.autocrlf=false', ...args);
+  if (result.status !== 0) throw Object.assign(new Error(result.error?.message ?? result.stderr), result);
+  return result.stdout;
+};
 const lf = text => text.replaceAll('\r\n', '\n');
 
 /** Files and contents of the patched upstream paths at one revision; a CI checkout may only hold the new pin. */
@@ -30,7 +36,7 @@ export function patchApplies(patch, contents) {
       writeFileSync(join(stage, file), text);
     }
     writeFileSync(join(stage, '.check.patch'), patch);
-    return spawnSync('git', ['-c', 'core.autocrlf=false', 'apply', '--check', '--whitespace=error-all', '.check.patch'], { cwd: stage }).status === 0;
+    return run(stage, '-c', 'core.autocrlf=false', 'apply', '--check', '--whitespace=error-all', '.check.patch').status === 0;
   } finally {
     rmSync(stage, { recursive: true, force: true });
   }
@@ -63,8 +69,8 @@ export function refreshPatch({ patch, from, to, files, resolved = {} }) {
         put(dirs.b, { [file]: resolved[file] });
         continue;
       }
-      const result = spawnSync('git', ['merge-file', '-p', '-L', 'adapted', '-L', 'previous upstream', '-L', 'new upstream',
-        join(dirs.ours, file), join(dirs.old, file), join(dirs.a, file)], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      const result = run(stage, 'merge-file', '-p', '-L', 'adapted', '-L', 'previous upstream', '-L', 'new upstream',
+        join(dirs.ours, file), join(dirs.old, file), join(dirs.a, file));
       assert.ok(result.status !== null && result.status < 128, `git merge-file failed for ${file}: ${result.stderr}`);
       if (result.status > 0) conflicts[file] = result.stdout;
       put(dirs.b, { [file]: result.stdout });
@@ -72,7 +78,7 @@ export function refreshPatch({ patch, from, to, files, resolved = {} }) {
     if (Object.keys(conflicts).length)
       throw Object.assign(new Error(`Adaptation conflicts with the new upstream in: ${Object.keys(conflicts).join(', ')}`), { conflicts });
     // Exit status 1 only means "differences found".
-    const diff = spawnSync('git', ['-c', 'core.autocrlf=false', 'diff', '--no-index', '--no-prefix', '--no-color', 'a', 'b'], { cwd: stage, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    const diff = run(stage, '-c', 'core.autocrlf=false', 'diff', '--no-index', '--no-prefix', '--no-color', 'a', 'b');
     assert.ok(diff.status === 0 || diff.status === 1, `git diff failed: ${diff.stderr}`);
     return diff.stdout;
   } finally {

@@ -1,7 +1,7 @@
 // `done ISSUE`: tests, ready, review and handoff.
 // Its functions run nothing when imported; run-time data comes from board-context.mjs, helpers of other commands by import.
 import assert from 'node:assert/strict';
-import { runProgram } from './board-process.mjs';
+import { runProgram } from './run-program.mjs';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

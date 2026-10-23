@@ -1,13 +1,6 @@
 // Process-level helpers of the board: a blocking pause and the shell commands of the project file. Git lives in board-checkout.mjs.
-import { execFileSync } from 'node:child_process';
 import { delimiter, dirname, resolve } from 'node:path';
-
-let adapter; // (file, args, options) => stdout, like execFileSync; unset means the real process
-/** A test sets the test variant (board-worker.mjs), like useGhAdapter: no test patches child_process. */
-export const useProcessAdapter = fake => { adapter = fake; };
-
-/** The one door for the board's own child processes (git, the targeted tests, the project file's shell); options as for execFileSync. */
-export const runProgram = (file, args, options) => (adapter ?? execFileSync)(file, args, options);
+import { runProgram } from './run-program.mjs';
 
 export function createProcess() {
   const sleep = seconds => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000);

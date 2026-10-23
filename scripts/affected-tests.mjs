@@ -7,12 +7,13 @@
 // `--resume FILE` (with `--run`) remembers the green steps per head in FILE and skips them on the next call; a red step names whether its test file is in the diff.
 // `--run` stays quiet when green (test counts, `ok: <command>`) and shows the failing output otherwise; `--verbose` shows it all.
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
+import { gitIn } from './git-tool.mjs';
 
 const kit = fileURLToPath(new URL('..', import.meta.url));
 const tests = 'scripts/tests/';
@@ -46,6 +47,7 @@ export const TABLE = [
   [/^scripts\/kit\.mjs$/, ['kit-setup.test.mjs']],
   [/^scripts\/github-board\.mjs$/, ['github-board.test.mjs', 'kit-setup.test.mjs']],
   [/^scripts\/kit-hook\.mjs$/,['kit-init-hook.test.mjs', 'ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
+  [/^scripts\/run-program\.mjs$/, [BOARD, 'git-tool.test.mjs']],
   [/^scripts\/(git-tool|kit-check|kit-entry)\.mjs$/, ['git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', 'kit-setup.test.mjs']],
   [/^scripts\/plugin-skills\.mjs$/, ['skill-core.test.mjs']],
   [/^scripts\/(impeccable-release\.mjs|impeccable\/)|^\.vendor\/impeccable$/, ['impeccable-update.test.mjs']],
@@ -79,7 +81,8 @@ export function affectedTests(files, directory = kit) {
   return { tests: [...found].sort().filter(name => existsSync(resolve(directory, tests, name))).map(name => tests + name), unmapped };
 }
 
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).split('\n').filter(Boolean);
+const gitText = gitIn({}, kit);
+const git = (cwd, ...args) => gitText(cwd, ...args).split('\n').filter(Boolean);
 
 /** Files that differ from the merge base with `base`, plus untracked ones, in the Git checkout `cwd`. */
 export function changedFiles(base = 'origin/main', cwd = kit) {

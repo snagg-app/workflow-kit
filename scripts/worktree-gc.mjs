@@ -17,6 +17,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
+import { gitAsyncIn } from './git-tool.mjs';
 import { readProfile } from './project-profile.mjs';
 
 const norm = path => resolve(path).replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
@@ -76,10 +77,10 @@ async function main() {
     jobs: { type: 'string', default: '8' }, 'volume-prefix': { type: 'string', multiple: true }, 'volume-protect': { type: 'string', multiple: true },
   } });
   const root = projectRoot();
-  const git = externalTool('git', root);
+  const gitAsync = gitAsyncIn({}, root);
   const exec = (tool, args, cwd = root) => new Promise(done => execFile(tool.file, args, { cwd, env: tool.env, encoding: 'utf8', maxBuffer: 1 << 28 },
     (error, stdout) => done({ ok: !error, out: stdout ?? '' })));
-  const gitIn = (args, cwd) => exec(git, args, cwd);
+  const gitIn = (args, cwd = root) => gitAsync(cwd, ...args);
   const jobs = Math.max(1, Number(option.jobs));
   const pool = async (items, work) => {
     const queue = [...items];

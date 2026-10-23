@@ -6,13 +6,13 @@
 // Ein Anbieter ist eine Beschreibung in provider-<name>.mjs (Quelle, Dateien, Patch, Ziel); die Sicherheitsregeln stehen nur hier:
 // sauberer Quell-Pin, Staging ausserhalb der Ausgabe, Sperre, Pruefsumme vor dem Veroeffentlichen, nie ueberschreiben, Aufraeumen, Fehlerprotokoll.
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, rmdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
+import { enterCwd, projectRoot } from './checkout-root.mjs';
+import { gitIn } from './git-tool.mjs';
 import { withLock } from './lock.mjs';
 import { linkSkills, materialize } from './provider-links.mjs';
 import { checkDirectory, localDirectory, moveAside, rename } from './write-guard.mjs';
@@ -53,13 +53,10 @@ export function outsideCheckouts(path, message) {
 /** The kit, the project the command runs in and the tools it needs; Git is the installed one, never a program of the checkout or the working directory. */
 export function context({ kit = resolve(dirname(fileURLToPath(import.meta.url)), '..'), home = homedir(), log = console.log } = {}) {
   const root = projectRoot();
-  let tool;
+  const run = gitIn({}, root, kit);
   return {
     kit, root, home, log, outside: outsideCheckouts,
-    git(...args) {
-      tool ??= externalTool('git', root, kit, process.cwd());
-      return execFileSync(tool.file, args, { cwd: root, env: tool.env, encoding: 'utf8' });
-    },
+    git: (...args) => run(root, ...args),
     text: path => readFileSync(path, 'utf8').replaceAll('\r\n', '\n'),
     versions: JSON.parse(readFileSync(join(kit, 'scripts/versions.json'), 'utf8')),
   };

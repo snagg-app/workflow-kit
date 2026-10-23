@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { externalTool } from './checkout-root.mjs';
+import { gitIn } from './git-tool.mjs';
 import { providers } from './agents.mjs';
 import { checkDirectory } from './write-guard.mjs';
 
@@ -46,8 +46,8 @@ export async function releasePins(release, version, checksum = download) {
 
 /** Update kit-owned metadata, then reuse the normal hook and skill generators. */
 export async function updateImpeccable(kit, { release, checksum } = {}) {
-  const tool = externalTool('git', kit, kitRoot, process.cwd());
-  const git = (...args) => execFileSync(tool.file, args, { cwd: kit, env: tool.env, encoding: 'utf8' }).trim();
+  const run = gitIn({}, kit, kitRoot);
+  const git = (...args) => run(kit, ...args);
   const source = join(kit, '.vendor/impeccable');
   const read = name => {
     const file = join(kit, name);
