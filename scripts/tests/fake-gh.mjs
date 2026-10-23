@@ -605,3 +605,9 @@ export function fakeGh(args, input = '') {
   }
   return out.join('');
 }
+
+/** A REST write of github.write: METHOD, PATH and the request, answered by method and path like the script of `gh api`. */
+export function fakeWrite(method, path, { fields, body, json, header }) {
+  const marks = [...Object.entries(fields).map(([key, val]) => `${key}=${val}`), ...body === undefined ? [] : ['body=@-'], ...header ? [header] : []];
+  return fakeGh(['api', path, method, ...marks], json === undefined ? body : JSON.stringify(json));
+}

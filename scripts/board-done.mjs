@@ -20,7 +20,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createDone(env) {
-  const { args, checkout, git, github, graphql, isSpec, issueName, issueOwner, issueProject, lines, localHead, number, progress, project, projectDirectory, projectStatus, readIssue, rest, restAll, restPost, specRefusal, state, statuses, step, texts } = env;
+  const { args, checkout, git, github, graphql, isSpec, issueName, issueOwner, issueProject, lines, localHead, number, progress, project, projectDirectory, projectStatus, readIssue, rest, restAll, specRefusal, state, statuses, step, texts } = env;
   const { baseSettings, currentIssuePr, findHandoffComment, handoff, isPartialPr, openFirstPr, poll, postBacklink, ready, resolveOption, reviewOutcome, reviewsForHead, set, tickAcceptance, useBaseSettings, writeBody } = env.later;
 
   /**
@@ -88,8 +88,8 @@ export function createDone(env) {
       } catch (error) { return failed(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
       // #646: no PR delivers nothing for review; only an exploration that says so (--no-pr) gets Human review, otherwise nothing changes.
       if (!pull && !args.flag('--no-pr')) return failed(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
-      restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `## ${texts.handoff}\n\n${lines(file)}\n`);
-      if (pull) github.run(['api', `repos/${project.repository}/pulls/${prNumber}`, '-X', 'PATCH', '-f', 'state=closed'], { stdio: 'pipe' });
+      github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `## ${texts.handoff}\n\n${lines(file)}\n` });
+      if (pull) github.write('PATCH', `repos/${project.repository}/pulls/${prNumber}`, { fields: { state: 'closed' } });
       const written = writeBody(before => tickAcceptance(before));
       if (written.exitCode) return written;
       step(written);
@@ -183,7 +183,7 @@ export function createDone(env) {
       step(written);
     }
     if (file && !findHandoffComment(polled.comments, issue.viewer, head)) {
-      restPost(`repos/${project.repository}/issues/${prNumber}/comments`, ['-F', 'body=@-'], `## ${texts.handoff}\n\nHead: ${head.slice(0, 7)}\n\n${lines(file)}\n`);
+      github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\nHead: ${head.slice(0, 7)}\n\n${lines(file)}\n` });
     }
     return handoff();
   }

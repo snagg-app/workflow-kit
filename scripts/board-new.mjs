@@ -66,8 +66,8 @@ export function createNew(env) {
   /** The REST call that creates the issue (no GraphQL point). A lost or unreadable answer does not prove that nothing was created. */
   function post({ title, text, milestone, labels }) {
     try {
-      const created = JSON.parse(github.run(['api', `repos/${project.repository}/issues`, '-X', 'POST', '--input', '-'],
-        { input: JSON.stringify({ title, body: text, milestone: milestone.number, labels }) }));
+      const created = JSON.parse(github.write('POST', `repos/${project.repository}/issues`,
+        { json: { title, body: text, milestone: milestone.number, labels } }));
       assert.ok(Number.isSafeInteger(created?.number) && created.html_url && created.node_id, 'GitHub did not report the new issue');
       return created;
     } catch (error) {

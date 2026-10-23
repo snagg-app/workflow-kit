@@ -8,7 +8,7 @@ import { workerData } from 'node:worker_threads';
 import { useProcessAdapter } from '../board-process.mjs';
 import { useGhAdapter } from '../github.mjs';
 import { useSonarAdapter } from '../sonar.mjs';
-import { fakeGh } from './fake-gh.mjs';
+import { fakeGh, fakeWrite } from './fake-gh.mjs';
 import { fakeSonar } from './fake-sonar.mjs';
 
 const { requests, results, done } = workerData;
@@ -35,6 +35,7 @@ function echoingFakeGh(args, options) {
     throw error;
   }
 }
+echoingFakeGh.write = fakeWrite; // writes are answered by method and path, never parsed from gh arguments
 // affected-tests.mjs has its own tests: the start of the targeted tests of `done` is only written down in affected-tests-calls, without the script path.
 // A file affected-tests-seconds makes them take that long (the clock of `done` starts before them).
 const noteAffectedTests = args => {

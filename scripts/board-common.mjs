@@ -158,11 +158,10 @@ export function createCommon(env) {
 
   /** What the last query cost and what is left, so a driver sees the shared quota without a command of its own. */
   const quotaLine = () => github.quota && `quota: ${github.quota.remaining} left, ${github.spent} reported GraphQL wrapper points, ${github.calls} wrapper calls, resets ${github.quota.resetAt}`;
-  const restPost = (path, args, input) => github.run(['api', path, '-X', 'POST', ...args], { input });
   const sameLogin = (a, b) => a?.toLowerCase() === b?.toLowerCase();
 
   let defaultBranch;
   const defaultBranchName = () => defaultBranch ??= rest(`repos/${project.repository}`).default_branch;
 
-  return { predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, statusName, projectStatus, specLabel, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, claimField, claimOf, commentClaims, feedbackNode, issueFeedback, handoffHeading, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, restPost, sameLogin, defaultBranch, defaultBranchName, defaultBranchName, replyLine };
+  return { predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, statusName, projectStatus, specLabel, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, claimField, claimOf, commentClaims, feedbackNode, issueFeedback, handoffHeading, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, sameLogin, defaultBranch, defaultBranchName, defaultBranchName, replyLine };
 }

@@ -95,6 +95,20 @@ export function createGithub({ tool, command, projectDirectory, sleep }) {
 
   github.rest = path => JSON.parse(github.run(['api', path], { stdio: 'pipe' }));
 
+  /**
+   * One REST write, the only place that builds its `gh` arguments. `fields` are strings (`-f`) or booleans (`-F`), `body` is the text of a
+   * `body` field, `json` a whole request body; `header` is one extra header. stdio is piped: without it execFileSync copies gh's raw refusal
+   * to stderr, and a caller that reads the last line sees that, not the instruction (#332). Returns gh's answer text.
+   */
+  github.write = (method, path, { fields = {}, body, json, header } = {}) => {
+    if (adapter?.write) return adapter.write(method, path, { fields, body, json, header });
+    const args = ['api', path, '-X', method, ...header ? ['-H', header] : []];
+    for (const [key, val] of Object.entries(fields)) args.push(typeof val === 'boolean' ? '-F' : '-f', `${key}=${val}`);
+    if (body !== undefined) args.push('-F', 'body=@-');
+    if (json !== undefined) args.push('--input', '-');
+    return github.run(args, { input: json !== undefined ? JSON.stringify(json) : body, stdio: 'pipe' });
+  };
+
   /** Every page, so an early bot summary on a long PR is never cut off. */
   github.restAll = (path, expected) => {
     const items = [];
