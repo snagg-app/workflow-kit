@@ -43,8 +43,8 @@ function install(names) {
 }
 
 if (event === '--install') { if (rest.length) install(rest); process.exit(0); }
-if (!hookEvents.includes(event) || !agentNames.includes(agent)) {
-  console.error(`Usage: kit-hook.mjs <${hookEvents.join('|')}> --agent <${agentNames.join('|')}>`);
+if (!hookEvents.includes(event) || !agentNames().includes(agent)) {
+  console.error(`Usage: kit-hook.mjs <${hookEvents.join('|')}> --agent <${agentNames().join('|')}>`);
   process.exit(2);
 }
 
