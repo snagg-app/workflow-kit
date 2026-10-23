@@ -40,7 +40,9 @@ const open = hint => ({ state: 'open', hint });
 const tasks = [];
 const humans = [];
 // Read before the steps: skills and hooks create agent folders, which would make every agent look used.
-const trust = hookAgents(root).names.filter(name => agents[name].hooks.trust).map(name => `${agents[name].hooks.trust} in ${agents[name].label ?? name}`);
+// No agent found: hooks go to all, but no agent is named.
+const used = hookAgents(root);
+const trust = (used.none ? [] : used.names).filter(name => agents[name].hooks.trust).map(name => `${agents[name].hooks.trust} in ${agents[name].label ?? name}`);
 
 // Local steps decide the exit code; a step that needs the network or the user's home reports an open step instead.
 const step = (title, required, work) => tasks.push({ title, required, work });
