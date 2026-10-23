@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { gitIn } from './git-tool.mjs';
 import { providers } from './agents.mjs';
 import { checkDirectory } from './write-guard.mjs';
+import { readVersions, setVersion } from './versions.mjs';
 
 const assets = ['impeccable-darwin-arm64', 'impeccable-darwin-x64',
   'impeccable-linux-arm64', 'impeccable-linux-x64', 'impeccable-windows-x64.exe'];
@@ -79,8 +80,7 @@ export async function updateImpeccable(kit, { release, checksum } = {}) {
   assert.equal(git('-C', source, 'rev-parse', `${tag}^{commit}`), revision, 'Skill tag does not match the proposed pin');
   release ??= JSON.parse(await download(`https://api.github.com/repos/pbakaus/impeccable/releases/tags/engine-v${version}`));
   const pins = await releasePins(release, version, checksum);
-  const manifest = JSON.parse(read('scripts/versions.json'));
-  const changes = new Map([['scripts/versions.json', JSON.stringify({ ...manifest, impeccable: version }, null, 2) + '\n'], ['scripts/impeccable/SHA256SUMS', pins]]);
+  const changes = new Map([['scripts/impeccable/SHA256SUMS', pins]]);
   const doc = read('docs/impeccable.md');
   assert.match(doc, /pinned to `skill-v\d+\.\d+\.\d+`/);
   assert.match(doc, /Engine \d+\.\d+\.\d+/);
@@ -92,6 +92,7 @@ export async function updateImpeccable(kit, { release, checksum } = {}) {
   // gitlink; Renovate collects generated files through postUpgradeTasks.fileFilters.
   if (git('rev-parse', ':.vendor/impeccable') !== revision)
     git('add', '--', '.vendor/impeccable');
+  if (readVersions(kit).impeccable !== version) setVersion('impeccable', version, kit);
   for (const [name, value] of changes)
     if (previous.get(name) !== value) writeFileSync(join(kit, name), value);
   for (const command of ['init-project.mjs', 'setup-skills.mjs'])

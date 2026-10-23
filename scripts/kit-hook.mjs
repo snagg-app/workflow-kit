@@ -1,6 +1,6 @@
 // Zweck: Eine Stelle fuer alle Kit-Hooks von Claude und Codex (gemeinsamer Kit-Checkout, Warnungen, Ponytail, Impeccable, Selbstinstallation).
 // Aufruf: node scripts/kit-hook.mjs <Event> --agent <claude|codex>; Hook-JSON auf stdin, Antwort-JSON auf stdout, Exit 0.
-// Nutzen: Die Agent-Einstellungen enthalten nur noch diesen Aufruf; Versionen stehen in versions.json.
+// Nutzen: Die Agent-Einstellungen enthalten nur noch diesen Aufruf; Versionen stehen im Versions-Manifest.
 import { spawn, spawnSync } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents, agentNames } from './agents.mjs';
 import { hookEvents } from './hooks.mjs';
+import { readVersions } from './versions.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
@@ -17,7 +18,7 @@ import { projectFeatures, readProfile, textsFor } from './project-profile.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const scripts = path.dirname(self);
-const versions = JSON.parse(readFileSync(path.join(scripts, 'versions.json'), 'utf8'));
+const versions = readVersions();
 const [event, ...rest] = process.argv.slice(2);
 const agent = rest[rest.indexOf('--agent') + 1];
 

@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { agentLabels, providers, sharedSkills, sourceProviders } from './agents.mjs';
+import { setVersion } from './versions.mjs';
 
 const patch = 'scripts/ponytail/adaptations.patch';
 const skillName = /^ponytail(?:-[a-z0-9]+)*$/;
@@ -140,9 +141,8 @@ exec /bin/sh "\${0%/*}/launch.sh" "$@"
     const { updatePatch } = await import('./ponytail-patch.mjs'); // only the maintainer's update needs it
     await updatePatch(c.kit, this.source, patch, from);
     // The snapshot folder name comes from the manifest, so it must name the pinned version (Impeccable's release does the same).
-    const manifest = path.join(c.kit, 'scripts/versions.json');
     const ponytail = JSON.parse(c.text(path.join(c.source, 'package.json'))).version;
-    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(c.text(manifest)), ponytail }, null, 2) + '\n');
+    setVersion('ponytail', ponytail, c.kit);
     await c.setup();
   },
 };
