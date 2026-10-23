@@ -2,9 +2,10 @@
 // skills: where the agent finds skills. agents: where it finds agent definitions; upstreamAgents: where Impeccable ships them.
 // linksShared: the agent reads the shared skills through links (junction or symlink, never committed), not copies.
 // detectEnv: an environment variable only this agent's session sets; defaultAgent is the one without.
+// detect: project paths that show a project uses this agent (kit setup writes hooks only for detected agents; none detected: for all).
 // hooks: settings file, PostToolUse matcher and handler shape (shell key for bash handlers, a PowerShell variant, file description; fingerprint: where a session keeps the settings fingerprint, absent for an agent that reloads hooks itself); null for an agent without hooks (level 0 of AGENT_RULES: AGENTS.md, skills, board.mjs, kit check).
-import { readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 export const defaultAgent = 'claude';
 export const sharedSkills = '.agents/skills';
@@ -14,12 +15,14 @@ export const ownSkills = ['impeccable'];
 export const agents = {
   codex: {
     detectEnv: 'CODEX_THREAD_ID',
+    detect: ['.codex'],
     skills: sharedSkills,
     agents: '.codex/agents',
     upstreamAgents: '.agents/skills/impeccable/agents',
     hooks: { file: '.codex/hooks.json', matcher: 'Edit|Write|apply_patch', windows: true },
   },
   claude: {
+    detect: ['.claude'],
     skills: '.claude/skills',
     linksShared: true,
     agents: '.claude/agents',
@@ -38,6 +41,11 @@ export const sourceProviders = Object.values(agents).filter(agent => !agent.link
 export const agentNames = Object.keys(agents);
 /** The agent whose session this process runs in. */
 export const detectAgent = (env = process.env) => agentNames.find(name => agents[name].detectEnv && env[agents[name].detectEnv]) ?? defaultAgent;
+/** The agents with hooks that a project uses (one of their detect paths exists); none found, as in a new project: all of them. */
+export function hookAgents(root) {
+  const withHooks = agentNames.filter(name => agents[name].hooks), found = withHooks.filter(name => agents[name].detect.some(path => existsSync(join(root, path))));
+  return { names: found.length ? found : withHooks, none: !found.length };
+}
 export const hookFiles = Object.values(agents).filter(agent => agent.hooks).map(agent => agent.hooks.file);
 
 // kind: `start` also checks for Node and clones a missing shared kit; `simple` only hands over. feature: the event exists only for a project with that function.

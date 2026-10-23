@@ -47,6 +47,20 @@ test('kit handlers are replaced; foreign handlers, groups and settings stay; rer
   assert.deepEqual(readFileSync(path), once);
 });
 
+test('hooks are written only for agents the project uses; a project with none gets all (#760)', t => {
+  const only = fixture(t), empty = fixture(t);
+  mkdirSync(join(only.root, '.claude'));
+  const said = result => (succeeds(result), result.stdout);
+  assert.match(said(only.run('--existing')), /agents found: claude\./);
+  assert.ok(existsSync(join(only.root, '.claude/settings.json')));
+  assert.equal(existsSync(join(only.root, '.codex')), false);
+  assert.match(said(empty.run('--existing')), /No agent found.*claude, codex|No agent found.*codex, claude/);
+  assert.ok(existsSync(join(empty.root, '.claude/settings.json')) && existsSync(join(empty.root, '.codex/hooks.json')));
+  const once = readFileSync(join(empty.root, '.codex/hooks.json'));
+  succeeds(empty.run('--existing'));
+  assert.deepEqual(readFileSync(join(empty.root, '.codex/hooks.json')), once);
+});
+
 test('a project without UI files gets no Impeccable entry, and an old one goes; UI or the switch bring it back', t => {
   const f = fixture(t), path = join(f.root, '.claude/settings.json'), profile = join(f.root, '.github/workflow-project.json');
   const events = () => Object.keys(read(path).hooks).sort();
