@@ -170,6 +170,20 @@ test('--cwd names the project to initialize, not the working directory', t => {
   assert.equal(spawnSync(process.execPath, [join(f.kit, 'scripts/init-project.mjs'), '--cwd', join(f.base, 'missing')], { cwd: other }).status, 2);
 });
 
+test('--cwd works after other arguments; unknown or repeated arguments stop the run (#784)', t => {
+  const f = fixture(t), other = join(f.base, 'other');
+  mkdirSync(join(other, '.git'), { recursive: true });
+  const script = join(f.kit, 'scripts/init-project.mjs');
+  const run = (...args) => spawnSync(process.execPath, [script, ...args], { cwd: other, encoding: 'utf8' });
+  succeeds(run('--existing', '--cwd', f.root));
+  assert.ok(existsSync(join(f.root, '.gitignore')));
+  assert.equal(existsSync(join(other, '.gitignore')), false);
+  assert.equal(run('--existing', '--cwd').status, 2);
+  assert.equal(run('--cwd', f.root, '--existing', '--cwd', f.root).status, 2);
+  assert.equal(run('--cwd', f.root, '--exsting').status, 2);
+  assert.equal(existsSync(join(other, '.gitignore')), false);
+});
+
 test('writes stay inside the owning checkout', t => {
   const f = fixture(t), outside = join(f.base, 'outside');
   mkdirSync(outside);

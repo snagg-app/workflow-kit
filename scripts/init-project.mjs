@@ -12,7 +12,9 @@ import { checkDirectory } from './provider-links.mjs';
 import { languages, projectFeatures, readProfile } from './project-profile.mjs';
 
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
-enterCwd(); // `--cwd PROJECT_DIR` as the first argument
+enterCwd(); // `--cwd PROJECT_DIR` at any position
+const unknown = process.argv.slice(2).filter(argument => argument !== '--existing');
+if (unknown.length) { console.error(`Unknown argument: ${unknown.join(' ')}. Usage: init-project.mjs [--cwd PROJECT_DIR] [--existing]`); process.exit(2); }
 const requestedRoot = projectRoot();
 // The kit is the shared checkout; it configures itself or the project named by --cwd, never a project that contains the kit.
 const root = requestedRoot;

@@ -131,7 +131,7 @@ export function quiet(verbose, command, args, options, { summary, noise, ok, lab
 }
 
 if (process.argv[1] && realpathSync.native(fileURLToPath(import.meta.url)) === realpathSync.native(process.argv[1])) {
-  enterCwd(); // `--cwd PROJECT_DIR` as the first argument; file arguments are relative to it
+  enterCwd(); // `--cwd PROJECT_DIR` at any position; file arguments are relative to it
   const { values, positionals: given } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, verbose: { type: 'boolean' }, resume: { type: 'string' }, base: { type: 'string', default: 'origin/main' } } });
   // A project that uses the kit through .vendor/workflow-kit: kit tests follow the kit's own changes, the project map the project's.
   const root = projectRoot(), inKit = realpathSync.native(root) === realpathSync.native(kit);

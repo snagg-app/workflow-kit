@@ -10,7 +10,7 @@ import { checkDirectory, linkSkills, materialize } from './provider-links.mjs';
 
 // Check Matt's ownership manifests before another generator changes discovery files.
 // All setups act on the checkout they run in (see projectRoot in checkout-root.mjs); `--cwd PROJECT_DIR` as the
-// first argument picks it, and the setups started below inherit that working directory.
+// argument picks it, and the setups started below inherit that working directory.
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log('Usage: node <kit>/scripts/setup-skills.mjs [--cwd PROJECT_DIR]');
   process.exit(0);
