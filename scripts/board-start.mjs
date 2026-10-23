@@ -145,7 +145,13 @@ function start() {
     else {
       const target = targetBranch({ number, title: fresh.title, agent, session, branch, taken: takenFor(fresh) });
       branch = target.branch;
-      if (target.create) git('switch', '-c', branch, '--no-track', `origin/${base}`);
+      if (target.create) {
+        git('switch', '-c', branch, '--no-track', `origin/${base}`);
+        // #848: a fresh worktree stood on an old commit that did not mention the kit, so the check above skipped the link; on the base the project names the kit, so link it now.
+        const again = kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt, force: true });
+        again.messages.forEach(progress);
+        assert.ok(!again.stuck, `the kit link of the fresh worktree failed (${again.messages.at(-1) ?? 'unknown'}); claim and status stay: fix it and run start again`);
+      }
     }
     if (!isOwn(fresh, session)) {
       github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });

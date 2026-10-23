@@ -97,7 +97,9 @@ function judgeChecks(ctx, s) {
     // CI never stalls: a running check is not success however long it takes.
     if (pending) { waiting.push({ text: `check ${label}`, since: Infinity }); continue; }
     const result = check.conclusion ?? check.state;
-    if (!passed.has(result)) {
+    // A cancelled SonarCloud analysis proves nothing itself (#847): judgeSonar then decides by the open findings of the PR, and a read it cannot make blocks.
+    const sonarCancelled = result === 'CANCELLED' && check.checkSuite?.app?.slug === 'sonarqubecloud';
+    if (!passed.has(result) && !sonarCancelled) {
       s.failed = true;
       const asks = baseChecks.has(label);
       reasons.push(`check ${label} ${result}${asks ? ` asks for the base: run board.mjs merge ${pr.number} or merge the base and push` : ''}`);
@@ -262,6 +264,7 @@ function judgeSonar({ pr, facts, live, after }, s) {
     const { total: open, lines: findings } = found;
     if (open === null) {
       lines.push('blocker: the Sonar issue count is unreadable: SONAR_TOKEN is not set and the SonarCloud check summary has no "N New issues"; set SONAR_TOKEN (docs/board/wait.md) and run done again');
+      if (check.conclusion === 'CANCELLED') { s.failed = true; reasons.push('check Sonar CANCELLED and its findings are unreadable'); }
       continue;
     }
     lines.push(`sonar: ${open} open issue${open === 1 ? '' : 's'}`, ...findings);
