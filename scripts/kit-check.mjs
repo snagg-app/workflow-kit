@@ -55,10 +55,12 @@ function updateKit(git, kit, say, root) {
     return say(textsAt(root).kitDirty(kit), true);
   // Never prompt, never run hooks of the checkout (the runner carries the timeout and the no-prompt environment, see `hookGit`).
   const step = (...args) => git(kit, '-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', ...args).ok;
-  locked(path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock'), 10 * 60_000, () => {
+  const ran = locked(path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock'), 10 * 60_000, () => {
     if (!step('pull', '--ff-only', '--quiet') || (existsSync(path.join(kit, '.gitmodules')) && !step('submodule', 'update', '--init', '--quiet')))
       say(textsAt(root).kitNotUpdated(kit), true);
   });
+  // Another run holds the lock: the hook stays silent, but the kit is not known to be current (#813), so `start` stops.
+  if (!ran) say(null, true);
 }
 
 /** The one repair of `.vendor/workflow-kit` (hook and `kit setup`): a link (Windows junction, else symlink) to the shared kit. Returns '' when in order, else what needs a human. */
@@ -91,8 +93,8 @@ function checkKit(git, dir, update, say, state, shared) {
   // The kit's own repository runs its own scripts; a project without any kit hook is none of our business.
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
   const kit = shared ?? sharedKit(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out), problem = linkKit(root, kit);
-  if (problem) return say(problem);
-  if (update && !state.updated) { state.updated = true; updateKit(git, kit, say, root); }
+  if (problem) return say(problem, true);
+  if (update && !state.updated.has(kit)) { state.updated.add(kit); updateKit(git, kit, (message, stuck) => { if (stuck) state.updated.delete(kit); say(message, stuck); }, root); } // a failed update is tried again by the next call of this process
   return kit;
 }
 
@@ -107,22 +109,23 @@ function kitHead(kit) {
   } catch { return ''; }
 }
 
-const state = { updated: false };
+const state = { updated: new Set() };
 
 /**
  * The kit check of one directory; returns the messages (empty: all in order). After a clean full check the git dir gets a stamp (`kit-ok`). While project commit, kit commit
  * and kit path are unchanged and the stamp is young, the next call skips the check and the pull: one git call plus file reads. Time is only an addition, never the key.
  * `update`: also pull the shared kit (the hook at session start); board.mjs and `kit check` read only.
+ * `force`: ignore the stamp (`start` must see the real state of origin, #813).
  * `kit`: the kit checkout that runs (`kit setup`), instead of the shared one found next to the project.
  * `git`: a runner `(dir, ...args) => output` that throws on failure (gitIn); the default is the kit's safe one, the hook and board.mjs pass theirs.
  */
-export function kitCheck(dir, { update = false, git: run = gitIn(patient, dir), kit: shared } = {}) {
+export function kitCheck(dir, { update = false, force = false, git: run = gitIn(patient, dir), kit: shared } = {}) {
   // `messages.stuck` (#813): the shared kit could not follow origin (not main, local work, no fast-forward); `start` refuses on it.
-  const git = asking(run), messages = [], say = (message, stuck) => { messages.push(message); if (stuck) messages.stuck = true; };
+  const git = asking(run), messages = [], say = (message, stuck) => { if (message) messages.push(message); if (stuck) messages.stuck = true; };
   const fresh = Number(process.env.KIT_HOOK_FRESH_SECONDS ?? 600) * 1000;
   const [gitDir, head] = git(dir, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');
   const file = gitDir && path.join(gitDir, 'kit-ok');
-  if (file) {
+  if (file && !force) {
     try {
       const stamp = JSON.parse(readFileSync(file, 'utf8'));
       if (stamp.git === gitDir && stamp.head === head && Date.now() - stamp.at < fresh && (stamp.pulled || !update)
@@ -130,8 +133,7 @@ export function kitCheck(dir, { update = false, git: run = gitIn(patient, dir), 
     } catch { /* no or broken stamp: full check */ }
   }
   const kit = checkKit(git, dir, update, say, state, shared);
-  if (messages.stuck) state.updated = false; // a failed update is tried again by the next call of this process
-  if (file && kit && !messages.length) {
+  if (file && kit && !messages.length && !messages.stuck) {
     // The check may have fast-forwarded the project, so the commit is read again.
     try { writeFileSync(file, JSON.stringify({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() })); } catch { /* best effort */ }
   }

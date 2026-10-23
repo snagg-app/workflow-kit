@@ -46,10 +46,11 @@ test('start prints the kit hints of the session hook, so an agent without hooks 
   mkdirSync(join(checkout, '.claude'));
   writeFileSync(join(checkout, '.claude/settings.json'), '{"hooks":{"SessionStart":[{"hooks":[{"id":"workflow-kit"}]}]}}');
   env.WORKFLOW_KIT_DIR = join(dirname(checkout), 'no-such-kit');
+  // #813: a kit that cannot be linked stops start before any write.
   const result = run('start', '1', '--session', 'S1');
-  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /Workflow-Kit-Checkout .* fehlt oder ist unvollständig/);
-  assert.equal(readFileSync(file('stored'), 'utf8'), 'In progress');
+  assert.equal(existsSync(file('stored')), false);
 });
 
 test('start brings the shared kit to origin/main, and refuses without a write when it cannot (#813)', t => {
