@@ -20,7 +20,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStart(env) {
-  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, progress, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses, step, texts } = env;
+  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, gitAt, github, isSpec, issueProject, number, progress, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses, step, texts } = env;
   const { baseOf, branchWork, check, foreignAssignees, isOwn, linkIssue, mayStart, openPr, ownPr, refsPr, set, startReasons, workBranches } = env.later;
 
   /** A branch name is taken when the issue, this clone or the remote already has it. */
@@ -70,7 +70,7 @@ export function createStart(env) {
     const session = sessionOption();
     assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
     // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
-    [...kitCheck(projectDirectory, { git }), ...modulesCheck(projectDirectory, { git })].forEach(progress);
+    [...kitCheck(projectDirectory, { git: gitAt }), ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
     // One checkout-wide setting each, so a commit in a submodule never rides along with a project push and a branch switch follows the submodule pins.
     if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);
     const issue = readIssue();

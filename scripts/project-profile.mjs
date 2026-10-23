@@ -1,8 +1,8 @@
 // What a project's .github/workflow-project.json says about its board statuses the language of the texts board.mjs writes and the kit skills it keeps.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { asking, gitIn } from './git-tool.mjs';
 
 const defaultStatuses = { backlog: 'Backlog', ready: 'Ready', inProgress: 'In progress', automatedReview: 'Automated review', humanReview: 'Human review', done: 'Done' };
 
@@ -130,9 +130,9 @@ const uiFile = /\.(?:tsx|jsx|vue|svelte|astro)$/;
  * Whether the project has UI files: a component file (tracked or new, not ignored) or a UI dependency in any package.json.
  * shortcut: names the common frameworks only; when it guesses wrong, set "impeccable" to true or false in the profile.
  */
-export function hasUi(root) {
-  const listed = spawnSync('git', ['-C', root, 'ls-files', '--cached', '--others', '--exclude-standard'], { encoding: 'utf8', maxBuffer: 1 << 28, windowsHide: true });
-  const files = listed.status === 0 ? listed.stdout.split('\n').filter(Boolean) : [];
+export function hasUi(root, git) {
+  const listed = asking(git)(root, 'ls-files', '--cached', '--others', '--exclude-standard');
+  const files = listed.ok ? listed.out.split('\n').filter(Boolean) : [];
   if (files.some(file => uiFile.test(file))) return true;
   return files.filter(file => /(?:^|\/)package\.json$/.test(file)).some(file => {
     try {
@@ -143,9 +143,9 @@ export function hasUi(root) {
 }
 
 /** The optional kit functions of a project: "impeccable" (true, false or "auto", the default: on with UI files) and "ponytail" (true by default, or false). */
-export function projectFeatures(root) {
+export function projectFeatures(root, git = gitIn({}, root)) {
   const { impeccable = 'auto', ponytail = true } = readProfile(root);
   assert.ok([true, false, 'auto'].includes(impeccable), 'impeccable in .github/workflow-project.json must be true, false or "auto"; omit it for "auto" (on when the project has UI files)');
   assert.ok(typeof ponytail === 'boolean', 'ponytail in .github/workflow-project.json must be true or false; omit it for true');
-  return { impeccable: impeccable === 'auto' ? hasUi(root) : impeccable, ponytail };
+  return { impeccable: impeccable === 'auto' ? hasUi(root, git) : impeccable, ponytail };
 }

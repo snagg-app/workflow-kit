@@ -14,12 +14,12 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createNext(env) {
-  const { args, ago, baseField, commentClaims, git, graphql, issueFeedback, loadDeliveries, predecessorFields, project, progress, projectDirectory, projectItem, projectStatus, restAll, sessionOption, statuses, texts } = env;
+  const { args, ago, baseField, commentClaims, gitAt, graphql, issueFeedback, loadDeliveries, predecessorFields, project, progress, projectDirectory, projectItem, projectStatus, restAll, sessionOption, statuses, texts } = env;
   const { conflicting, dropFieldsCache, feedback, heldOnlyByOpenPredecessors, idleMs, isStale, loadPrFeedback, openPr, ownWork, predecessorReasons, selectField, stackBase, startReasons, waitReasons } = env.later;
 
   function next() {
     // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
-    [...kitCheck(projectDirectory, { git }), ...modulesCheck(projectDirectory, { git })].forEach(progress);
+    [...kitCheck(projectDirectory, { git: gitAt }), ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
     // Advanced issue search understands -is:blocked (open native predecessors). Separate searches keep blocked issues
     // from crowding unblocked ones out of the 1,000-result search cap; read every page of both before sorting. A page costs by its size, not by its hits
     // so it is short. PR feedback is loaded separately, once per actual unique PR.

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents, agentNames, hookEvents } from './agents.mjs';
 import { projectRoot } from './checkout-root.mjs';
+import { asking, gitIn, patient } from './git-tool.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { locked } from './lock.mjs';
 import { locate, markUsed } from './provider.mjs';
@@ -56,10 +57,9 @@ if (Number(process.versions.node.split('.')[0]) < versions.node) {
   process.exit(0);
 }
 
-const git = (dir, ...args) => {
-  const result = spawnSync('git', ['-C', dir, ...args], { encoding: 'utf8', windowsHide: true });
-  return { ok: result.status === 0, out: (result.stdout ?? '').trim() };
-};
+// The hook runs in the project folder, so its git is looked up outside that checkout (#758).
+const hookGit = gitIn(patient);
+const git = asking(hookGit);
 function emit() {
   if (!user.length && !context.length) return;
   const output = { systemMessage: user.join('\n'), hookSpecificOutput: { hookEventName: event, additionalContext: context.join('\n') } };
@@ -136,11 +136,11 @@ else {
   const { fingerprint: where, file: settings } = agents[agent].hooks ?? {};
   if (where) fingerprint(project, input, where, settings);
   let on = { impeccable: true, ponytail: true }; // a broken profile must not stop the session
-  try { on = projectFeatures(project); } catch (error) { if (event === 'SessionStart') say(error.message); }
+  try { on = projectFeatures(project, hookGit); } catch (error) { if (event === 'SessionStart') say(error.message); }
   // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
-  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) kitCheck(dir, { update: event === 'SessionStart' && input.source !== 'compact' }).forEach(say);
+  for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) kitCheck(dir, { update: event === 'SessionStart' && input.source !== 'compact', git: hookGit }).forEach(say);
   if (event === 'SessionStart') {
-    modulesCheck(project).forEach(say);
+    modulesCheck(project, { git: hookGit }).forEach(say);
     if (fresh) spawn(process.execPath, [self, '--install', ...Object.keys(on).filter(name => on[name])], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   }
   const ponytail = on.ponytail && launcher(event === 'SessionStart' ? 'activate' : 'subagent', ...(event === 'SessionStart' && !fresh ? ['continue'] : []));

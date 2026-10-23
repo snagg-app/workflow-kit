@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
 import { hookSettings } from '../agents.mjs';
@@ -58,6 +58,21 @@ test('a fresh project gets the link to the shared kit and a clean git status; th
   result = await f.trial();
   assert.equal(result.status, 0, result.stderr);
   assert.equal(await f.head(), tip, 'the next session start has the new kit commit, without a merge in the project');
+});
+
+test('the hook never runs a git from the project folder (#758)', async t => {
+  const f = await shared(t, 'kit-planted-git ');
+  const planted = join(f.project, process.platform === 'win32' ? 'git.exe' : 'git'), marker = join(f.temp, 'planted-git-ran');
+  copyFileSync(process.execPath, planted);
+  chmodSync(planted, 0o755);
+  // The planted "git" is a copy of node; this preload (loaded by every node child) records that the copy, and only the copy, started.
+  const probe = join(f.temp, 'probe.cjs');
+  writeFileSync(probe, `if (/^git(\\.exe)?$/i.test(require('node:path').basename(process.execPath))) require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran');`);
+  const key = Object.keys(f.env).find(name => name.toLowerCase() === 'path');
+  const result = await f.trial({ [key]: [f.project, '.', f.env[key]].join(delimiter), NODE_OPTIONS: `--require "${probe.replaceAll('\\', '/')}"` });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(marker), false, 'the git of the project folder was started');
+  assert.ok(f.linked(), 'the real git still did the check');
 });
 
 test('a valid stamp skips the check and the pull; a changed project commit runs the full check again', async t => {
