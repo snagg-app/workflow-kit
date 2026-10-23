@@ -37,14 +37,14 @@ export function render(outcome, { verbose = false, json = false } = {}) {
 }
 
 /** The printer of one board.mjs call. `--json` keeps stdout to the one document: progress then goes to stderr. */
-export function createOutput({ json = false, verbose = false } = {}) {
-  const progress = text => (json ? console.error : console.log)(text);
+export function createOutput({ json = false, verbose = false, io = console } = {}) {
+  const progress = text => (json ? io.error : io.log)(text);
   return {
     progress,
     /** A result that is part of a longer run (a step of `done`) prints when it happens, not as the end. */
     step: outcome => progress(render(outcome, { verbose })),
-    finish: outcome => console.log(render(outcome, { verbose, json })),
-    text: text => console.log(text),
-    diagnostic: text => console.error(text),
+    finish: outcome => io.log(render(outcome, { verbose, json })),
+    text: text => io.log(text),
+    diagnostic: text => io.error(text),
   };
 }

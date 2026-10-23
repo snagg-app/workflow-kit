@@ -4,14 +4,14 @@
 import { execFile } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { externalTool } from './checkout-root.mjs';
+import { externalToolIn } from './checkout-root.mjs';
 import { runProgram } from './run-program.mjs';
 
 /** Looks git up on first use per `dir`, outside the checkouts of `paths`, the working directory and `dir`: a command without git never needs one and a checkout cannot substitute it. */
-function lookup(paths) {
+function lookup(paths, from) {
   const tools = new Map();
   return dir => {
-    if (!tools.has(dir)) tools.set(dir, externalTool('git', process.cwd(), ...paths, dir));
+    if (!tools.has(dir)) tools.set(dir, externalToolIn(from, 'git', process.cwd(), ...paths, dir));
     return tools.get(dir);
   };
 }
@@ -20,10 +20,10 @@ const spawnOptions = (tool, env, timeout) => ({ encoding: 'utf8', env: { ...tool
 
 /**
  * A git runner `(dir, ...args) => stdout` (trimmed unless `-z`; throws like execFileSync).
- * `options`: `timeout` and extra `env` for every call (a value of `undefined` removes a variable). The runner is passed around, never installed globally.
+ * `options`: `timeout` and extra `env` for every call (a value of `undefined` removes a variable); `from`: the environment that finds git (default: the process's). The runner is passed around, never installed globally.
  */
-export function gitIn({ timeout, env } = {}, ...paths) {
-  const tool = lookup(paths);
+export function gitIn({ timeout, env, from = process.env } = {}, ...paths) {
+  const tool = lookup(paths, from);
   return (dir, ...args) => {
     const output = runProgram(tool(dir).file, ['-C', dir, ...args], spawnOptions(tool(dir), env, timeout));
     return args.includes('-z') ? output : output.trim();
@@ -31,8 +31,8 @@ export function gitIn({ timeout, env } = {}, ...paths) {
 }
 
 /** For callers that need more than the output: `{ status, stdout, stderr }`, no throw on a non-zero exit (`status` null and `error` set when git did not run, e.g. a timeout). */
-export function gitResultIn({ timeout, env } = {}, ...paths) {
-  const tool = lookup(paths);
+export function gitResultIn({ timeout, env, from = process.env } = {}, ...paths) {
+  const tool = lookup(paths, from);
   return (dir, ...args) => {
     const found = tool(dir); // a missing git throws here, never as a result
     try {
@@ -44,8 +44,8 @@ export function gitResultIn({ timeout, env } = {}, ...paths) {
 }
 
 /** The same lookup for many calls at once: `(dir, ...args) => Promise<{ ok, out }>`, no throw. */
-export function gitAsyncIn({ timeout, env } = {}, ...paths) {
-  const tool = lookup(paths);
+export function gitAsyncIn({ timeout, env, from = process.env } = {}, ...paths) {
+  const tool = lookup(paths, from);
   return (dir, ...args) => new Promise(done => {
     const found = tool(dir);
     execFile(found.file, ['-C', dir, ...args], { ...spawnOptions(found, env, timeout), stdio: undefined },

@@ -106,14 +106,14 @@ export function parseArgs(specs, argv, project) {
 }
 
 /** The options commands read by name, on top of the parsed arguments. */
-export function createOptions({ project, args }) {
+export function createOptions({ project, args, env = process.env }) {
   // "staleHours" in the project file (default 6): after that long without activity the work counts as abandoned and a new session may take it over (#400).
   const { staleHours } = project;
   // "reviewerGraceMinutes" in the project file is the default of --grace; 0 turns the grace off.
   const projectGrace = project.reviewerGraceMinutes;
   const numberOption = args.number;
   // The own session for start, check and next alike (claim.mjs).
-  const sessionOption = () => ownSession(args.value('--session'));
+  const sessionOption = () => ownSession(args.value('--session'), env);
   return { staleHours, numberOption, stallOption: () => numberOption('--stall', 20), stack: args.flag('--stack'), projectGrace, graceOption: () => numberOption('--grace', projectGrace),
     sessionOption, blockerRepository: reference => blockerRepository(reference, project), validBlocker: reference => validBlocker(reference, project) };
 }

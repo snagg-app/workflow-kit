@@ -1,10 +1,10 @@
-// Runs board.mjs for board-runner.mjs inside this worker thread instead of a new Node process per call, and hands its
+// Runs board-run.mjs (the function behind board.mjs) for board-runner.mjs inside this worker thread instead of a new Node process per call, and hands its
 // `gh` calls to the fake gh (fake-gh.mjs) instead of starting a process per call. A case of the board tests makes about
 // eight such starts; at 70 to 150 ms each (Windows, virus scanner) they were most of the suite's run time.
 import childProcess from 'node:child_process';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
-import { format } from 'node:util';
 import { workerData } from 'node:worker_threads';
+import { runBoard } from '../board-run.mjs';
 import { useProcessAdapter } from '../run-program.mjs';
 import { useGhAdapter } from '../github.mjs';
 import { useSonarAdapter } from '../sonar.mjs';
@@ -12,7 +12,6 @@ import { fakeGh } from './fake-gh.mjs';
 import { fakeSonar } from './fake-sonar.mjs';
 
 const { requests, results, done } = workerData;
-const boardUrl = new URL('../board.mjs', import.meta.url).href;
 
 // The process variant for board-process.mjs: the targeted tests are only noted, other programs run for real.
 // Their stderr would go to this process's file descriptor, past the captured result; it is routed into the result like board.mjs's own output.
@@ -48,28 +47,17 @@ useProcessAdapter((file, args, options) => file === process.execPath && /affecte
   : /(^|[\\/])git(\.exe)?$/.test(file) ? realExecFileSync('git', args, { ...options, env: { ...options?.env, PATH: hostPath } })
     : realExecFileSync(file, args, options));
 
-class ProcessExit extends Error {}
+const say = stream => text => results.postMessage({ stream, text: `${text}\n` });
+const io = { log: say('stdout'), error: say('stderr') };
 
-let count = 0;
-requests.onmessage = async ({ data: { args, env } }) => {
-  let status = 0;
-  const say = stream => (...parts) => results.postMessage({ stream, text: `${format(...parts)}\n` });
-  const [log, error, warn, exit] = [console.log, console.error, console.warn, process.exit];
-  [console.log, console.error, console.warn] = [say('stdout'), say('stderr'), say('stderr')];
-  process.exit = code => { throw Object.assign(new ProcessExit(), { code: code ?? process.exitCode ?? 0 }); };
-  for (const key of Object.keys(process.env)) delete process.env[key];
-  Object.assign(process.env, env);
-  process.argv = [process.execPath, 'board.mjs', ...args];
-  process.exitCode = undefined;
+requests.onmessage = async ({ data: { args, env, cwd } }) => {
+  let status;
   try {
-    await import(`${boardUrl}?call=${++count}`);
-    status = process.exitCode ?? 0;
+    status = (await runBoard({ argv: args, env, cwd, io })).exitCode;
   } catch (thrown) {
-    // Like Node: process.exit() ends with its code, any other uncaught error prints its stack and ends with 1.
-    if (thrown instanceof ProcessExit) status = thrown.code;
-    else { results.postMessage({ stream: 'stderr', text: `${thrown?.stack ?? thrown}\n` }); status = 1; }
-  } finally {
-    [console.log, console.error, console.warn, process.exit] = [log, error, warn, exit];
+    // Like Node: an uncaught error prints its stack and ends with 1.
+    results.postMessage({ stream: 'stderr', text: `${thrown?.stack ?? thrown}\n` });
+    status = 1;
   }
   results.postMessage({ status });
   Atomics.store(done, 0, 1);
