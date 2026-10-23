@@ -20,7 +20,8 @@ export const hookEvents = events().map(({ event }) => event);
 /** The hook settings the kit contributes to one agent's settings file; `on` names the functions the project uses (projectFeatures), without it all of them. */
 export function hookSettings(name, on) {
   const commands = JSON.parse(readFileSync(new URL('./hook-commands.json', import.meta.url), 'utf8'));
-  const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile);
+  const { node } = JSON.parse(readFileSync(new URL('./versions.json', import.meta.url), 'utf8'));
+  const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile).replaceAll('{node}', node);
   const hooks = {};
   for (const { event, kind, timeout, matcher, statusMessage, feature } of events()) {
     if (feature && on && !on[feature]) continue;
