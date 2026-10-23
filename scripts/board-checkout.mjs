@@ -1,6 +1,6 @@
 // The git rules of the board in one place (#686): where the checkout stands, which branch is the work's target and where a push may go.
 // `start`, `done`, `stack-sync` and `merge` only run what these answer; every git call of the board goes through `git` / `gitAt` here.
-import { execFileSync } from 'node:child_process';
+import { runProgram } from './board-process.mjs';
 import { externalTool } from './checkout-root.mjs';
 
 /** #646: nothing the board pushes may reach these (private repos have no branch protection). */
@@ -49,7 +49,7 @@ export function createCheckout({ projectDirectory, sleep }) {
     const tool = externalTool('git', process.cwd(), cwd);
     for (let attempt = 1; ; attempt++) {
       try {
-        const output = execFileSync(tool.file, ['-C', cwd, ...args], { encoding: 'utf8', env: tool.env, stdio: ['ignore', 'pipe', 'pipe'] });
+        const output = runProgram(tool.file, ['-C', cwd, ...args], { encoding: 'utf8', env: tool.env, stdio: ['ignore', 'pipe', 'pipe'] });
         return args.includes('-z') ? output : output.trim();
       } catch (error) {
         if (args[0] !== 'fetch' || attempt === 3 || !/cannot lock ref|unable to update local ref/.test(String(error.stderr || error.message))) throw error;
