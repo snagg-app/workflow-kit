@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { agents, hookSettings, ownSkills } from './agents.mjs';
 import { checkDirectory } from './provider-links.mjs';
-import { projectFeatures } from './project-profile.mjs';
+import { languages, projectFeatures, readProfile } from './project-profile.mjs';
 
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 enterCwd(); // `--cwd PROJECT_DIR` as the first argument
@@ -70,9 +70,13 @@ if (root !== kit) linkKit();
 
 const templates = readdirSync(join(kit, 'templates'), { recursive: true })
   .filter(file => lstatSync(join(kit, 'templates', file)).isFile()).map(file => file.split(sep).join('/'));
-for (const name of templates) {
+const language = readProfile(root).language ?? 'en';
+for (const file of templates) {
+  // templates/<language>/ holds the texts that differ by language; the project gets the one of its profile.
+  const [first, ...rest] = file.split('/');
+  const name = languages.includes(first) ? (first === language ? rest.join('/') : null) : file;
   // Templates start new projects; afterwards they belong to the project and are never overwritten.
-  if (!existing && !existsSync(safe(name))) write(name, text(join(kit, 'templates', name)));
+  if (name && !existing && !existsSync(safe(name))) write(name, text(join(kit, 'templates', file)));
 }
 // The kit's handlers come from the agent table and the project's functions (profile); without an entry, a file only loses them.
 const features = projectFeatures(root);

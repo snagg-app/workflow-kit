@@ -34,12 +34,28 @@ export function statusMismatch(actual, project) {
 const texts = {
   en: {
     handoff: 'Handoff',
+    claimed: 'Claimed.',
+    base: 'Base',
+    feedback: 'Feedback',
+    waitsUntil: 'Waits until',
+    decision: 'Decision',
+    resultHint: '<result in one sentence>',
+    noFindings: 'No findings',
+    hooksChanged: 'Hooks changed since session start: restart the session',
     selfReview: 'Self-review',
     delivered: (pr, base) => `Delivered with #${pr} in \`${base}\`. The release PR to \`main\` publishes the version.`,
     conflict: (url, statuses) => `PR ${url} conflicts with its base, but an issue in ${statuses.humanReview} must be mergeable. The issue goes back to ${statuses.automatedReview}. Resolve the conflict, then hand off again (\`board.mjs done\`).`,
   },
   de: {
     handoff: 'Übergabe',
+    claimed: 'Beansprucht.',
+    base: 'Basis',
+    feedback: 'Rückmeldungen',
+    waitsUntil: 'Wartet bis',
+    decision: 'Entscheidung',
+    resultHint: '<Ergebnis in einem Satz>',
+    noFindings: 'Keine Funde',
+    hooksChanged: 'Hooks seit Session-Start geändert: Session neu starten',
     selfReview: 'Selbstprüfung',
     delivered: (pr, base) => `Geliefert mit #${pr} in \`${base}\`. Der Release-PR nach \`main\` veröffentlicht die Version.`,
     conflict: (url, statuses) => `Der PR ${url} hat Konflikte mit seiner Basis, ein Issue in ${statuses.humanReview} muss aber mergebar sein. Das Issue geht zurück auf ${statuses.automatedReview}. Konflikt lösen, dann neu übergeben (\`board.mjs done\`).`,
@@ -59,6 +75,16 @@ export function readProfileAt(rest, repository, ref) {
   assert.equal(file?.encoding, 'base64', `.github/workflow-project.json of ${repository}${ref === undefined ? '' : ` on ${ref}`} is unreadable`);
   return JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
 }
+
+/** The profile of a project directory ({} without a readable file). */
+export function readProfile(root) {
+  try { return JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8')); } catch { return {}; }
+}
+
+export const languages = Object.keys(texts);
+
+/** One text in every language, for readers that accept what any language wrote (the claim's "Basis:" line, "Wartet bis:"). */
+export const textInEveryLanguage = key => [...new Set(Object.values(texts).map(table => table[key]))];
 
 /** The skills every project gets without a choice. Why these: docs/skill-core.md. */
 export const coreSkills = ['spec-review', 'find-skills', 'pr', 'code-review', 'ponytail', 'ponytail-review', 'grilling', 'writing-for-agents', 'codebase-design', 'to-tickets'];
@@ -96,9 +122,7 @@ export function hasUi(root) {
 
 /** The optional kit functions of a project: "impeccable" (true, false or "auto", the default: on with UI files) and "ponytail" (true by default, or false). */
 export function projectFeatures(root) {
-  let project = {};
-  try { project = JSON.parse(readFileSync(join(root, '.github/workflow-project.json'), 'utf8')); } catch { /* no profile: the defaults */ }
-  const { impeccable = 'auto', ponytail = true } = project;
+  const { impeccable = 'auto', ponytail = true } = readProfile(root);
   assert.ok([true, false, 'auto'].includes(impeccable), 'impeccable in .github/workflow-project.json must be true, false or "auto"; omit it for "auto" (on when the project has UI files)');
   assert.ok(typeof ponytail === 'boolean', 'ponytail in .github/workflow-project.json must be true or false; omit it for true');
   return { impeccable: impeccable === 'auto' ? hasUi(root) : impeccable, ponytail };

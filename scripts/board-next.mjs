@@ -14,7 +14,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createNext(env) {
-  const { args, ago, baseField, commentClaims, git, graphql, issueFeedback, loadDeliveries, predecessorFields, project, progress, projectDirectory, projectItem, projectStatus, restAll, sessionOption, statuses } = env;
+  const { args, ago, baseField, commentClaims, git, graphql, issueFeedback, loadDeliveries, predecessorFields, project, progress, projectDirectory, projectItem, projectStatus, restAll, sessionOption, statuses, texts } = env;
   const { conflicting, dropFieldsCache, feedback, heldOnlyByOpenPredecessors, idleMs, isStale, loadPrFeedback, openPr, ownWork, predecessorReasons, selectField, stackBase, startReasons, waitReasons } = env.later;
 
   function next() {
@@ -82,7 +82,7 @@ export function createNext(env) {
     // Long lists stop after 10 entries ("and N more"); --verbose lists all. The own work is never cut.
     const cut = list => capped(list, { verbose: args.flag('--verbose') });
     const notes = [];
-    if (replies.length) notes.push(`Rückmeldungen (answer in the ticket with a comment that starts with your "Agent: …, Session: …" line, or hand off again with done; start ISSUE is BLOCKED while one of your session's is open):\n${cut(replies.map(row => `#${row.issue.number} [${status(row.issue)}] ${row.issue.title}: ${row.reason} ${row.url}`)).join('\n')}\n`);
+    if (replies.length) notes.push(`${texts.feedback} (answer in the ticket with a comment that starts with your "Agent: …, Session: …" line, or hand off again with done; start ISSUE is BLOCKED while one of your session's is open):\n${cut(replies.map(row => `#${row.issue.number} [${status(row.issue)}] ${row.issue.title}: ${row.reason} ${row.url}`)).join('\n')}\n`);
     if (mine.length) notes.push(`Finish your own work first (start ISSUE is BLOCKED for a new start meanwhile):\n${mine.map(issue => work(issue)).join('\n')}\n`);
     if (abandoned.length) notes.push(`Stale or conflicting work, a new session may take it over (start ISSUE --session ID):\n${cut(abandoned.map(issue => work(issue,
       conflicting(issue) ? 'merge conflicts' : `no activity for ${ago(idleMs(issue))}`))).join('\n')}\n`);

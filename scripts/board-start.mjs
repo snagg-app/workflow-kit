@@ -9,6 +9,7 @@ import { shared } from './board-args.mjs';
 import { pushPlan, targetBranch } from './board-checkout.mjs';
 import { result } from './board-result.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
+import { textInEveryLanguage } from './project-profile.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -19,7 +20,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStart(env) {
-  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, progress, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses, step } = env;
+  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, github, isSpec, issueProject, number, progress, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses, step, texts } = env;
   const { baseOf, branchWork, check, foreignAssignees, isOwn, linkIssue, mayStart, openPr, ownPr, refsPr, set, startReasons, workBranches } = env.later;
 
   /** A branch name is taken when the issue, this clone or the remote already has it. */
@@ -35,7 +36,7 @@ export function createStart(env) {
     // A merged PR (squash: its commits are not in the base) means the work is delivered: the FILE-only path reports it.
     if (!claim || issue.closedByPullRequestsReferences?.nodes.some(pr => pr?.state === 'MERGED')) return;
     git('fetch', 'origin');
-    const base = /^Basis:[ \t]*(\S+)[ \t]*$/m.exec(claim.input)?.[1] ?? (baseOf(issue).branch || defaultBranchName());
+    const base = new RegExp(`^(?:${textInEveryLanguage('base').join('|')}):[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(claim.input)?.[1] ?? (baseOf(issue).branch || defaultBranchName());
     const here = checkout.stand(base);
     if (here.ahead === 0) return;
     const { branch, create } = targetBranch({ number, title: issue.title, agent: claim[1], session: claim[2], branch: here.branch, taken: takenFor(issue) });
@@ -136,7 +137,7 @@ export function createStart(env) {
         if (target.create) git('switch', '-c', branch, '--no-track', `origin/${base}`);
       }
       if (!isOwn(fresh, session)) {
-        restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `Beansprucht.\n${claimLine}\nBasis: ${base}\n`);
+        restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `${texts.claimed}\n${claimLine}\n${texts.base}: ${base}\n`);
         const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).findLast(comment => claimField.test(comment.body ?? ''));
         assert.equal(claimField.exec(posted?.body ?? '')?.[2], session, 'Claim comment read-back differs');
       }
