@@ -10,7 +10,7 @@ import { agents, agentNames, hookEvents } from './agents.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { snapshotDirectory } from './provider-ponytail.mjs';
-import { projectFeatures } from './project-profile.mjs';
+import { projectFeatures, readProfile, textsFor } from './project-profile.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const scripts = path.dirname(self);
@@ -83,7 +83,11 @@ function fingerprint(dir, input, { configEnv, configDir }, settings) {
     const seen = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
     let now = '';
     for (const ref of ['@{upstream}', 'origin/HEAD']) if ((now = git(dir, 'rev-parse', '-q', '--verify', `${ref}:${settings}`).out)) break;
-    if (seen && now && now !== seen) context.push('Hooks seit Session-Start geändert: Session neu starten');
+    if (seen && now && now !== seen) {
+      let language = readProfile(dir);
+      try { textsFor(language); } catch { language = {}; } // a bad profile is board.mjs's to report, not the hook's
+      context.push(textsFor(language).hooksChanged);
+    };
   } else if (input.source !== 'compact') {
     try {
       mkdirSync(path.dirname(file), { recursive: true });
