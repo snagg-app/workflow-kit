@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSy
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { hookSettings } from '../agents.mjs';
+import { entryFile, hookSettings } from '../agents.mjs';
 
 const write = (path, value) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, value); };
 const json = (path, value) => write(path, JSON.stringify(value, null, 2) + '\n');
@@ -25,7 +25,7 @@ function fixture(t) {
   mkdirSync(root, { recursive: true });
   mkdirSync(join(kit, 'templates'), { recursive: true });
   mkdirSync(join(kit, 'scripts'));
-  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'board-process.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'board-process.mjs', 'kit-entry.mjs']) copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   copyFileSync(new URL('../../templates/.ignore', import.meta.url), join(kit, 'templates/.ignore'));
   write(join(kit, 'AGENT_RULES.md'), '# rules\n');
   const run = (...args) => spawnSync(process.execPath, [join(kit, 'scripts/init-project.mjs'), ...args], { cwd: root, encoding: 'utf8' });
@@ -45,6 +45,7 @@ test('kit handlers are replaced; foreign handlers, groups and settings stay; rer
   const once = readFileSync(path);
   succeeds(f.run('--existing'));
   assert.deepEqual(readFileSync(path), once);
+  assert.deepEqual(readFileSync(join(f.root, entryFile)), readFileSync(new URL('../kit-entry.mjs', import.meta.url)), 'setup puts the entry the hooks call into the project');
 });
 
 test('hooks are written only for agents the project uses; a project with none gets all (#760)', t => {
@@ -86,7 +87,7 @@ test('every shipped hook handler has the kit id and calls the hook module', () =
   for (const [file, settings] of [['claude', hookSettings('claude')], ['codex', hookSettings('codex')], ['.claude/settings.json', read(new URL('../../.claude/settings.json', import.meta.url))], ['.codex/hooks.json', read(new URL('../../.codex/hooks.json', import.meta.url))]]) {
     const handlers = Object.values(settings.hooks).flat().flatMap(group => group.hooks);
     assert.ok(handlers.length >= 5, file);
-    for (const handler of handlers) assert.ok(handler.id === 'workflow-kit' && handler.command.includes('kit-hook.mjs'), file);
+    for (const handler of handlers) assert.ok(handler.id === 'workflow-kit' && handler.command.includes('workflow-kit-hook.mjs'), file);
   }
 });
 
@@ -195,7 +196,7 @@ test('.vendor/workflow-kit becomes a link to the shared kit; reruns change nothi
   assert.equal(realpathSync.native(link), realpathSync.native(f.kit));
   assert.ok(existsSync(other));
   // A kit inside the project it configures would link the project to itself.
-  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'board-process.mjs']) {
+  for (const script of ['init-project.mjs', 'kit-check.mjs', 'lock.mjs', 'checkout-root.mjs', 'provider-links.mjs', 'agents.mjs', 'hook-commands.json', 'project-profile.mjs', 'git-tool.mjs', 'board-process.mjs', 'kit-entry.mjs']) {
     mkdirSync(join(f.root, 'inner/scripts'), { recursive: true });
     copyFileSync(new URL(`../${script}`, import.meta.url), join(f.root, 'inner/scripts', script));
   }

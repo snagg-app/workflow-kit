@@ -5,6 +5,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, s
 import path from 'node:path';
 import { hookFiles } from './agents.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
+import { sharedKit } from './kit-entry.mjs';
 import { locked } from './lock.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -37,13 +38,6 @@ function followBase(git, root, say) {
     }
     return;
   }
-}
-
-/** The shared kit checkout: WORKFLOW_KIT_DIR, else `workflow-kit` next to the main checkout of the project (also from a worktree). */
-function sharedKit(git, root) {
-  if (process.env.WORKFLOW_KIT_DIR) return path.resolve(process.env.WORKFLOW_KIT_DIR);
-  const common = git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out;
-  return path.join(path.dirname(path.dirname(common)), 'workflow-kit');
 }
 
 /** `git pull --ff-only` and the kit's own submodules. Work in progress in the checkout is never touched, only reported. */
@@ -90,7 +84,7 @@ function checkKit(git, dir, update, say, state, shared) {
   const entry = lstatSync(path.join(root, '.vendor/workflow-kit'), { throwIfNoEntry: false });
   // The kit's own repository runs its own scripts; a project without any kit hook is none of our business.
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
-  const kit = shared ?? sharedKit(git, root), problem = linkKit(root, kit);
+  const kit = shared ?? sharedKit(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out), problem = linkKit(root, kit);
   if (problem) return say(problem);
   if (update && !state.updated) { state.updated = true; updateKit(git, kit, say); }
   return kit;

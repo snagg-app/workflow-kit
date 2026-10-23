@@ -4,7 +4,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSy
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, test } from 'node:test';
-import { hookSettings } from '../agents.mjs';
+import { entryFile, hookSettings } from '../agents.mjs';
 import { rename } from '../provider-links.mjs';
 import { isolatedGit, run as spawn, temporary } from './fixtures.mjs';
 
@@ -364,7 +364,8 @@ for (const [agent, key, shell, args] of entries) {
     writeFileSync(join(origin, 'AGENT_RULES.md'), 'x');
     writeFileSync(join(origin, 'scripts/kit-hook.mjs'), "import { writeFileSync } from 'node:fs'; writeFileSync(process.env.HOOK_MARKER, process.argv.slice(2).join(' '));\n");
     await git(origin, 'init', '--quiet'); await git(origin, 'add', '.'); await git(origin, 'commit', '--quiet', '-m', 'kit');
-    mkdirSync(project); await git(project, 'init', '--quiet');
+    mkdirSync(join(project, '.agents'), { recursive: true }); await git(project, 'init', '--quiet');
+    copyFileSync(new URL('../kit-entry.mjs', import.meta.url), join(project, entryFile)); // what `kit setup` puts there
     const run = (command, extra) => spawn(shell, [...args, command], { cwd: project, env: { ...env, CLAUDE_PROJECT_DIR: project, ...extra }, input: '{}' });
 
     const noNode = await run(handler('SessionStart'), { PATH: mkdtempSync(join(temp, 'empty ')) });
