@@ -2,11 +2,12 @@
 // Aufruf: Bei Einrichtung oder Kit-Updates, aus dem gemeinsamen Kit-Checkout (--cwd PROJEKT); --existing lässt die Vorlagen weg.
 // Nutzen: .vendor/workflow-kit zeigt auf den gemeinsamen Checkout; Kit-Handler werden an ihrer Kennung ersetzt; fremde Hooks und Einstellungen bleiben.
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { agents, hookSettings, ownSkills } from './agents.mjs';
+import { linkKit } from './kit-check.mjs';
 import { checkDirectory } from './provider-links.mjs';
 import { projectFeatures } from './project-profile.mjs';
 
@@ -56,17 +57,8 @@ function mergeHooks(name, template) {
   write(name, JSON.stringify(merged, null, 2) + '\n');
 }
 
-/** `.vendor/workflow-kit` is a link to the shared kit; a folder or submodule in its place is the project's to delete. */
-function linkKit() {
-  const link = join(root, '.vendor/workflow-kit'), entry = present(link);
-  assert.ok(!entry || entry.isSymbolicLink(), '.vendor/workflow-kit is a folder or submodule, not a link: delete it (git rm -f for a submodule), then run init-project again');
-  if (entry && realpathSyncOr(link) === kit) return;
-  rmSync(link, { force: true });
-  mkdirSync(dirname(link), { recursive: true });
-  symlinkSync(kit, link, 'junction'); // a junction on Windows, which needs no privilege; a symlink elsewhere
-}
-const realpathSyncOr = file => { try { return realpathSync.native(file); } catch { return ''; } };
-if (root !== kit) linkKit();
+// The same repair as the session-start hook; a folder or submodule in its place is the project's to delete.
+if (root !== kit) { const problem = linkKit(root, kit); assert.ok(!problem, problem); }
 
 const templates = readdirSync(join(kit, 'templates'), { recursive: true })
   .filter(file => lstatSync(join(kit, 'templates', file)).isFile()).map(file => file.split(sep).join('/'));

@@ -38,6 +38,11 @@ const step = (title, required, work) => tasks.push({ title, required, work });
 
 // A new project (no AGENTS.md yet) also gets the starter files; an existing one keeps everything of its own.
 step('link, kit hooks, ignore files', true, () => run('init-project.mjs', ...(existsSync(join(root, 'AGENTS.md')) ? ['--existing'] : [])));
+// The check the session start runs (without the pull): it reports what the other steps cannot repair.
+step('kit check', false, () => {
+  const hints = [...kitCheck(root, { kit: dirname(scripts) }), ...modulesCheck(root)];
+  return hints.length ? { status: 1, stderr: hints.join(' ') } : { status: 0 };
+});
 step('profile .github/workflow-project.json', true, () => {
   if (!existsSync(profile)) { mkdirSync(dirname(profile), { recursive: true }); writeFileSync(profile, '{\n  "language": "en"\n}\n'); }
   return { status: 0 };
