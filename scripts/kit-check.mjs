@@ -89,7 +89,7 @@ function checkKit(dir, update, say, state) {
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
   const kit = sharedKit(root);
   if (entry && !entry.isSymbolicLink())
-    return say(`${root}: .vendor/workflow-kit is still a submodule or a folder, not a link to the shared kit. Switch it: node ${path.join(kit, 'scripts/init-project.mjs')} --existing --cwd ${root}`);
+    return say(`${root}: .vendor/workflow-kit is a folder or submodule, not a link to the shared kit. Delete it (git rm -f for a submodule), then: node ${path.join(kit, 'scripts/init-project.mjs')} --existing --cwd ${root}`);
   if (!existsSync(path.join(kit, 'AGENT_RULES.md')))
     return say(`${root}: the shared Workflow Kit checkout ${kit} is missing or incomplete. Clone it: git clone https://github.com/snagg-app/workflow-kit.git ${kit}`);
   if (real(link) !== real(kit)) {
