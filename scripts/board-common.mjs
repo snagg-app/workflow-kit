@@ -105,20 +105,10 @@ const validTagName = tag => tag !== '' && !/[\x00-\x1f\x7f ~^:?*[\\]|\.\.|@\{|\/
  * Überschrift. Ein Fehlgriff blockiert sichtbar (mit Grund), statt eine Bedingung still zu überlesen.
  */
 const decisionWait = 'waits for the decision of';
-// The claim (#643) is "Agent: claude|codex, Session: ID": `start` writes it as an issue comment (with "Basis: BRANCH"); once the first push opens the Draft PR, the PR body carries it
-// and decides. The field may stand anywhere in a line
-// (Codex wrote it at the end of a sentence), not quoted in code, and "Agent: codex" alone is the claim of an unknown session: it can never be
-// the caller's, so it holds the issue until the line in the PR body is edited to the new session (a handover).
-const claimField = /(?<![\w`])Agent:[ \t]*(claude|codex)(?![\w-])(?:[ \t]*,[ \t]*Session:[ \t]*(\w[\w.-]*)(?![\w.-]))?/i;
-const claimOf = pr => claimField.exec(pr.body ?? '');
-
-/** Claim comments of the issue, oldest first; a reply line without a session is no claim. ponytail: reads the comments the query holds (the newest 50 of an issue, 10 in lists). */
-const commentClaims = issue => (issue.comments?.nodes ?? []).map(comment => claimField.exec(comment.body)).filter(found => found?.[2]);
 // Feedback after a handoff (#554): issue comments ride along with the searches; PR feedback is read by actual ids,
 // so two connections per PR do not multiply every search slot by ten hypothetical PRs.
 const feedbackNode = 'createdAt url body';
 const issueFeedback = `comments(last:10){nodes{${feedbackNode}}}`;
-const replyLine = /^Agent:[ \t]*(claude|codex)\b/im;
 // #N in the project's repository, OWNER/REPO#N elsewhere: a bare number must never name a same-number issue or PR of another repository.
 const refOf = (repository, number) => `${repository.nameWithOwner.toLowerCase() === project.repository.toLowerCase() ? '' : repository.nameWithOwner}#${number}`;
 const logins = issue => issue.assignees.nodes.map(assignee => assignee.login).join(', ');
@@ -159,4 +149,4 @@ const sameLogin = (a, b) => a?.toLowerCase() === b?.toLowerCase();
 
 const defaultBranchName = () => memory.defaultBranch ??= rest(`repos/${project.repository}`).default_branch;
 
-export { predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, statusName, projectStatus, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, claimField, claimOf, commentClaims, feedbackNode, issueFeedback, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, sameLogin, defaultBranchName, replyLine };
+export { predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, statusName, projectStatus, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, feedbackNode, issueFeedback, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, sameLogin, defaultBranchName };

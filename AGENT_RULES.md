@@ -110,7 +110,7 @@ work between them:
    [execution check](docs/CONTRIBUTING.md#execution-check) first: BLOCKED or UNKNOWN stop and write
    nothing, except a specifically authorized, documented exception; STACKABLE (only an open
    predecessor PR holds the issue) continues as a [stacked PR](docs/CONTRIBUTING.md#stacked-pull-requests).
-   Then it assigns you, sets In progress, posts the claim comment (`Agent: claude|codex, Session: ID`
+   Then it assigns you, sets In progress, posts the claim comment (`Agent: NAME, Session: ID`
    and the base), brings the kit to its pin and reads every step back. An empty base field stops `start` before any write. No PR yet:
    `start` switches to a new branch from `origin/<base>` (never push to the base; `done` refuses a checkout on or tracking `main`/`release/**`); the first `done` pushes it and opens the Draft PR that
    closes the issue (its body carries the claim line: keep it when you rewrite the body). A claim of
@@ -121,7 +121,7 @@ work between them:
    off. A repeated call resumes. Work on a ticket does not end at Human review: call `next` in your
    loop and handle its **Rückmeldungen** first (a comment, review or thread after your handoff, a
    push-back to In progress or Automated review, an @mention). Answer in the ticket with a comment
-   that has the line `Agent: claude|codex, Session: ID` (last line), or hand off again with `done`.
+   that has the line `Agent: NAME, Session: ID` (last line), or hand off again with `done`.
 2. Implement and push. `done` first follows the target branch's
    [base-merge policy](SETUP.md#3-board-and-labels).
    `node .vendor/workflow-kit/scripts/board.mjs done ISSUE FILE` then runs the

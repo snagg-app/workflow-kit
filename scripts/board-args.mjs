@@ -2,6 +2,8 @@
 // One parser takes a call or refuses it with the reason and the usage of that one command; nothing here reads GitHub.
 // A refused call ends with exit code 2; --help and `help` print the usage derived from the same description.
 
+import { ownSession } from './claim.mjs';
+
 const kinds = {
   number: { what: 'an issue or PR number', ok: text => /^#?[1-9]\d*$/.test(text) && Number.isSafeInteger(Number(text.replace('#', ''))) },
   digits: { what: 'a number of 1 or more', ok: text => /^[1-9]\d*$/.test(text) && Number.isSafeInteger(Number(text)) },
@@ -25,7 +27,7 @@ const kinds = {
 
 /** Flags that several commands share, so that each is described once. */
 export const shared = {
-  session: { value: 'ID', kind: 'id', help: 'The own session. Default: the agent-<id> worktree, CODEX_THREAD_ID, else CLAUDE_CODE_SESSION_ID.' },
+  session: { value: 'ID', kind: 'id', help: 'The own session. Default: the session variable of the agent table (agents.mjs), else the agent-<id> worktree.' },
   issueRepo: { value: 'OWNER/NAME', kind: 'repo', help: 'The issue lives in that repository and on its board; PR, branch and tests stay here.' },
   refs: { help: 'The PR only names the issue ("Refs #N"); the issue status stays.' },
   maxMinutes: { value: 'N', kind: 'minutes', help: 'Stop waiting after N minutes (default 9, 0 = no limit): exit 4, call again.' },
@@ -110,9 +112,8 @@ export function createOptions({ project, args }) {
   // "reviewerGraceMinutes" in the project file is the default of --grace; 0 turns the grace off.
   const projectGrace = project.reviewerGraceMinutes;
   const numberOption = args.number;
-  // The own session for start, check and next alike: `--session`, else the `agent-<id>` of a Claude Code worktree, else CODEX_THREAD_ID, else CLAUDE_CODE_SESSION_ID (the session itself, not a subagent).
-  const sessionOption = () => args.value('--session')
-    ?? (process.env.CODEX_THREAD_ID || /[\\/]agent-(\w+)(?:[\\/]|$)/.exec(process.cwd())?.[1] || process.env.CLAUDE_CODE_SESSION_ID);
+  // The own session for start, check and next alike (claim.mjs).
+  const sessionOption = () => ownSession(args.value('--session'));
   return { staleHours, numberOption, stallOption: () => numberOption('--stall', 20), stack: args.flag('--stack'), projectGrace, graceOption: () => numberOption('--grace', projectGrace),
     sessionOption, blockerRepository: reference => blockerRepository(reference, project), validBlocker: reference => validBlocker(reference, project) };
 }

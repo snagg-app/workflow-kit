@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { detectAgent } from './agents.mjs';
+import { claimIn, claimLine, claimOf, commentClaims, hasClaim, withClaim } from './claim.mjs';
 import { shared } from './board-args.mjs';
 import { pushPlan, targetBranch } from './board-checkout.mjs';
 import { result } from './board-result.mjs';
@@ -14,7 +15,7 @@ import { args, checkout, git, gitAt, github, issueProject, number, progress, pro
 import { linkIssue } from './board-body.mjs';
 import { baseOf, check, mayStart } from './board-check.mjs';
 import { branchWork, foreignAssignees, isOwn, openPr, ownPr, refsPr, startReasons, workBranches } from './board-claims.mjs';
-import { claimField, claimOf, commentClaims, defaultBranchName, isSpec, projectItem, readIssue, refOf, sameLogin, specRefusal } from './board-common.mjs';
+import { defaultBranchName, isSpec, projectItem, readIssue, refOf, sameLogin, specRefusal } from './board-common.mjs';
 import { set } from './board-fields.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
@@ -104,7 +105,7 @@ function start() {
   set('Status', statuses.inProgress, () => fresh);
   const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
     : baseOf(issue).branch || defaultBranchName();
-  const claimLine = `Agent: ${agent}, Session: ${session}`;
+  const line = claimLine(session, agent);
   const current = openPr(issue);
   let branch = git('branch', '--show-current'), handedBranch;
   const continueOn = name => {
@@ -123,7 +124,7 @@ function start() {
     continueOn(branch);
     if (!ownPr(issue, session)) {
       const path = `repos/${project.repository}/pulls/${current.number}`, body = rest(path).body ?? '';
-      github.write('PATCH', path, { body: claimField.test(body) ? body.replace(claimField, claimLine) : `${body}\n${claimLine}\n` });
+      github.write('PATCH', path, { body: withClaim(body, line) });
       assert.equal(claimOf(rest(path))?.[2], session, 'Claim in the PR body read-back differs');
     }
   } else {
@@ -138,9 +139,9 @@ function start() {
       if (target.create) git('switch', '-c', branch, '--no-track', `origin/${base}`);
     }
     if (!isOwn(fresh, session)) {
-      github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `${texts.claimed}\n${claimLine}\n${texts.base}: ${base}\n` });
-      const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).findLast(comment => claimField.test(comment.body ?? ''));
-      assert.equal(claimField.exec(posted?.body ?? '')?.[2], session, 'Claim comment read-back differs');
+      github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
+      const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).findLast(comment => hasClaim(comment.body));
+      assert.equal(claimIn(posted?.body)?.[2], session, 'Claim comment read-back differs');
     }
   }
   const final = readIssue();
