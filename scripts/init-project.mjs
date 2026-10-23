@@ -19,7 +19,7 @@ const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
 const ours = handler => handler.id === 'workflow-kit';
 
 /** Configures the project at `root` (an existing project keeps its own files: no templates). Throws on a problem; prints what it did. */
-export function initProject({ root, existing = false, log = console.log }) {
+export function initProject({ root, existing = false, log = console.log, profile = readProfile(root) }) {
   // The kit is the shared checkout; it configures itself or the project named by --cwd, never a project that contains the kit.
   assert.ok(root === kit || !(kit + sep).startsWith(root + sep), 'Run init-project from the shared kit checkout (a clone next to the project, not inside it): node <kit>/scripts/init-project.mjs --cwd <project>');
   const safe = file => projectFile(root, file);
@@ -50,7 +50,7 @@ export function initProject({ root, existing = false, log = console.log }) {
 
   const templates = readdirSync(join(kit, 'templates'), { recursive: true })
     .filter(file => lstatSync(join(kit, 'templates', file)).isFile()).map(file => file.split(sep).join('/'));
-  const language = readProfile(root).language ?? 'en';
+  const language = profile.language ?? 'en';
   for (const file of templates) {
     // templates/<language>/ holds the texts that differ by language; the project gets the one of its profile.
     const [first, ...rest] = file.split('/');
@@ -59,7 +59,7 @@ export function initProject({ root, existing = false, log = console.log }) {
     if (name && !existing && !existsSync(safe(name))) write(name, text(join(kit, 'templates', file)));
   }
   // The kit's handlers come from the agent table, the agents the project uses (detect) and its functions (profile).
-  const features = projectFeatures(root);
+  const features = projectFeatures(root, undefined, profile);
   const { names: hookNames, none: noAgentFound } = projectAgents(root, agent => agent.hooks);
   // The hook entries call this small copy of kit-entry.mjs, which finds or clones the kit when it is missing.
   write(entryFile, text(join(kit, 'scripts/kit-entry.mjs')));

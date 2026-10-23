@@ -32,6 +32,9 @@ if (process.argv[2] === 'check') {
   process.exit(hints.length ? 1 : 0);
 }
 const profile = join(root, '.github/workflow-project.json');
+// `kit setup` reads the profile once and hands it to the steps; a broken one fails the first step that needs it, as before.
+let read;
+const current = () => read ??= readProfile(root);
 // A step is a function of `log`: it returns { state: 'ok' | 'open', note?, hint? } ("open": something is left to do, `hint` says what) or throws (the error message is the hint).
 // What the scripts behind it say goes to `log`; `kit setup` shows it under the step's line.
 const ok = note => ({ state: 'ok', note });
@@ -48,7 +51,7 @@ const trust = (used.none ? [] : used.names).filter(name => agents[name].hooks.tr
 const step = (title, required, work) => tasks.push({ title, required, work });
 
 // A new project (no AGENTS.md yet) also gets the starter files; an existing one keeps everything of its own.
-step('link, kit hooks, ignore files', true, log => { initProject({ root, existing: existsSync(join(root, 'AGENTS.md')), log }); return ok(); });
+step('link, kit hooks, ignore files', true, log => { initProject({ root, existing: existsSync(join(root, 'AGENTS.md')), log, profile: current() }); return ok(); });
 // The check the session start runs (without the pull): it reports what the other steps cannot repair.
 step('kit check', false, () => {
   const hints = [...kitCheck(root, { ...kitEnvironment(), kit: dirname(scripts) }).messages, ...modulesCheck(root)];
@@ -58,12 +61,12 @@ step('profile .github/workflow-project.json', true, () => {
   if (!existsSync(profile)) writeProjectFile(root, '.github/workflow-project.json', '{\n  "language": "en"\n}\n');
   return ok();
 });
-step(`skills for ${agentLabels()}`, true, async log => { await setupSkills({ log }); return ok(); });
+step(`skills for ${agentLabels()}`, true, async log => { await setupSkills({ log, profile: current() }); return ok(); });
 step('git hooks (.githooks)', true, log => { installGitHooks({ root, log }); return ok(); });
 // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
 for (const provider of featureProviders().filter(provider => provider.install))
   step(`${provider.label} hooks`, false, async log => {
-    if (!projectFeatures(root)[provider.name]) return ok(`off for this project ("${provider.name}" in .github/workflow-project.json)`);
+    if (!projectFeatures(root, undefined, current())[provider.name]) return ok(`off for this project ("${provider.name}" in .github/workflow-project.json)`);
     await install(provider, context({ log }));
     return ok();
   });
@@ -90,7 +93,7 @@ if (failed) process.exit(1);
 const installed = existsSync(join(root, '.agents/skills')) ? readdirSync(join(root, '.agents/skills')) : [];
 const twice = [...pluginSkills()].filter(([name]) => installed.includes(name));
 if (twice.length) {
-  const wanted = (activeSkills(readProfile(root)) ?? installed).filter(name => !twice.some(([plugin]) => plugin === name));
+  const wanted = (activeSkills(current()) ?? installed).filter(name => !twice.some(([plugin]) => plugin === name));
   console.log(`\nAlso installed as your plugin: ${twice.map(([name, key]) => `${name} (${key})`).join(', ')}.`);
   console.log(`To leave the project copy out, set in .github/workflow-project.json: ${JSON.stringify({ skills: wanted })}`);
 }

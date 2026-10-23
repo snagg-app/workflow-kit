@@ -14,7 +14,7 @@ import { asking, gitIn, patient } from './git-tool.mjs';
 import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
 import { locate, markUsed } from './provider.mjs';
 import { featureProviders, providerList, providerNamed } from './provider-list.mjs';
-import { projectFeatures, readProfile, textsFor } from './project-profile.mjs';
+import { projectFeatures, readProfileLenient, textsFor } from './project-profile.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const scripts = path.dirname(self);
@@ -50,9 +50,7 @@ if (!hookEvents.includes(event) || !agentNames().includes(agent)) {
 
 const user = [], context = [];
 /** The hook's notices follow the language of the project profile; a bad profile is board.mjs's to report, not the hook's. */
-function texts() {
-  try { return textsFor(readProfile(projectDirOf(agent) || '.')); } catch { return textsFor({}); }
-}
+const texts = () => textsFor(readProfileLenient(projectDirOf(agent) || '.'));
 const say = message => { user.push(message); context.push(message); };
 if (Number(process.versions.node.split('.')[0]) < versions.node) {
   // Only SessionStart may speak: the other events do not accept this output.

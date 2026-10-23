@@ -175,6 +175,11 @@ export function readProfile(root) {
   return parseProfile(existsSync(file) ? readFileSync(file, 'utf8') : '{}');
 }
 
+/** The profile of a project directory for readers that must not fail: a broken one reads as {} (English texts, no setup command); reporting it is board.mjs's job. The single fallback. */
+export function readProfileLenient(root) {
+  try { return readProfile(root); } catch { return {}; }
+}
+
 export const languages = Object.keys(texts);
 
 /** One text in every language, for readers that accept what any language wrote (the claim's "Basis:" line, "Wartet bis:"). */
@@ -196,7 +201,6 @@ export function activeSkills(project) {
 }
 
 /** The optional kit functions of a project, one switch per provider with a `feature` (provider-list.mjs): true or false, or "auto" where the provider can tell (Impeccable: on with UI files). */
-export function projectFeatures(root, git = gitIn({}, root)) {
-  const profile = readProfile(root);
+export function projectFeatures(root, git = gitIn({}, root), profile = readProfile(root)) {
   return Object.fromEntries(featureProviders().map(({ name, feature }) => [name, profile[name] === 'auto' ? feature.auto(root, asking(git)) : profile[name]]));
 }

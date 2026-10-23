@@ -17,7 +17,7 @@ const kitOwnedSkills = ['find-skills', 'spec-review'];
  * Writes the skills of every provider and of the kit into the project the process runs in (see projectRoot in checkout-root.mjs),
  * then trims them to the project's "skills" choice. Throws on any problem; prints what it did.
  */
-export async function setupSkills({ log = console.log } = {}) {
+export async function setupSkills({ log = console.log, profile } = {}) {
   const c = context({ log }), { kit, root } = c;
   // Check Matt's ownership manifests before another generator changes discovery files (the list is in that order).
   for (const provider of providerList()) await setup(provider, c);
@@ -29,7 +29,7 @@ export async function setupSkills({ log = console.log } = {}) {
   }
   linkSkills(root, log); // agents that read the shared skills through links
   // The project's "skills" choice: kit skills outside it go again. Skills of the project itself are never touched.
-  const project = readProfile(root);
+  const project = profile ?? readProfile(root);
   const active = activeSkills(project);
   if (active) {
     const kitSkills = [...providerList().flatMap(provider => skillsOf(provider, root)), ...kitOwnedSkills];

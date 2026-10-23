@@ -7,15 +7,13 @@ import { hookFiles } from './agents.mjs';
 import { asking, gitIn, gitStamp, patient } from './git-tool.mjs';
 import { sharedKit } from './kit-entry.mjs';
 import { locked } from './lock.mjs';
-import { readProfile, textsFor } from './project-profile.mjs';
+import { readProfileLenient, textsFor } from './project-profile.mjs';
 import { fileURLToPath } from 'node:url';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 
 /** The profile's texts of a project directory; English without a readable profile (a broken one is board.mjs's to report, not the check's). */
-function textsAt(dir) {
-  try { return textsFor(readProfile(dir)); } catch { return textsFor({}); }
-}
+const textsAt = dir => textsFor(readProfileLenient(dir));
 
 const isDirectory = dir => existsSync(dir) && statSync(dir).isDirectory();
 const real = file => { try { return realpathSync.native(file); } catch { return ''; } };
@@ -145,7 +143,6 @@ export function modulesCheck(dir, { git: run = gitIn({}, dir) } = {}) {
   const read = file => { try { return JSON.parse(readFileSync(path.join(root, file), 'utf8')); } catch { return null; } };
   const manifest = read('package.json');
   if (![manifest?.dependencies, manifest?.devDependencies].some(list => list && typeof list === 'object' && Object.keys(list).length)) return [];
-  let setup = '';
-  try { setup = readProfile(root).setup.replace(/[^A-Za-z0-9 /._:=@-]/g, ''); } catch { /* a broken profile is board.mjs's to report, not the hook's */ }
-  return [textsAt(root).modulesMissing(setup)];
+  const profile = readProfileLenient(root);
+  return [textsFor(profile).modulesMissing((profile.setup ?? '').replace(/[^A-Za-z0-9 /._:=@-]/g, ''))];
 }
