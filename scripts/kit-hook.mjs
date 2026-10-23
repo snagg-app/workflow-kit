@@ -11,6 +11,7 @@ import { projectRoot } from './checkout-root.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { locate, markUsed } from './provider.mjs';
+import { featureProviders } from './provider-list.mjs';
 import impeccableProvider from './provider-impeccable.mjs';
 import ponytailProvider from './provider-ponytail.mjs';
 import { projectFeatures, readProfile, textsFor } from './project-profile.mjs';
@@ -24,6 +25,8 @@ const agent = rest[rest.indexOf('--agent') + 1];
 
 /** The checkout both the installer and the launcher lookup read the Ponytail files from. */
 const hookProject = () => projectRoot(process.env.CLAUDE_PROJECT_DIR || undefined);
+
+const installCommand = provider => `node .vendor/workflow-kit/scripts/provider.mjs ${provider.name} install`;
 
 /** Runs the installers for the functions the project uses; provider.mjs locks each one per machine, so two sessions install once. */
 function install(names) {
@@ -132,7 +135,7 @@ else {
   const fresh = !['resume', 'compact', 'fork'].includes(input.source);
   const { fingerprint: where, file: settings } = agents[agent].hooks ?? {};
   if (where) fingerprint(project, input, where, settings);
-  let on = { impeccable: true, ponytail: true }; // a broken profile must not stop the session
+  let on = Object.fromEntries(featureProviders().map(provider => [provider.name, true])); // a broken profile must not stop the session
   try { on = projectFeatures(project, hookGit); } catch (error) { if (event === 'SessionStart') say(error.message); }
   // A subagent in its own worktree gets CLAUDE_PROJECT_DIR of the session that started it; its own directory is the cwd on stdin.
   for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean))) kitCheck(dir, { update: event === 'SessionStart' && input.source !== 'compact', git: hookGit }).forEach(say);
@@ -151,9 +154,9 @@ else {
       if (parsed.hookSpecificOutput?.additionalContext) context.push(parsed.hookSpecificOutput.additionalContext);
     } catch { if (text) context.push(text); }
   } else if (event === 'SessionStart' && on.ponytail) {
-    say(texts().hooksOff('Ponytail', 'node .vendor/workflow-kit/scripts/provider.mjs ponytail install'));
+    say(texts().hooksOff(ponytailProvider.label, installCommand(ponytailProvider)));
   }
   if (event === 'SessionStart' && fresh && on.impeccable && !engine)
-    say(texts().hooksOff('Impeccable', 'node .vendor/workflow-kit/scripts/provider.mjs impeccable install'));
+    say(texts().hooksOff(impeccableProvider.label, installCommand(impeccableProvider)));
   emit();
 }

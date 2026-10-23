@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { providers, sourceProviders } from './agents.mjs';
+import { providers, sharedSkills, sourceProviders } from './agents.mjs';
 
 const patch = 'scripts/ponytail/adaptations.patch';
 const skillName = /^ponytail(?:-[a-z0-9]+)*$/;
@@ -28,6 +28,9 @@ export default {
   name: 'ponytail',
   label: 'Ponytail',
   source: '.vendor/ponytail',
+  // The skills the project has after setup, and the profile switch ("ponytail": false turns the hooks off).
+  skills: root => existsSync(path.join(root, sharedSkills)) ? readdirSync(path.join(root, sharedSkills)).filter(name => skillName.test(name)) : [],
+  feature: { default: true },
 
   build(c, next) {
     const skills = c.git('-C', c.source, 'ls-tree', '-d', '--name-only', `${c.revision}:skills`).trim().split('\n');
