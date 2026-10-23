@@ -27,7 +27,7 @@ export const useGhAdapter = fake => { adapter = fake; };
  * the account's GraphQL quota (5000 points an hour) is shared by every agent on it. Every response carries what is left and when it
  * resets in its headers (`gh api -i`, also on a refusal), so no extra request asks for it; a query reads its own cost.
  */
-export function createGithub({ tool, reserve, pauses = false, projectDirectory, sleep }) {
+export function createGithub({ tool, reserve, pauses = false, projectDirectory, sleep, env = process.env, say = console.error }) {
   const github = { quota: undefined, spent: 0, calls: 0, deadline: Infinity }; // the latest quota, this run's reported cost and request count
 
   /** One `gh` call; options as for execFileSync (`input`, `stdio`). Private: the rest of the kit uses the named operations below. */
@@ -38,7 +38,7 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
   github.sleepUntilReset = resetAt => {
     if (pauses) throw new QuotaPause(resetAt);
     if (Date.parse(resetAt) > github.deadline) throw new StillWaiting(resetAt);
-    console.error(`rate limited until ${untilText(resetAt)}`);
+    say(`rate limited until ${untilText(resetAt)}`);
     sleep(Math.max(1, (Date.parse(resetAt) - Date.now()) / 1000 + 1));
   };
 
@@ -64,7 +64,7 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
         const { remaining, resetAt } = data?.rateLimit ?? {};
         github.quota = (Number.isFinite(remaining) && resetAt ? { remaining, resetAt } : quotaOf(headers)) ?? github.quota;
         github.spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
-        if (process.env.BOARD_TRACE) console.error(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? '~1' : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
+        if (env.BOARD_TRACE) say(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? '~1' : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
         if (errors?.length) {
           const message = errors.map(({ type, message }) => `${type ?? ''} ${message ?? ''}`).join('\n').trim();
           if (!(tolerate?.test(message) && data)) throw Object.assign(new Error(message), { stdout: response, stderr: message });
@@ -168,14 +168,14 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
   // Field and option ids of the Project change rarely: kept in the clone's Git directory (shared by its worktrees) and read again only when
   // a name or option is missing from them or a write with them fails. One read costs a point; every run used to pay it.
   const fieldsFile = () => {
-    assert.notEqual(process.env.BOARD_FIELD_CACHE, '0', 'field cache switched off'); // the board tests change definitions between calls
+    assert.notEqual(env.BOARD_FIELD_CACHE, '0', 'field cache switched off'); // the board tests change definitions between calls
     // Read from the files, not `git rev-parse`: a worktree's `.git` is a file naming its directory, whose `commondir` names the shared one.
     let dir = join(projectDirectory, '.git');
     if (statSync(dir).isFile()) dir = resolve(projectDirectory, readFileSync(dir, 'utf8').replace(/^gitdir:\s*/, '').trim());
     if (existsSync(join(dir, 'commondir'))) dir = resolve(dir, readFileSync(join(dir, 'commondir'), 'utf8').trim());
     return join(dir, 'board-project-fields.json');
   };
-  github.dropFieldsCache = () => { if (process.env.BOARD_FIELD_CACHE !== '0') rmSync(fieldsFile(), { force: true }); };
+  github.dropFieldsCache = () => { if (env.BOARD_FIELD_CACHE !== '0') rmSync(fieldsFile(), { force: true }); };
   /** The single-select fields of the Project, from the cache or one query. */
   github.loadFields = projectId => {
     try {

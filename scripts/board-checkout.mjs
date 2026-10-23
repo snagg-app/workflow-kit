@@ -38,13 +38,13 @@ export function pushPlan({ stand, number, pr, mergeNeeded = false }) {
 }
 
 /** env: { projectDirectory, sleep } */
-export function createCheckout({ projectDirectory, sleep }) {
+export function createCheckout({ projectDirectory, sleep, env = process.env }) {
   /**
    * git in `cwd` (looked up on use, outside every checkout, so commands without git never need one).
    * Worktrees of one clone share their remote refs: a `fetch` that meets another's lock on a ref ("cannot lock ref", #566) is repeated
    * after a second, three tries in all; any other failure stays one at once. A failure carries `status` and `stderr` of git.
    */
-  const run = gitIn({}, process.cwd());
+  const run = gitIn({ from: env }, process.cwd());
   function gitAt(cwd, ...args) {
     for (let attempt = 1; ; attempt++) {
       try {

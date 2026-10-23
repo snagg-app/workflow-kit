@@ -24,7 +24,7 @@ export function runBoard({ cwd, env, args, timeout }) {
   // The working directory belongs to the whole process: board.mjs reads .github/workflow-project.json and the fake gh its files from it.
   process.chdir(cwd);
   try {
-    requests.postMessage({ args, env });
+    requests.postMessage({ args, env, cwd: process.cwd() });
     const timedOut = Atomics.wait(done, 0, 0, timeout) === 'timed-out';
     const result = { status: null, stdout: '', stderr: '' };
     for (let message; (message = receiveMessageOnPort(results));) {
