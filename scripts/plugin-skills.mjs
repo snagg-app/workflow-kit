@@ -1,4 +1,4 @@
-// Skills the user has as Claude Code plugin: <home>/.claude/plugins/installed_plugins.json lists each plugin with its installPath, skills sit in <installPath>/skills/<name>/SKILL.md.
+// Skills the user has as Claude Code plugin: the plugin list under the home directory (`plugins` in agents.mjs) lists each plugin with its installPath, skills sit in <installPath>/skills/<name>/SKILL.md.
 // shortcut: this is Claude Code's own file layout (version 2); anything unexpected counts as "no plugin skills", so kit setup only misses a hint.
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
