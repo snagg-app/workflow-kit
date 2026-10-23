@@ -99,6 +99,19 @@ test('templates start new projects and are never overwritten', t => {
   assert.equal(readFileSync(rules, 'utf8'), 'project rules\n');
 });
 
+test('the PR template is the one of the profile language, English without a profile (#759)', t => {
+  const f = fixture(t), file = join(f.root, '.github/PULL_REQUEST_TEMPLATE.md');
+  f.template('en/.github/PULL_REQUEST_TEMPLATE.md', 'english\n');
+  f.template('de/.github/PULL_REQUEST_TEMPLATE.md', 'deutsch\n');
+  succeeds(f.run());
+  assert.equal(readFileSync(file, 'utf8'), 'english\n');
+  assert.equal(existsSync(join(f.root, 'en')) || existsSync(join(f.root, 'de')), false, 'The language folders are not copied');
+  rmSync(file);
+  json(join(f.root, '.github/workflow-project.json'), { language: 'de' });
+  succeeds(f.run());
+  assert.equal(readFileSync(file, 'utf8'), 'deutsch\n');
+});
+
 test('discovery files become trackable while custom ignores and private state stay', t => {
   const f = fixture(t), ignore = join(f.root, '.gitignore');
   write(ignore, '/custom-cache/\n/.claude/skills/private/\n');
