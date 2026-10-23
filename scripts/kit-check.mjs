@@ -50,14 +50,14 @@ function followBase(git, root, say) {
 function updateKit(git, kit, say, root) {
   const branch = git(kit, 'symbolic-ref', '--short', '-q', 'HEAD').out;
   if (branch !== 'main')
-    return say(textsAt(root).kitNotMain(kit, branch));
+    return say(textsAt(root).kitNotMain(kit, branch), true);
   if (dirty(git, kit) || git(kit, 'rev-list', '-n', '1', 'HEAD', '--not', '--remotes').out)
-    return say(textsAt(root).kitDirty(kit));
+    return say(textsAt(root).kitDirty(kit), true);
   // Never prompt, never run hooks of the checkout (the runner carries the timeout and the no-prompt environment, see `hookGit`).
   const step = (...args) => git(kit, '-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', ...args).ok;
   locked(path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock'), 10 * 60_000, () => {
     if (!step('pull', '--ff-only', '--quiet') || (existsSync(path.join(kit, '.gitmodules')) && !step('submodule', 'update', '--init', '--quiet')))
-      say(textsAt(root).kitNotUpdated(kit));
+      say(textsAt(root).kitNotUpdated(kit), true);
   });
 }
 
@@ -117,7 +117,8 @@ const state = { updated: false };
  * `git`: a runner `(dir, ...args) => output` that throws on failure (gitIn); the default is the kit's safe one, the hook and board.mjs pass theirs.
  */
 export function kitCheck(dir, { update = false, git: run = gitIn(patient, dir), kit: shared } = {}) {
-  const git = asking(run), messages = [], say = message => messages.push(message);
+  // `messages.stuck` (#813): the shared kit could not follow origin (not main, local work, no fast-forward); `start` refuses on it.
+  const git = asking(run), messages = [], say = (message, stuck) => { messages.push(message); if (stuck) messages.stuck = true; };
   const fresh = Number(process.env.KIT_HOOK_FRESH_SECONDS ?? 600) * 1000;
   const [gitDir, head] = git(dir, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');
   const file = gitDir && path.join(gitDir, 'kit-ok');
@@ -129,6 +130,7 @@ export function kitCheck(dir, { update = false, git: run = gitIn(patient, dir), 
     } catch { /* no or broken stamp: full check */ }
   }
   const kit = checkKit(git, dir, update, say, state, shared);
+  if (messages.stuck) state.updated = false; // a failed update is tried again by the next call of this process
   if (file && kit && !messages.length) {
     // The check may have fast-forwarded the project, so the commit is read again.
     try { writeFileSync(file, JSON.stringify({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() })); } catch { /* best effort */ }
