@@ -1,7 +1,11 @@
 // Project fields: reading the options, guarded writes and `field`.
-// A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
+// Its functions run nothing when imported; run-time data comes from board-context.mjs, helpers of other commands by import.
 import assert from 'node:assert/strict';
 import { linesOf, result } from './board-result.mjs';
+import { args, command, github, graphql, issueName, issueOwner, issueProject, number, progress, restAll, state, statuses, memory } from './board-context.mjs';
+import { verifyBacklinks } from './board-body.mjs';
+import { check, mayStart, waitReasons } from './board-check.mjs';
+import { decisionWait, isSpec, projectItem, readIssue, specRefusal, statusName } from './board-common.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -13,202 +17,195 @@ export const specs = [
     check: args => args.rest.length >= 2 || args.values('--field').length ? undefined : 'field needs at least one pair: NAME VALUE or --field NAME=VALUE' },
 ];
 
-/** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
-export function createFields(env) {
-  const { args, command, decisionWait, github, graphql, isSpec, issueName, issueOwner, issueProject, number, progress, projectItem, readIssue, restAll, specRefusal, state, statusName, statuses } = env;
-  const { check, mayStart, verifyBacklinks, waitReasons } = env.later;
-
-  /** Specs are untouched outside a human-invoked spec-review; re-read children immediately before Human review. */
-  function guardSpecStatus(issue, { fieldName, option }) {
-    if (fieldName !== 'Status' || !isSpec(issue)) return;
-    assert.ok(option.name !== statuses.done, specRefusal(issue.number, 'Status Done is refused'));
-    assert.ok(command === 'field' && args.flag('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
-    if (option.name === statuses.humanReview) {
-      const children = restAll(`repos/${issueProject.repository}/issues/${issue.number}/sub_issues`);
-      assert.ok(children.every(child => Number.isSafeInteger(child?.number) && ['open', 'closed'].includes(child.state)), 'Spec sub-issues are unreadable');
-      const open = children.filter(child => child.state === 'open');
-      assert.ok(!open.length, specRefusal(issue.number, `Human review is refused: open sub-issues ${open.map(child => `#${child.number}`).join(', ')}`));
-    }
+/** Specs are untouched outside a human-invoked spec-review; re-read children immediately before Human review. */
+function guardSpecStatus(issue, { fieldName, option }) {
+  if (fieldName !== 'Status' || !isSpec(issue)) return;
+  assert.ok(option.name !== statuses.done, specRefusal(issue.number, 'Status Done is refused'));
+  assert.ok(command === 'field' && args.flag('--spec-review'), specRefusal(issue.number, 'only a human-invoked spec-review changes its status; field requires --spec-review'));
+  if (option.name === statuses.humanReview) {
+    const children = restAll(`repos/${issueProject.repository}/issues/${issue.number}/sub_issues`);
+    assert.ok(children.every(child => Number.isSafeInteger(child?.number) && ['open', 'closed'].includes(child.state)), 'Spec sub-issues are unreadable');
+    const open = children.filter(child => child.state === 'open');
+    assert.ok(!open.length, specRefusal(issue.number, `Human review is refused: open sub-issues ${open.map(child => `#${child.number}`).join(', ')}`));
   }
-
-  /** A single-select Project field with its options in configured order. The definitions are read once per run, however many fields are looked up. */
-  let projectFields, fieldsCached = false, fieldsRefreshed = false; // refreshed: ids resolved before it may be stale
-  // Field and option ids change rarely: kept in the clone's Git directory (shared by its worktrees) and read again only when a name
-  // or option is missing from them or a write with them fails (writeOption). One read costs a point; every run used to pay it.
-  function dropFieldsCache() {
-    fieldsRefreshed = true;
-    projectFields = undefined;
-    fieldsCached = false;
-    github.dropFieldsCache();
-  }
-
-  const loadFields = () => github.loadFields(issueProject.id);
-  function selectField(fieldName, optionName) {
-    if (!projectFields) ({ fields: projectFields, cached: fieldsCached } = loadFields());
-    const known = () => {
-      const found = projectFields.find(candidate => candidate.name === fieldName);
-      const names = [...found?.options ?? [], ...found?.issueField?.options ?? []].map(choice => String(choice.name).toLowerCase());
-      return found && (optionName === undefined || names.includes(String(optionName).toLowerCase())
-        || (fieldName === 'Status' && names.some(choice => statusName(choice).toLowerCase() === statusName(optionName).toLowerCase())));
-    };
-    if (fieldsCached && !known()) { dropFieldsCache(); ({ fields: projectFields, cached: fieldsCached } = loadFields()); }
-    const fields = projectFields;
-    const field = fields.find(candidate => candidate.name === fieldName);
-    assert.ok(field, `${issueProject.url} has no single-select ${fieldName} field; use one of: ${fields.map(candidate => candidate.name).join(', ')}`);
-    // An empty Project option list means the field mirrors an organization issue field.
-    const linked = !field.options.length && field.issueField;
-    return { field, linked, choices: linked ? linked.options : field.options };
-  }
-
-  /**
-   * Put the issue on the Project. A new issue may already have been added by the Project's own automation: GitHub then
-   * refuses with "already exists", which is no failure as long as the item can be read afterwards.
-   */
-  function addToProject(issue) {
-    try {
-      return graphql(`mutation($project:ID!,$content:ID!){addProjectV2ItemById(
-      input:{projectId:$project,contentId:$content}){item{id}}}`, { project: issueProject.id, content: issue.id }).addProjectV2ItemById.item.id;
-    } catch (error) {
-      if (!/already exists in this project/i.test(String(error.stderr ?? ''))) throw error;
-      const id = projectItem(readIssue())?.id;
-      assert.ok(id, `GitHub reports #${issue.number} as already on the Project, but its item is unreadable`);
-      return id;
-    }
-  }
-
-  /** Look up a field and option; nothing is printed or written. */
-  function resolveOption(fieldName, optionName) {
-    const { field, linked, choices } = selectField(fieldName, optionName);
-    const normalized = name => String(fieldName === 'Status' ? statusName(name) : name).toLowerCase();
-    const option = choices.find(choice => choice.name.toLowerCase() === String(optionName).toLowerCase())
-      ?? choices.find(choice => normalized(choice.name) === normalized(optionName));
-    assert.ok(option, `${fieldName}: "${optionName}" is not an option; use one of: ${choices.map(choice => choice.name).join(', ')}`);
-    return { fieldName, field, linked, option };
-  }
-
-  /** Guards of a transition; a refusal throws. They report (backlinks), so run them only after every pair is valid. Returns the lines to report. */
-  function guardOption(issue, { fieldName, option }) {
-    const notes = [];
-    guardSpecStatus(issue, { fieldName, option });
-    if (fieldName === 'Status' && option.name === statuses.ready) {
-      // Ready contradicts an open decision wait: it stays Backlog until the line is removed (#514).
-      const decisions = waitReasons(issue.body).blocked.filter(reason => reason.startsWith(decisionWait));
-      if (decisions.length) throw new Error(`#${issue.number} cannot be Ready: ${decisions.join('; ')}`);
-    }
-    if (fieldName === 'Status' && option.name === statuses.inProgress) {
-      // Assignment first, so a missing assignment is named even when the issue is also blocked.
-      const viewer = issue.viewer; // read with the issue
-      assert.ok(viewer?.login, 'Cannot verify the authenticated GitHub user');
-      assert.ok(issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === viewer.login.toLowerCase()),
-        `Assign yourself first: gh issue edit ${number} --repo ${issueProject.repository} --add-assignee "@me". Verify session ownership before assigning.`);
-      // An open issue in Done was reopened by a human (a merge closes it): it may leave Done, with a note (#510). A closed one stays blocked.
-      const wasDone = issue.state === 'OPEN' && projectItem(issue)?.status?.name === statuses.done;
-      const judged = wasDone ? { ...issue, projectItems: { nodes: issue.projectItems.nodes.map(item => item === projectItem(issue) ? { ...item, status: { name: statuses.ready } } : item) } } : issue;
-      // A refusal is an error like the others: its verdict lines become the one ERROR line instead of a second output format.
-      const verdict = check(judged);
-      if (!mayStart(verdict)) throw new Error(linesOf(verdict).join('; '));
-      if (wasDone) notes.push(`note: #${issue.number} is open again and was Done; it moves to In progress`);
-    }
-    if (fieldName === 'Status' && statusName(option.name) === statuses.automatedReview) notes.push(...verifyBacklinks(issue));
-    return notes;
-  }
-
-  function writeOption(issue, plan) {
-    // After a refresh the ids of plans made before it are stale too (several fields in one call).
-    if (fieldsRefreshed) plan = resolveOption(plan.fieldName, plan.option.name);
-    try {
-      return writeOptionOnce(issue, plan);
-    } catch (error) {
-      // Ids from the cache may be stale (a field or option was recreated): read them again and try once more.
-      // Only a GraphQL refusal that names a field or option: a spec guard (assertion) or a quota pause is no stale id.
-      if (!fieldsCached || error.code === 'ERR_ASSERTION' || !/could not resolve|global id|field|option/i.test(String(error.stderr ?? error.message))) throw error;
-      dropFieldsCache();
-      return writeOptionOnce(issue, resolveOption(plan.fieldName, plan.option.name));
-    }
-  }
-
-  function writeOptionOnce(issue, { fieldName, field, linked, option }) {
-    const beforeSend = () => guardSpecStatus(issue, { fieldName, option });
-    if (linked) {
-      graphql(`mutation($issue:ID!,$field:ID!,$option:ID!){setIssueFieldValue(input:{issueId:$issue,
-      issueFields:[{fieldId:$field,singleSelectOptionId:$option}]}){clientMutationId}}`,
-      { issue: issue.id, field: linked.id, option: option.id }, undefined, beforeSend);
-    } else {
-      let item = projectItem(issue)?.id;
-      if (!item) {
-        item = addToProject(issue);
-        // Later writes of the same call reuse the item instead of adding it again.
-        issue.projectItems.nodes.push({ id: item, project: { id: issueProject.id } });
-      }
-      graphql(`mutation($project:ID!,$item:ID!,$field:ID!,$option:String!){updateProjectV2ItemFieldValue(input:{projectId:$project,
-      itemId:$item,fieldId:$field,value:{singleSelectOptionId:$option}}){projectV2Item{id}}}`,
-      { project: issueProject.id, item, field: field.id, option: option.id }, undefined, beforeSend);
-    }
-    return `${issueProject.repository}#${issue.number} ${fieldName}: ${option.name}`;
-  }
-
-  /** Write a selected field option; guarded delivery can reject the fresh issue before mutation. */
-  function set(fieldName, optionName = state.value, beforeWrite) {
-    // A guarded handoff rechecks current ownership/readiness after the potentially lengthy review reads; its fresh issue replaces this read.
-    let issue = beforeWrite ? undefined : readIssue();
-    const plan = resolveOption(fieldName, optionName);
-    if (beforeWrite) {
-      issue = beforeWrite();
-      if (!issue) return;
-    }
-    guardOption(issue, plan).forEach(progress);
-    progress(writeOption(issue, plan));
-    return plan.option.name;
-  }
-
-  /** NAME=VALUE of one `--field`; the name may not hold "=". */
-  function splitPair(text) {
-    const split = text.indexOf('=');
-    assert.ok(split > 0 && split < text.length - 1, `--field wants NAME=VALUE, got "${text}"`);
-    return [text.slice(0, split), text.slice(split + 1)];
-  }
-
-  /** The words after the issue of `field` and `new` in one list: the `--field NAME=VALUE` pairs first, then the free `NAME VALUE` words. */
-  const fieldWords = () => [...args.values('--field').flatMap(splitPair), ...args.rest];
-
-  /** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing arguments. */
-  function fieldPairs() {
-    const words = fieldWords();
-    if (words[0].toLowerCase() === 'status' && statusName(words[1]).toLowerCase() === 'automated review') return [words.slice(0, 2)];
-    assert.ok(words.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
-    return Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
-  }
-
-  /** Resolve NAME VALUE pairs against the Project's fields; nothing is written. */
-  function planFields(pairs) {
-    assert.equal(new Set(pairs.map(([fieldName]) => fieldName.toLowerCase())).size, pairs.length, 'Each field may appear once per call');
-    return pairs.map(([fieldName, optionName]) => resolveOption(fieldName, optionName));
-  }
-
-  /** Any single-select fields: every pair is validated before the first write, then all are read back together so a silent API no-op cannot pass. */
-  function setField() {
-    const issue = readIssue();
-    const lines = applyFields(issue, planFields(fieldPairs()));
-    return result('ok', 'SET', { headline: null, notes: lines, data: { fields: lines } });
-  }
-
-  /** Write resolved plans on the issue and read them all back; returns the lines to report: guard notes, then one confirmation line per plan. */
-  function applyFields(issue, plans) {
-    const notes = plans.flatMap(plan => guardOption(issue, plan));
-    // Confirmation lines come after the read-back, so a failed call never shows a write as confirmed.
-    const written = plans.map(plan => writeOption(issue, plan));
-    const { repository } = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
-    issue(number:$number){projectItems(first:100){nodes{project{id} fieldValues(first:100){nodes{
-      ...on ProjectV2ItemFieldSingleSelectValue{name field{...on ProjectV2FieldCommon{name}}}}}}}
-    issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}}}}`,
-    { owner: issueOwner, name: issueName, number });
-    const values = [...projectItem(repository.issue)?.fieldValues.nodes ?? [], ...repository.issue.issueFieldValues.nodes];
-    for (const { fieldName, option } of plans) {
-      const stored = values.find(entry => entry?.field?.name === fieldName)?.name;
-      assert.equal(stored, option.name, `Read-back of ${fieldName} shows ${stored ?? 'no value'}`);
-    }
-    return [...notes, ...written];
-  }
-
-  return { dropFieldsCache, selectField, resolveOption, writeOption, set, planFields, setField, fieldWords };
 }
+
+/** A single-select Project field with its options in configured order. The definitions are read once per run, however many fields are looked up. */
+// Field and option ids change rarely: kept in the clone's Git directory (shared by its worktrees) and read again only when a name
+// or option is missing from them or a write with them fails (writeOption). One read costs a point; every run used to pay it.
+function dropFieldsCache() {
+  memory.fieldsRefreshed = true;
+  memory.projectFields = undefined;
+  memory.fieldsCached = false;
+  github.dropFieldsCache();
+}
+
+const loadFields = () => github.loadFields(issueProject.id);
+function selectField(fieldName, optionName) {
+  if (!memory.projectFields) ({ fields: memory.projectFields, cached: memory.fieldsCached } = loadFields());
+  const known = () => {
+    const found = memory.projectFields.find(candidate => candidate.name === fieldName);
+    const names = [...found?.options ?? [], ...found?.issueField?.options ?? []].map(choice => String(choice.name).toLowerCase());
+    return found && (optionName === undefined || names.includes(String(optionName).toLowerCase())
+      || (fieldName === 'Status' && names.some(choice => statusName(choice).toLowerCase() === statusName(optionName).toLowerCase())));
+  };
+  if (memory.fieldsCached && !known()) { dropFieldsCache(); ({ fields: memory.projectFields, cached: memory.fieldsCached } = loadFields()); }
+  const fields = memory.projectFields;
+  const field = fields.find(candidate => candidate.name === fieldName);
+  assert.ok(field, `${issueProject.url} has no single-select ${fieldName} field; use one of: ${fields.map(candidate => candidate.name).join(', ')}`);
+  // An empty Project option list means the field mirrors an organization issue field.
+  const linked = !field.options.length && field.issueField;
+  return { field, linked, choices: linked ? linked.options : field.options };
+}
+
+/**
+ * Put the issue on the Project. A new issue may already have been added by the Project's own automation: GitHub then
+ * refuses with "already exists", which is no failure as long as the item can be read afterwards.
+ */
+function addToProject(issue) {
+  try {
+    return graphql(`mutation($project:ID!,$content:ID!){addProjectV2ItemById(
+    input:{projectId:$project,contentId:$content}){item{id}}}`, { project: issueProject.id, content: issue.id }).addProjectV2ItemById.item.id;
+  } catch (error) {
+    if (!/already exists in this project/i.test(String(error.stderr ?? ''))) throw error;
+    const id = projectItem(readIssue())?.id;
+    assert.ok(id, `GitHub reports #${issue.number} as already on the Project, but its item is unreadable`);
+    return id;
+  }
+}
+
+/** Look up a field and option; nothing is printed or written. */
+function resolveOption(fieldName, optionName) {
+  const { field, linked, choices } = selectField(fieldName, optionName);
+  const normalized = name => String(fieldName === 'Status' ? statusName(name) : name).toLowerCase();
+  const option = choices.find(choice => choice.name.toLowerCase() === String(optionName).toLowerCase())
+    ?? choices.find(choice => normalized(choice.name) === normalized(optionName));
+  assert.ok(option, `${fieldName}: "${optionName}" is not an option; use one of: ${choices.map(choice => choice.name).join(', ')}`);
+  return { fieldName, field, linked, option };
+}
+
+/** Guards of a transition; a refusal throws. They report (backlinks), so run them only after every pair is valid. Returns the lines to report. */
+function guardOption(issue, { fieldName, option }) {
+  const notes = [];
+  guardSpecStatus(issue, { fieldName, option });
+  if (fieldName === 'Status' && option.name === statuses.ready) {
+    // Ready contradicts an open decision wait: it stays Backlog until the line is removed (#514).
+    const decisions = waitReasons(issue.body).blocked.filter(reason => reason.startsWith(decisionWait));
+    if (decisions.length) throw new Error(`#${issue.number} cannot be Ready: ${decisions.join('; ')}`);
+  }
+  if (fieldName === 'Status' && option.name === statuses.inProgress) {
+    // Assignment first, so a missing assignment is named even when the issue is also blocked.
+    const viewer = issue.viewer; // read with the issue
+    assert.ok(viewer?.login, 'Cannot verify the authenticated GitHub user');
+    assert.ok(issue.assignees.nodes.some(assignee => assignee.login.toLowerCase() === viewer.login.toLowerCase()),
+      `Assign yourself first: gh issue edit ${number} --repo ${issueProject.repository} --add-assignee "@me". Verify session ownership before assigning.`);
+    // An open issue in Done was reopened by a human (a merge closes it): it may leave Done, with a note (#510). A closed one stays blocked.
+    const wasDone = issue.state === 'OPEN' && projectItem(issue)?.status?.name === statuses.done;
+    const judged = wasDone ? { ...issue, projectItems: { nodes: issue.projectItems.nodes.map(item => item === projectItem(issue) ? { ...item, status: { name: statuses.ready } } : item) } } : issue;
+    // A refusal is an error like the others: its verdict lines become the one ERROR line instead of a second output format.
+    const verdict = check(judged);
+    if (!mayStart(verdict)) throw new Error(linesOf(verdict).join('; '));
+    if (wasDone) notes.push(`note: #${issue.number} is open again and was Done; it moves to In progress`);
+  }
+  if (fieldName === 'Status' && statusName(option.name) === statuses.automatedReview) notes.push(...verifyBacklinks(issue));
+  return notes;
+}
+
+function writeOption(issue, plan) {
+  // After a refresh the ids of plans made before it are stale too (several fields in one call).
+  if (memory.fieldsRefreshed) plan = resolveOption(plan.fieldName, plan.option.name);
+  try {
+    return writeOptionOnce(issue, plan);
+  } catch (error) {
+    // Ids from the cache may be stale (a field or option was recreated): read them again and try once more.
+    // Only a GraphQL refusal that names a field or option: a spec guard (assertion) or a quota pause is no stale id.
+    if (!memory.fieldsCached || error.code === 'ERR_ASSERTION' || !/could not resolve|global id|field|option/i.test(String(error.stderr ?? error.message))) throw error;
+    dropFieldsCache();
+    return writeOptionOnce(issue, resolveOption(plan.fieldName, plan.option.name));
+  }
+}
+
+function writeOptionOnce(issue, { fieldName, field, linked, option }) {
+  const beforeSend = () => guardSpecStatus(issue, { fieldName, option });
+  if (linked) {
+    graphql(`mutation($issue:ID!,$field:ID!,$option:ID!){setIssueFieldValue(input:{issueId:$issue,
+    issueFields:[{fieldId:$field,singleSelectOptionId:$option}]}){clientMutationId}}`,
+    { issue: issue.id, field: linked.id, option: option.id }, undefined, beforeSend);
+  } else {
+    let item = projectItem(issue)?.id;
+    if (!item) {
+      item = addToProject(issue);
+      // Later writes of the same call reuse the item instead of adding it again.
+      issue.projectItems.nodes.push({ id: item, project: { id: issueProject.id } });
+    }
+    graphql(`mutation($project:ID!,$item:ID!,$field:ID!,$option:String!){updateProjectV2ItemFieldValue(input:{projectId:$project,
+    itemId:$item,fieldId:$field,value:{singleSelectOptionId:$option}}){projectV2Item{id}}}`,
+    { project: issueProject.id, item, field: field.id, option: option.id }, undefined, beforeSend);
+  }
+  return `${issueProject.repository}#${issue.number} ${fieldName}: ${option.name}`;
+}
+
+/** Write a selected field option; guarded delivery can reject the fresh issue before mutation. */
+function set(fieldName, optionName = state.value, beforeWrite) {
+  // A guarded handoff rechecks current ownership/readiness after the potentially lengthy review reads; its fresh issue replaces this read.
+  let issue = beforeWrite ? undefined : readIssue();
+  const plan = resolveOption(fieldName, optionName);
+  if (beforeWrite) {
+    issue = beforeWrite();
+    if (!issue) return;
+  }
+  guardOption(issue, plan).forEach(progress);
+  progress(writeOption(issue, plan));
+  return plan.option.name;
+}
+
+/** NAME=VALUE of one `--field`; the name may not hold "=". */
+function splitPair(text) {
+  const split = text.indexOf('=');
+  assert.ok(split > 0 && split < text.length - 1, `--field wants NAME=VALUE, got "${text}"`);
+  return [text.slice(0, split), text.slice(split + 1)];
+}
+
+/** The words after the issue of `field` and `new` in one list: the `--field NAME=VALUE` pairs first, then the free `NAME VALUE` words. */
+const fieldWords = () => [...args.values('--field').flatMap(splitPair), ...args.rest];
+
+/** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing arguments. */
+function fieldPairs() {
+  const words = fieldWords();
+  if (words[0].toLowerCase() === 'status' && statusName(words[1]).toLowerCase() === 'automated review') return [words.slice(0, 2)];
+  assert.ok(words.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
+  return Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
+}
+
+/** Resolve NAME VALUE pairs against the Project's fields; nothing is written. */
+function planFields(pairs) {
+  assert.equal(new Set(pairs.map(([fieldName]) => fieldName.toLowerCase())).size, pairs.length, 'Each field may appear once per call');
+  return pairs.map(([fieldName, optionName]) => resolveOption(fieldName, optionName));
+}
+
+/** Any single-select fields: every pair is validated before the first write, then all are read back together so a silent API no-op cannot pass. */
+function setField() {
+  const issue = readIssue();
+  const lines = applyFields(issue, planFields(fieldPairs()));
+  return result('ok', 'SET', { headline: null, notes: lines, data: { fields: lines } });
+}
+
+/** Write resolved plans on the issue and read them all back; returns the lines to report: guard notes, then one confirmation line per plan. */
+function applyFields(issue, plans) {
+  const notes = plans.flatMap(plan => guardOption(issue, plan));
+  // Confirmation lines come after the read-back, so a failed call never shows a write as confirmed.
+  const written = plans.map(plan => writeOption(issue, plan));
+  const { repository } = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
+  issue(number:$number){projectItems(first:100){nodes{project{id} fieldValues(first:100){nodes{
+    ...on ProjectV2ItemFieldSingleSelectValue{name field{...on ProjectV2FieldCommon{name}}}}}}}
+  issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}}}}`,
+  { owner: issueOwner, name: issueName, number });
+  const values = [...projectItem(repository.issue)?.fieldValues.nodes ?? [], ...repository.issue.issueFieldValues.nodes];
+  for (const { fieldName, option } of plans) {
+    const stored = values.find(entry => entry?.field?.name === fieldName)?.name;
+    assert.equal(stored, option.name, `Read-back of ${fieldName} shows ${stored ?? 'no value'}`);
+  }
+  return [...notes, ...written];
+}
+
+export { dropFieldsCache, selectField, resolveOption, writeOption, set, planFields, setField, fieldWords };
