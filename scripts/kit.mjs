@@ -4,7 +4,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agentLabels, agents, projectAgents } from './agents.mjs';
+import { agentLabels, agents, hookAgents, projectAgents } from './agents.mjs';
 import { setupBoard } from './github-board.mjs';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { createGithub } from './github.mjs';
@@ -39,6 +39,10 @@ const open = hint => ({ state: 'open', hint });
 
 const tasks = [];
 const humans = [];
+// Read before the steps: skills and hooks create agent folders, which would make every agent look used.
+// No agent found: hooks go to all, but no agent is named.
+const used = hookAgents(root);
+const trust = (used.none ? [] : used.names).filter(name => agents[name].hooks.trust).map(name => `${agents[name].hooks.trust} in ${agents[name].label ?? name}`);
 
 // Local steps decide the exit code; a step that needs the network or the user's home reports an open step instead.
 const step = (title, required, work) => tasks.push({ title, required, work });
@@ -93,6 +97,6 @@ if (twice.length) {
 // An agent without hooks (hooks: null in agents.mjs) gets the check from AGENTS.md instead of an adapter (#690).
 for (const [name, agent] of Object.entries(agents)) if (!agent.hooks)
   humans.push(`${name} has no hooks: add to the project's AGENTS.md "Start every session with: node .vendor/workflow-kit/scripts/kit.mjs check".`);
-humans.push('Review and trust the project hooks in your agent (/hooks in Claude Code or Codex), then start a new session.');
+humans.push(`Review and trust the project hooks in your agent${trust.length ? ` (${trust.join(', ')})` : ''}, then start a new session.`);
 humans.push('In GitHub: enable the chosen reviewers, set Project auto-add for the repository, require checks and approval for PRs.');
 console.log(`\nOnly you can do:\n${humans.map((line, index) => `${index + 1}. ${line}`).join('\n')}`);

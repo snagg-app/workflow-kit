@@ -83,8 +83,7 @@ test('kit setup keeps the own hooks, settings and AGENTS.md of an existing proje
   assert.ok(settings.hooks.Stop.some(group => group.hooks.some(handler => handler.id === 'mine')));
   assert.ok(settings.hooks.SessionStart.some(group => group.hooks.some(handler => handler.id === 'workflow-kit')));
   assert.equal(readFileSync(join(project, 'AGENTS.md'), 'utf8'), 'my rules\n');
-  assert.equal(existsSync(join(project, 'CONTRIBUTING.md')), false, 'an existing project gets no starter files');
-});
+  assert.equal(existsSync(join(project, 'CONTRIBUTING.md')), false, 'an existing project gets no starter files');});
 
 test('a board with a differently named status is told which name is missing and how to map it', () => {
   const board = ['Backlog', 'Ready', 'In progress', 'Auto review', 'Human review', 'Done'];
