@@ -38,8 +38,14 @@ function openFirstPr(issue) {
   // A merged PR (squash: its commits are not in the base) means the work is delivered: the FILE-only path reports it.
   if (!claim || issue.closedByPullRequestsReferences?.nodes.some(pr => pr?.state === 'MERGED')) return;
   git('fetch', 'origin');
-  const base = new RegExp(`^(?:${textInEveryLanguage('base').join('|')}):[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(claim.text)?.[1] ?? (baseOf(issue).branch || defaultBranchName());
-  const here = checkout.stand(base);
+  const claimed = new RegExp(`^(?:${textInEveryLanguage('base').join('|')}):[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(claim.text)?.[1];
+  // #855: the field may have moved since the claim (Zielrelease changed, branch rebuilt). The base the branch really stands on (smallest distance to it) wins; a tie keeps the claim.
+  let base = claimed ?? (baseOf(issue).branch || defaultBranchName()), here;
+  for (const candidate of new Set([base, baseOf(issue).branch].filter(Boolean))) {
+    let stand;
+    try { stand = checkout.stand(candidate); } catch (error) { if (candidate === base) throw error; continue; }
+    if (!here || stand.ahead + stand.behind < here.ahead + here.behind) [base, here] = [candidate, stand];
+  }
   if (here.ahead === 0) return;
   const { branch, create } = targetBranch({ number, title: issue.title, agent: claim.agent, session: claim.session, branch: here.branch, taken: takenFor(issue) });
   if (create) git('switch', '-c', branch, '--no-track');
