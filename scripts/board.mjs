@@ -3,7 +3,7 @@
 // `--cwd PATH` anywhere in the arguments runs it for the project in PATH from any directory: without it the
 // working directory decides the project, and a driver in another project would read and write the wrong board.
 // This file only translates the call: it reads the project, checks the arguments and runs one command. Each command is a module
-// `board-<name>.mjs` with its description (`specs`) and a factory `createX(env)` that runs nothing when imported; the modules reach each other through `env.later`.
+// `board-<name>.mjs` with its description (`specs`) and its functions, which run nothing when imported. They take the run-time data of the call from board-context.mjs and each other's helpers by import.
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
@@ -15,22 +15,22 @@ import { commandSpecs } from './board-commands.mjs';
 import { createProcess } from './board-process.mjs';
 import { createCheckout } from './board-checkout.mjs';
 import { createOutput, isResult, result } from './board-result.mjs';
-import { createCommon } from './board-common.mjs';
-import { createClaims } from './board-claims.mjs';
-import { createCheck } from './board-check.mjs';
-import { createSweep } from './board-sweep.mjs';
-import { createNext } from './board-next.mjs';
-import { createStack } from './board-stack.mjs';
-import { createFields } from './board-fields.mjs';
-import { createNew } from './board-new.mjs';
-import { createBody } from './board-body.mjs';
-import { createHandoff } from './board-handoff.mjs';
-import { createWait } from './board-wait.mjs';
-import { createBlock } from './board-block.mjs';
-import { createStart } from './board-start.mjs';
-import { createDone } from './board-done.mjs';
-import { createReviews } from './board-reviews.mjs';
-import { createMerge } from './board-merge.mjs';
+import { setContext } from './board-context.mjs';
+import { quotaLine as quotaLineOf } from './board-common.mjs';
+import * as check from './board-check.mjs';
+import * as claims from './board-claims.mjs';
+import * as sweep from './board-sweep.mjs';
+import * as next from './board-next.mjs';
+import * as stack from './board-stack.mjs';
+import * as fields from './board-fields.mjs';
+import * as create from './board-new.mjs';
+import * as body from './board-body.mjs';
+import * as handoff from './board-handoff.mjs';
+import * as wait from './board-wait.mjs';
+import * as block from './board-block.mjs';
+import * as start from './board-start.mjs';
+import * as done from './board-done.mjs';
+import * as merge from './board-merge.mjs';
 
 // Taken off here, so the parser sees the command first.
 // A subfolder of the checkout (or of --cwd) works like its root: the project file is found there.
@@ -118,27 +118,14 @@ try {
   // `value` is the first argument after the PR; `ready PR --local` (the step `done` takes) reads the head from the checkout, so a shell never has to splice `$(git rev-parse HEAD)` into the call.
   // The PR must still show exactly that head before it is marked ready, so a commit that was not pushed is refused like a mistyped id.
   const state = { value: command === 'ready' && args.flag('--local') ? localHead() : args.words[1], stackedOn: undefined, adoptedPr: undefined, delivered: undefined };
-  // The commands call each other by name, when they run; every module adds its functions here.
-  const registry = {};
-  const later = new Proxy(registry, { get: (target, key) => (...parts) => target[key](...parts) });
-  const shared = { project, owner, name, number, command, github, graphql, rest, restAll, gh, projectDirectory, issueProject, issueOwner, issueName, statuses, texts,
-    startedAt, state, git, gitAt, checkout, localHead, sleep, runShell, args, ...options, later,
+  setContext({ project, owner, name, number, command, github, graphql, rest, restAll, projectDirectory, issueProject, issueOwner, issueName, statuses, texts, startedAt, state,
+    git, gitAt, checkout, localHead, sleep, runShell, args, ...options,
     // Lines that must show while the command runs; field and new have none (a failed call must not show a write as confirmed).
-    progress: oneLine ? () => undefined : output.progress, step: oneLine ? () => undefined : output.step };
-  const common = createCommon(shared);
-  const env = { ...shared, ...common };
-  quotaLine = common.quotaLine;
-  for (const create of [createClaims, createCheck, createSweep, createNext, createStack, createFields, createNew, createBody, createHandoff, createWait, createBlock, createStart, createDone]) {
-    Object.assign(registry, create(env));
-  }
-  // The review gate and the merge live in their own modules.
-  Object.assign(registry, createReviews({ project, owner, name, github, number, graceMinutes: options.graceOption, prQuery: common.prQuery, readStacks: later.readStacks,
-    stackOrderText: common.stackOrderText, conflictLine: later.conflictLine }));
-  Object.assign(registry, createMerge({ project, owner, name, github, projectDirectory, number, stack: options.stack, stackState: registry.stackState, numberOption: options.numberOption,
-    sleep, readyQuery: common.readyQuery, dependentPrs: later.dependentPrs, runShell, gitAt, mergeGate: later.mergeGate, stackReasons: later.stackReasons, reviewsForHead: later.reviewsForHead,
-    poll: later.poll, progress: shared.progress, readPr: later.readPr, baseMovement: later.baseMovement, filesText: later.filesText }));
+    progress: oneLine ? () => undefined : output.progress, step: oneLine ? () => undefined : output.step });
+  quotaLine = quotaLineOf;
+  const commands = { ...check, ...claims, ...sweep, ...next, ...stack, ...fields, ...create, ...body, ...handoff, ...wait, ...block, ...start, ...done, ...merge };
   // check, reviews, handoff, ready and link are the steps `start` and `done` take (`hidden` in their description): callable for those two and for the tests, but not listed.
-  const outcome = await registry[spec.run]();
+  const outcome = await commands[spec.run]();
   if (isResult(outcome)) {
     output.finish(outcome);
     process.exitCode = outcome.exitCode;
