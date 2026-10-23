@@ -31,6 +31,28 @@ export function statusMismatch(actual, project) {
     + 'Migrate explicitly, preserving option IDs and cards.';
 }
 
+/**
+ * The board `kit setup` copies for a new project: "boardTemplate" ({ owner, number }) of the project's file, else the board of the kit
+ * repository (`kitProject`, the kit's own file). Existing boards are never copied.
+ */
+export function boardTemplate(project, kitProject) {
+  const template = project.boardTemplate ?? kitProject;
+  assert.ok(typeof template?.owner === 'string' && /^[A-Za-z0-9_.-]+$/.test(template.owner) && Number.isInteger(template.number) && template.number > 0,
+    'boardTemplate in .github/workflow-project.json must be {"owner": "ORG", "number": 5}; omit it to copy the board of the kit repository');
+  return { owner: template.owner, number: template.number };
+}
+
+const defaultLabels = [['ci', '1d76db'], ['documentation', '0075ca'], ['testing', '5319e7'], ['security', 'b60205'], ['dependencies', '0366d6'], ['needs-human-input', 'd93f0b'], ['spec', 'c5def5']]
+  .map(([name, color]) => ({ name, color }));
+
+/** The labels `kit setup` creates when missing: "labels" ([{ name, color }]) of the project's file, else the seven defaults. */
+export function projectLabels(project) {
+  const labels = project.labels ?? defaultLabels;
+  assert.ok(Array.isArray(labels) && labels.every(label => typeof label?.name === 'string' && label.name.trim() && /^[0-9a-fA-F]{6}$/.test(label.color)),
+    'labels in .github/workflow-project.json must be a list of {"name": "ci", "color": "1d76db"} (six hex digits); omit it for the default labels');
+  return labels;
+}
+
 const texts = {
   en: {
     handoff: 'Handoff',
