@@ -1,7 +1,7 @@
 // `wait`, `quota-wait` and the polling they share.
 // A factory over `env`, so tests and other commands can import it; other commands are reached through `env.later` when called.
 import { QuotaPause, StillWaiting, sleepers } from './github.mjs';
-import { untilText, waitInterval } from './quota.mjs';
+import { untilText } from './quota.mjs';
 import { shared } from './board-args.mjs';
 import { isResult, result } from './board-result.mjs';
 
@@ -60,24 +60,6 @@ export function createWait(env) {
   }
 
   /**
-   * What GraphQL shows of the PR changes only when REST shows a change too (head, state, draft, merge state, update time, check runs,
-   * check suites, commit statuses), so a round that finds the same marker reads GraphQL no more: comments, reviews and reactions are
-   * REST reads anyway and the clock is the current one. `head` is the commit the marker names; `pull`, `runs` and `statuses` are what
-   * REST answered (pausedRound shows them). Undefined when REST cannot say.
-   * ponytail: checks stop at 100 like the GraphQL query; replace when that query paginates.
-   */
-  function changeMarker(prNumber) {
-    try {
-      const pull = rest(`repos/${project.repository}/pulls/${prNumber}`), commit = `repos/${project.repository}/commits/${pull.head.sha}`;
-      const listed = (path, key) => rest(`${commit}/${path}?per_page=100`)[key];
-      const [runs, suites, statuses] = [listed('check-runs', 'check_runs'), listed('check-suites', 'check_suites'), listed('status', 'statuses')];
-      return { head: pull.head.sha, pull, runs, statuses, text: JSON.stringify([pull.head.sha, pull.updated_at, pull.state, pull.draft, pull.mergeable_state,
-        runs.map(run => [run.id, run.status, run.conclusion]), suites.map(suite => [suite.id, suite.status, suite.conclusion]),
-        statuses.map(status => [status.context, status.state, status.description])]) };
-    } catch { return undefined; } // a failed marker read is a full read, never a verdict
-  }
-
-  /**
    * The GraphQL quota is used up until `resetAt`: `wait` keeps looking over REST (PR state and checks) instead of sleeping, and the
    * full read (threads, verdict) follows after the reset. It never ends the wait: REST lists every run of the head, so an older run
    * that a newer one cancelled looks failed, and only the full read knows which run decides.
@@ -97,26 +79,22 @@ export function createWait(env) {
     return { done: false, lines: [...lines, `waiting: ${text}`], pausedUntil: resetAt };
   }
 
-  // The last full read of this wait: the marker REST showed before it, the PR and the unresolved threads.
-  let lastRead;
-  // A full read is repeated after this long even without a change, so a GraphQL answer that lagged behind REST heals.
-  const fullReadEvery = 5 * 60_000;
-
   /**
    * One round of `wait`. An unchanged marker answers from the last full read, brought up to date by the REST reads and the clock, and only
    * while it still says "waiting": every end (DONE, FAILED, a closed PR) is confirmed by a full read, whose result is what is printed.
    * Review thread resolutions leave no mark in REST, which is why no end is taken from the cache.
    */
   function reviewsForHead(prNumber = number) {
-    const marker = changeMarker(prNumber), started = Date.now();
+    const marker = github.changeMarker(project.repository, prNumber), started = Date.now();
     try {
-      if (marker && lastRead?.marker?.text === marker.text && started - lastRead.at < fullReadEvery) {
-        const result = lookAtHead(lastRead.pr, () => lastRead.threads);
+      const recalled = github.recallRead(marker, started);
+      if (recalled) {
+        const result = lookAtHead(recalled.pr, () => recalled.threads);
         if (!result.done) return result;
       }
       const pr = readPr(prNumber), result = lookAtHead(pr);
       // A PR that shows another head than REST is still catching up, and a result that ended early has no threads: read both again next round.
-      lastRead = marker && pr.headRefOid === marker.head && result.threads && { marker, pr, threads: result.threads, at: started };
+      github.keepRead(marker && pr.headRefOid === marker.head && result.threads && { marker, pr, threads: result.threads, at: started });
       return result;
     } catch (error) {
       if (error instanceof QuotaPause) return pausedRound(error.resetAt, marker);
@@ -147,7 +125,7 @@ export function createWait(env) {
         }
         if (Date.now() >= github.deadline) return stillWaiting(result.pausedUntil);
         // Little quota lengthens the pause, but not while REST is read in place of GraphQL.
-        const pause = ['wait', 'merge'].includes(command) && args.flag('--interval') ? numberOption('--interval', 0) : waitInterval(quiet++, result.pausedUntil ? undefined : github.quota?.remaining);
+        const pause = ['wait', 'merge'].includes(command) && args.flag('--interval') ? numberOption('--interval', 0) : github.pause(quiet++, result.pausedUntil);
         await new Promise(resolve => setTimeout(resolve, Math.min(1000 * pause, github.deadline - Date.now())));
       }
     } catch (error) {
