@@ -37,6 +37,8 @@ gha-creds-*.json
 
 # Scratch files of drivers (PR bodies, comments); never part of a commit
 /.scratch/
+# Driver worktrees (git worktree add .worktrees/<name>)
+.worktrees/
 /.vendor/workflow-kit
 /.claude/skills/*
 !/.claude/skills/impeccable/
