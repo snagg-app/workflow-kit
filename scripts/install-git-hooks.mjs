@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, isAbsolute, join, normalize, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { externalTool, projectRoot } from './checkout-root.mjs';
 
 // Explicit setup, per clone: copies the project's .githooks (plus the kit's post-checkout kit sync) into the clone's
@@ -43,9 +43,8 @@ const tops = out('worktree', 'list', '--porcelain', '-z').split('\0')
 const hooksDir = join(resolve(root, out('rev-parse', '--git-common-dir')), 'workflow-kit-hooks');
 const hooksValue = hooksDir.replaceAll('\\', '/');
 const ours = new Set([hooksDir, ...tops.map(top => join(top, '.githooks'))].map(fold));
-// Git resolves a relative hooks path in whichever worktree runs the hook, so only .githooks itself (the
-// pre-#194 setting, migrated) is ours in every worktree; any other relative value may point elsewhere and stays foreign.
-const isOurs = value => isAbsolute(value) ? ours.has(fold(value)) : normalize(value) === '.githooks';
+// Git resolves a relative hooks path in whichever worktree runs the hook, so a relative value may point elsewhere and stays foreign.
+const isOurs = value => isAbsolute(value) && ours.has(fold(value));
 
 /** Every core.hooksPath entry of one config source as { value, origin }, including include/includeIf
  * files (a selected source skips them without --includes). --null keeps origins unquoted. */
