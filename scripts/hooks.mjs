@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { agents, entryFile } from './agents.mjs';
 import { providerList } from './provider-list.mjs';
+import { readVersions } from './versions.mjs';
 
 // kind: `start` also reports a missing Node (the entry clones a missing shared kit).
 const startEvents = [
@@ -20,7 +21,7 @@ export const hookEvents = events().map(({ event }) => event);
 /** The hook settings the kit contributes to one agent's settings file; `on` names the functions the project uses (projectFeatures), without it all of them. */
 export function hookSettings(name, on) {
   const commands = JSON.parse(readFileSync(new URL('./hook-commands.json', import.meta.url), 'utf8'));
-  const { node } = JSON.parse(readFileSync(new URL('./versions.json', import.meta.url), 'utf8'));
+  const { node } = readVersions();
   const { hooks: shape } = agents[name], fill = (text, event) => text.replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile).replaceAll('{node}', node);
   const hooks = {};
   for (const { event, kind, timeout, matcher, statusMessage, feature } of events()) {
