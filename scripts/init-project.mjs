@@ -6,7 +6,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSy
 import { dirname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
-import { agents, hookSettings, ownSkills } from './agents.mjs';
+import { agents, hookAgents, hookSettings, ownSkills } from './agents.mjs';
 import { linkKit } from './kit-check.mjs';
 import { checkDirectory } from './provider-links.mjs';
 import { languages, projectFeatures, readProfile } from './project-profile.mjs';
@@ -70,10 +70,11 @@ for (const file of templates) {
   // Templates start new projects; afterwards they belong to the project and are never overwritten.
   if (name && !existing && !existsSync(safe(name))) write(name, text(join(kit, 'templates', file)));
 }
-// The kit's handlers come from the agent table and the project's functions (profile); without an entry, a file only loses them.
+// The kit's handlers come from the agent table, the agents the project uses (detect) and its functions (profile).
 const features = projectFeatures(root);
-const hookTemplates = new Map(Object.entries(agents).filter(([, agent]) => agent.hooks).map(([name, agent]) => [agent.hooks.file, hookSettings(name, features)]));
-for (const [name, template] of hookTemplates) mergeHooks(name, template);
+const { names: hookNames, none: noAgentFound } = hookAgents(root);
+for (const name of hookNames) mergeHooks(agents[name].hooks.file, hookSettings(name, features));
+console.log(noAgentFound ? `No agent found in the project; hooks written for all: ${hookNames.join(', ')}.` : `Hooks written for the agents found: ${hookNames.join(', ')}.`);
 
 const patterns = ['/.vendor/workflow-kit', '/.workflow-kit/', '/.scratch/','/.impeccable/vendor/', '/.impeccable/setup-*/',
   '.claude/settings.local.json', '**/.impeccable/config.local.json', '**/skills/impeccable/scripts/bin/',
