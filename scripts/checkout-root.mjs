@@ -12,11 +12,16 @@ export function checkoutRoot(path) {
   }
 }
 
-/** Takes `--cwd PROJECT_DIR`, which must be the first argument, off `argv` and returns the directory ('.' without the option),
+/** Takes `--cwd PROJECT_DIR`, at any position, off `argv` and returns the directory ('.' without the option),
  * so a driver can run a kit command for another clone without `cd`. The one path a command takes from its arguments. */
 export function takeCwd(argv = process.argv) {
-  if (argv[2] !== '--cwd') return '.';
-  const directory = argv.splice(2, 2)[1];
+  const at = argv.indexOf('--cwd', 2);
+  if (at < 0) return '.';
+  if (argv.indexOf('--cwd', at + 1) >= 0) {
+    console.error('--cwd given twice');
+    process.exit(2);
+  }
+  const directory = argv.splice(at, 2)[1];
   if (!directory || directory.startsWith('--')) {
     console.error('--cwd needs the directory of the project');
     process.exit(2);

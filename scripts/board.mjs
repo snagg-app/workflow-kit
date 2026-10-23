@@ -1,6 +1,6 @@
 // Board commands, so agents don't rediscover Project, priority and dependency APIs on every task.
 // Run in the project: `board.mjs help` lists the commands, `board.mjs help COMMAND` shows one (derived from the descriptions in board-commands.mjs).
-// `--cwd PATH` as the first argument runs it for the project in PATH from any directory: without it the
+// `--cwd PATH` anywhere in the arguments runs it for the project in PATH from any directory: without it the
 // working directory decides the project, and a driver in another project would read and write the wrong board.
 // This file only translates the call: it reads the project, checks the arguments and runs one command. Each command is a module
 // `board-<name>.mjs` with its description (`specs`) and a factory `createX(env)` that runs nothing when imported; the modules reach each other through `env.later`.
