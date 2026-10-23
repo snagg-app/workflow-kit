@@ -32,9 +32,8 @@ export function createMerge(env) {
    */
   function updateBranch(head, base) {
     try {
-      github.run(['api', `repos/${project.repository}/pulls/${number}/update-branch`, '-X', 'PUT', '-f', `expected_head_sha=${head}`], { stdio: 'pipe' });
+      github.write('PUT', `repos/${project.repository}/pulls/${number}/update-branch`, { fields: { expected_head_sha: head } });
     } catch (error) {
-      // stdio 'pipe': without it execFileSync copies gh's raw refusal to stderr, and a caller that reads the last line sees that, not the instruction (#332).
       if (!/\b403\b|stacked PR's branch/.test(`${error.stderr}${error.stdout}`)) throw error;
       return failed(`GitHub refuses the branch update with 403 (typical for a PR with stacked children): run \`git merge origin/${base}\` in the PR's worktree, push once, then run \`board.mjs merge ${number}\` again`);
     }
@@ -62,7 +61,7 @@ export function createMerge(env) {
     const dependents = dependentPrs(branch);
     if (dependents.length) return `branch kept: ${branch} is the base of open PR ${dependents.map(({ number: dependent }) => `#${dependent}`).join(', ')}`;
     try {
-      github.run(['api', `repos/${project.repository}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`, '-X', 'DELETE'], { stdio: 'pipe' });
+      github.write('DELETE', `repos/${project.repository}/git/refs/heads/${branch.split('/').map(encodeURIComponent).join('/')}`);
     } catch (error) {
       // A branch that is already gone (the repository deletes merged branches itself) is no failure.
       if (!/\b(404|422)\b|Reference does not exist|Not Found/.test(`${error.stderr}${error.stdout}`)) throw error;
@@ -159,8 +158,8 @@ export function createMerge(env) {
     let asynchronous = false;
     const mergeAsync = () => {
       // Without the version header GitHub answers 404 for a stacked PR (#492); direct_merge is still a valid merge_action with it. The result is read from the PR below.
-      github.run(['api', `repos/${project.repository}/pulls/${number}/merge-async`, '-X', 'PUT', '-H', 'X-GitHub-Api-Version: 2026-03-10', '-f', 'merge_action=direct_merge', '-f', 'merge_method=merge', '-f', `sha=${headRefOid}`],
-        {});
+      github.write('PUT', `repos/${project.repository}/pulls/${number}/merge-async`,
+        { header: 'X-GitHub-Api-Version: 2026-03-10', fields: { merge_action: 'direct_merge', merge_method: 'merge', sha: headRefOid } });
       asynchronous = true;
     };
     // A stack is merged by GitHub from its top, and a plain `gh pr merge` of the top would land it in the layer below: merge-async only.
@@ -229,9 +228,9 @@ export function createMerge(env) {
           let open;
           for (let read = 1; (open = rest(path).state !== 'closed') && read < 5; read++) sleep(numberOption('--interval', 3));
           if (open) {
-            github.run(['api', `${path}/comments`, '-X', 'POST', '-F', 'body=@-'],
-              { input: `Geschlossen von \`board.mjs merge --stack\`: PR #${layer} ist in ${stackState.trunk} gemergt, GitHub hat das Issue nicht selbst geschlossen.\n` });
-            github.run(['api', path, '-X', 'PATCH', '-f', 'state=closed', '-f', 'state_reason=completed'], { stdio: 'pipe' });
+            github.write('POST', `${path}/comments`,
+              { body: `Geschlossen von \`board.mjs merge --stack\`: PR #${layer} ist in ${stackState.trunk} gemergt, GitHub hat das Issue nicht selbst geschlossen.\n` });
+            github.write('PATCH', path, { fields: { state: 'closed', state_reason: 'completed' } });
           }
           notes.push(`issue #${issueNumber} (PR #${layer}): closed`);
         } catch (error) { notes.push(`note: issue #${issueNumber} (PR #${layer}) not handled (${String(error.stderr || error.message).trim()})`); }

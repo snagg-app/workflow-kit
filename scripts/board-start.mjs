@@ -20,7 +20,7 @@ export const specs = [
 
 /** env: the project, the GitHub adapter, process and argument helpers, the common helpers and `later` (the other commands) */
 export function createStart(env) {
-  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, gitAt, github, isSpec, issueProject, number, progress, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, restPost, runShell, sameLogin, sessionOption, specRefusal, state, statuses, step, texts } = env;
+  const { args, checkout, claimField, claimOf, commentClaims, defaultBranchName, git, gitAt, github, isSpec, issueProject, number, progress, project, projectDirectory, projectItem, readIssue, refOf, rest, restAll, runShell, sameLogin, sessionOption, specRefusal, state, statuses, step, texts } = env;
   const { baseOf, branchWork, check, foreignAssignees, isOwn, linkIssue, mayStart, openPr, ownPr, refsPr, set, startReasons, workBranches } = env.later;
 
   /** A branch name is taken when the issue, this clone or the remote already has it. */
@@ -46,7 +46,7 @@ export function createStart(env) {
     git(...plan.args);
     // #725: a branch with an open PR the issue does not list yet (on a release base the closing keyword links nothing, so a run that stopped before the link left exactly that) gets no second PR (GitHub answers 422).
     const open = rest(`repos/${project.repository}/pulls?head=${project.repository.split('/')[0]}:${branch}&state=open`)[0]?.number;
-    const pr = open ?? JSON.parse(restPost(`repos/${project.repository}/pulls`, ['-f', `title=${issue.title}`, '-f', `head=${branch}`, '-f', `base=${base}`, '-F', 'draft=true', '-F', 'body=@-'], `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n`)).number;
+    const pr = open ?? JSON.parse(github.write('POST', `repos/${project.repository}/pulls`, { fields: { title: issue.title, head: branch, base, draft: true }, body: `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim[0]}\n` })).number;
     linkIssue(number, pr, false, issue).forEach(progress);
     progress(open ? `done: branch ${branch} already has PR #${pr}; linked it` : `done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
     return pr;
@@ -96,7 +96,7 @@ export function createStart(env) {
     const unset = baseOf(issue);
     if (unset.setting && !unset.value && !stacked && !openPr(issue)) assert.fail(`the Project field ${unset.setting.field} of #${number} is empty; set it (main for tooling issues) and start again, nothing was written`);
     if (!fresh.assignees.nodes.some(user => sameLogin(user.login, login))) {
-      restPost(`repos/${issueProject.repository}/issues/${number}/assignees`, ['-f', `assignees[]=${login}`]);
+      github.write('POST', `repos/${issueProject.repository}/issues/${number}/assignees`, { fields: { 'assignees[]': login } });
       fresh.assignees.nodes.push({ login });
     }
     // The read seconds ago is the one `set` would take now; the read-back at the end of start still reads the issue again.
@@ -122,7 +122,7 @@ export function createStart(env) {
       continueOn(branch);
       if (!ownPr(issue, session)) {
         const path = `repos/${project.repository}/pulls/${current.number}`, body = rest(path).body ?? '';
-        github.run(['api', path, '-X', 'PATCH', '-F', 'body=@-'], { input: claimField.test(body) ? body.replace(claimField, claimLine) : `${body}\n${claimLine}\n` });
+        github.write('PATCH', path, { body: claimField.test(body) ? body.replace(claimField, claimLine) : `${body}\n${claimLine}\n` });
         assert.equal(claimOf(rest(path))?.[2], session, 'Claim in the PR body read-back differs');
       }
     } else {
@@ -137,7 +137,7 @@ export function createStart(env) {
         if (target.create) git('switch', '-c', branch, '--no-track', `origin/${base}`);
       }
       if (!isOwn(fresh, session)) {
-        restPost(`repos/${issueProject.repository}/issues/${number}/comments`, ['-F', 'body=@-'], `${texts.claimed}\n${claimLine}\n${texts.base}: ${base}\n`);
+        github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `${texts.claimed}\n${claimLine}\n${texts.base}: ${base}\n` });
         const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).findLast(comment => claimField.test(comment.body ?? ''));
         assert.equal(claimField.exec(posted?.body ?? '')?.[2], session, 'Claim comment read-back differs');
       }

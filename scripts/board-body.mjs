@@ -135,8 +135,7 @@ export function createBody(env) {
     if (fresh === undefined) return refused;
     if (before === fresh) return result('ok', 'BODY', { headline: `BODY #${number} already has this text` });
     // The text already read and compared goes over stdin: gh would take a file named "-" for stdin and write an empty body.
-    github.run(['api', `repos/${issueProject.repository}/issues/${number}`, '-X', 'PATCH', '-F', 'body=@-'],
-      { input: fresh });
+    github.write('PATCH', `repos/${issueProject.repository}/issues/${number}`, { body: fresh });
     const after = current();
     if (after !== fresh) {
       refuse(`the body of #${number} is not what was written: another session overwrote it meanwhile (diff: what you wrote, then the current body); read it, merge, write again`, diffText(fresh, after));
@@ -202,8 +201,7 @@ export function createBody(env) {
     const prUrl = new URL(url);
     let backlink = findBacklink(issueComments(issueProject.repository, issueNumber), prUrl);
     if (!backlink) {
-      github.run(['api', `repos/${issueProject.repository}/issues/${issueNumber}/comments`, '-X', 'POST', '-F', 'body=@-'],
-        { input: `PR: ${url}\n` });
+      github.write('POST', `repos/${issueProject.repository}/issues/${issueNumber}/comments`, { body: `PR: ${url}\n` });
       backlink = findBacklink(issueComments(issueProject.repository, issueNumber), prUrl);
       assert.ok(backlink, `Backlink read-back differs: the comment with ${url} is not readable on #${issueNumber}; read the comments before writing again`);
     }

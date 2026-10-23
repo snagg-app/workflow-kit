@@ -28,7 +28,7 @@ export function createReviews(env) {
   function reviews(stallMinutes = 20, now = Date.now(), prNumber = env.number, pr = readPr(prNumber), graceMinutes = env.graceMinutes(), threadsOf = current => unresolvedThreads(current.number, current.reviewThreads), dismissStale = false) {
     useBaseSettings(pr);
     const { dismissals = [], ...verdict } = judgeReview(readFacts(pr, threadsOf), gate, { stallMinutes, now, graceMinutes, dismissStale });
-    for (const { id, message } of dismissals) github.run(['api', `repos/${project.repository}/pulls/${pr.number}/reviews/${id}/dismissals`, '-X', 'PUT', '-f', `message=${message}`], { stdio: 'pipe' });
+    for (const { id, message } of dismissals) github.write('PUT', `repos/${project.repository}/pulls/${pr.number}/reviews/${id}/dismissals`, { fields: { message } });
     return verdict;
   }
 
