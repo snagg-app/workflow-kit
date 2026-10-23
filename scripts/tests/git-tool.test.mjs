@@ -25,10 +25,13 @@ const scripts = new URL('../', import.meta.url);
 
 test('no kit script starts git itself; only git-tool.mjs looks it up, and it does not depend on the board (#796)', () => {
   // kit-entry.mjs runs before the kit exists and cannot import anything; it is the one stated exception.
-  for (const name of readdirSync(scripts).filter(name => name.endsWith('.mjs') && !['git-tool.mjs', 'kit-entry.mjs'].includes(name))) {
+  const files = readdirSync(scripts, { recursive: true }).map(name => name.replaceAll('\\', '/'))
+    .filter(name => name.endsWith('.mjs') && !name.startsWith('tests/') && !['git-tool.mjs', 'kit-entry.mjs'].includes(name));
+  assert.ok(files.includes('provider.mjs'));
+  for (const name of files) {
     const source = readFileSync(new URL(name, scripts), 'utf8');
-    assert.doesNotMatch(source, /externalTool\(\s*'git'/, `${name} looks up git itself`);
-    assert.doesNotMatch(source, /(execFileSync|execFile|spawnSync|spawn)\(\s*'git'/, `${name} starts git from the PATH`);
+    assert.doesNotMatch(source, /externalTool\(\s*['"`]git['"`]/, `${name} looks up git itself`);
+    assert.doesNotMatch(source, /(execFileSync|execFile|spawnSync|spawn|execSync|exec)\(\s*['"`]git['"`]/, `${name} starts git from the PATH`);
   }
   assert.doesNotMatch(readFileSync(new URL('git-tool.mjs', scripts), 'utf8'), /board-process/);
 });
@@ -39,4 +42,12 @@ test('gitResultIn reports status and error output of a failed command instead of
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /not a git repository/i);
   assert.equal(gitResultIn()(dir, '--version').status, 0);
+});
+
+test('gitResultIn throws when git cannot be found instead of returning a result (#796)', t => {
+  const dir = temporary(t, 'git-missing ');
+  const path = process.env.PATH;
+  process.env.PATH = '';
+  t.after(() => { process.env.PATH = path; });
+  assert.throws(() => gitResultIn()(dir, '--version'), /Install git/);
 });

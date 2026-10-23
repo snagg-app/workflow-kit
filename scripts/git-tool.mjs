@@ -32,8 +32,9 @@ export function gitIn({ timeout, env } = {}, ...paths) {
 export function gitResultIn({ timeout, env } = {}, ...paths) {
   const tool = lookup(paths);
   return (dir, ...args) => {
+    const found = tool(dir); // a missing git throws here, never as a result
     try {
-      return { status: 0, stdout: runProgram(tool(dir).file, ['-C', dir, ...args], spawnOptions(tool(dir), env, timeout)), stderr: '' };
+      return { status: 0, stdout: runProgram(found.file, ['-C', dir, ...args], spawnOptions(found, env, timeout)), stderr: '' };
     } catch (error) {
       return { status: error.status ?? null, stdout: String(error.stdout ?? ''), stderr: String(error.stderr ?? ''), error: error.status == null ? error : undefined };
     }
