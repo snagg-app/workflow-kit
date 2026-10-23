@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { shared } from './board-args.mjs';
 import { capped, result } from './board-result.mjs';
 import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
-import { args, gitAt, graphql, progress, project, projectDirectory, restAll, sessionOption, statuses, texts } from './board-context.mjs';
+import { args, env, gitAt, graphql, progress, project, projectDirectory, restAll, sessionOption, statuses, texts } from './board-context.mjs';
 import { feedback, heldOnlyByOpenPredecessors, loadPrFeedback, predecessorReasons, waitReasons } from './board-check.mjs';
 import { conflicting, idleMs, isStale, openPr, ownWork, startReasons } from './board-claims.mjs';
 import { commentClaims } from './claim.mjs';
