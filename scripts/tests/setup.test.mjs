@@ -55,7 +55,12 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   execFileSync('git', ['clone', '--quiet', '--no-local', fixture, clone]);
   const executableEntries = execFileSync('git', ['-C', clone, 'ls-files', '--stage', '--', ...executablePaths], { encoding: 'utf8' }).trim().split('\n')
     .filter(entry => !/\t\.claude\/skills\/(?!impeccable)/.test(entry)); // Git for Windows follows the links; Linux does not
-  assert.equal(executableEntries.length, 3);
+  assert.equal(executableEntries.length, 2); // Claude Code's copy of the launcher equals the shared one and is not committed (#761)
+  const committed = execFileSync('git', ['-C', clone, 'ls-files', '--', '.claude/skills/impeccable', '.agents/skills/impeccable/agents', '.codex/agents'], { encoding: 'utf8' }).split('\n');
+  assert.ok(committed.includes('.claude/skills/impeccable/SKILL.md') && committed.includes('.claude/skills/impeccable/.gitignore'));
+  assert.ok(!committed.includes('.claude/skills/impeccable/scripts/VERSION'), 'a file equal to the shared one is not committed');
+  assert.ok(lstatSync(join(fixture, '.claude/skills/impeccable/scripts/VERSION')).isFile(), 'setup copies the equal files locally, without link privileges');
+  assert.ok(!committed.some(file => file.startsWith('.agents/skills/impeccable/agents/') && file.endsWith('.toml')), 'Codex definitions are committed once, in .codex/agents');
   assert.ok(executableEntries.every(entry => entry.startsWith('100755 ')), 'Git clone preserves every Unix executable mode even with core.filemode=false');
   const skills = readdirSync(join(fixture, '.agents/skills')).filter(name => lstatSync(join(fixture, '.agents/skills', name)).isDirectory());
   assert.ok(skills.includes('ponytail') && skills.includes('impeccable') && skills.includes('tdd') && skills.includes('find-skills'));
