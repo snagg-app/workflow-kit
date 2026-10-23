@@ -143,7 +143,7 @@ test('a wrong link is replaced, a leftover submodule folder only reported, a pro
 
   rmSync(link); mkdirSync(link); writeFileSync(join(link, 'mine.txt'), 'x');
   const result = await f.trial();
-  assert.match(result.stdout, /still a submodule or a folder/);
+  assert.match(result.stdout, /a folder or submodule, not a link/);
   assert.ok(existsSync(join(link, 'mine.txt')), 'a real folder stays');
 
   const plain = join(f.temp, 'plain');

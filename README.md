@@ -40,9 +40,8 @@ each. Skill folders may hold other agents' metadata (`agents/openai.yaml`); it s
 through the link and ignores it.
 
 `init-project` links `.vendor/workflow-kit` to the shared checkout (a junction on Windows,
-else a symlink), adds it to `.gitignore`, and removes a leftover kit submodule of earlier
-versions (gitlink, `.gitmodules` entry and clone; it stops if that clone holds local
-changes or unpublished commits). From then on the hooks do the rest, see [Hooks](#hooks).
+else a symlink) and adds it to `.gitignore`. It stops at a folder or submodule in that place:
+delete it, then rerun. From then on the hooks do the rest, see [Hooks](#hooks).
 
 Without `--existing`, `init-project` also creates the starter files (AGENTS.md,
 CONTRIBUTING.md, issue and PR templates) that are missing; afterwards they belong to
@@ -66,18 +65,14 @@ about the new kit.
 The kit has hook adapters only for Codex and Claude Code. Any other agent works at level 0
 (`AGENTS.md`, skills, `board.mjs`, `kit.mjs check`; see [Hooks](AGENT_RULES.md#hooks)); an
 agent without hooks has `hooks: null` in `scripts/agents.mjs`, and `kit setup` then names the one
-line for its `AGENTS.md`. Projects from earlier kit versions keep
-their copies for Antigravity, Cursor, OpenCode, Pi and Copilot: `init-project` removes
-only the kit's handlers from `.cursor/hooks.json` and `.github/hooks/*.json`, and the
-kit never deletes other project files. Delete `.agent/`, `.cursor/`, `.opencode/`,
-`.pi/`, `.github/skills/`, `.github/agents/` and `.github/hooks/` by hand (keep files
-of your own), or leave them unused.
+line for its `AGENTS.md`. The kit no longer touches files of other agents (Antigravity, Cursor,
+OpenCode, Pi, Copilot) or its own old ones; delete them by hand (keep files of your own).
 
 ### Generated files and ownership
 
 The kit owns every hook handler with the id `workflow-kit` (keep personal hooks elsewhere), and upstream skills, agents and
 commands by name. Generated discovery files are ordinary committed files in
-`.agents`, `.claude/skills/impeccable` and `.claude/agents`, plus `.codex/agents`; the other Claude Code skills are local links to `.agents/skills`. Equal files stay untouched; changed
+`.agents`, `.claude/skills/impeccable` and `.claude/agents`, plus `.codex/agents`; of `.claude/skills/impeccable` only the files that differ from `.agents/skills/impeccable` are committed (setup copies the others; a generated `.gitignore` in that folder names them), and `impeccable_*.toml` is committed only in `.codex/agents`; the other Claude Code skills are local links to `.agents/skills`. Equal files stay untouched; changed
 content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
 A fresh clone/worktree discovers the committed files without generation or dependency
@@ -142,8 +137,7 @@ only through that rerun, for example by rerunning the project's bootstrap. Symli
 `.githooks/` are not copied. A `post-checkout` of the project's own is used instead of the
 kit's and reported; integrate `scripts/git-hooks/post-checkout` there by hand.
 
-The earlier settings, the relative `.githooks` and absolute paths into this
-repository's worktrees with matching `config.worktree` overrides, become the new path.
+Absolute paths into this repository's worktrees with matching `config.worktree` overrides become the new path.
 Git resolves relative paths per worktree, so any other relative value counts as foreign.
 It changes a config file only when every `core.hooksPath` entry there (including
 `include` files) points to this repository's hooks and is written in that file itself.
@@ -161,8 +155,6 @@ A kit with local changes, ignored or untracked files, or commits no remote has
 and the checkout continues; any failure only prints the command. Without a kit gitlink, as in this repository,
 it does nothing. Known limit: where the kit has `core.filemode=false`, a purely local mode change is invisible to
 Git and the update may reset it.
-Migrating from the earlier design (a committed `.githooks/post-checkout`): delete that file, then rerun
-the installer, so the kit's current one is copied.
 
 ## Board commands
 
