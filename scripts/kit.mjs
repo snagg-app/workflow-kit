@@ -6,7 +6,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agents } from './agents.mjs';
+import { setupBoard } from './github-board.mjs';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
+import { createGithub } from './github.mjs';
 import { kitCheck, modulesCheck } from './kit-check.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
 import { activeSkills, projectFeatures } from './project-profile.mjs';
@@ -38,6 +40,11 @@ const step = (title, required, work) => tasks.push({ title, required, work });
 
 // A new project (no AGENTS.md yet) also gets the starter files; an existing one keeps everything of its own.
 step('link, kit hooks, ignore files', true, () => run('init-project.mjs', ...(existsSync(join(root, 'AGENTS.md')) ? ['--existing'] : [])));
+// The check the session start runs (without the pull): it reports what the other steps cannot repair.
+step('kit check', false, () => {
+  const hints = [...kitCheck(root, { kit: dirname(scripts) }), ...modulesCheck(root)];
+  return hints.length ? { status: 1, stderr: hints.join(' ') } : { status: 0 };
+});
 step('profile .github/workflow-project.json', true, () => {
   if (!existsSync(profile)) { mkdirSync(dirname(profile), { recursive: true }); writeFileSync(profile, '{\n  "language": "en"\n}\n'); }
   return { status: 0 };
@@ -47,17 +54,7 @@ step('git hooks (.githooks)', true, () => run('install-git-hooks.mjs'));
 // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
 for (const [name, title] of [['ponytail', 'Ponytail hooks'], ['impeccable', 'Impeccable hooks']])
   step(title, false, () => projectFeatures(root)[name] ? run('provider.mjs', name, 'install') : { status: 0, note: 'off for this project ("' + name + '" in .github/workflow-project.json)' });
-step('GitHub board and labels', false, () => {
-  const git = externalTool('git', root), gh = externalTool('gh', root);
-  const remote = spawnSync(git.file, ['-C', root, 'remote', 'get-url', 'origin'], { encoding: 'utf8', env: git.env }).stdout.trim();
-  const repo = /github\.com[:/]([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+?)(?:\.git)?\/?$/.exec(remote)?.[1];
-  if (!repo) return { status: 1, stderr: 'no GitHub remote "origin"' };
-  // A project already bound to its board stays as it is: no network, no GraphQL quota (#730). A new or changed binding runs setup-github.mjs by hand.
-  const bound = JSON.parse(readFileSync(profile, 'utf8'));
-  if (bound.repository?.toLowerCase() === repo.toLowerCase() && bound.number && bound.id) return { status: 0, note: `already bound to project #${bound.number}; run setup-github.mjs ${repo} to redo it` };
-  if (spawnSync(gh.file, ['auth', 'status'], { env: gh.env }).status !== 0) return { status: 1, stderr: 'gh is not signed in' };
-  return run('setup-github.mjs', repo);
-});
+step('GitHub board and labels', false, () => setupBoard({ root, github: createGithub({ tool: externalTool('gh', root), command: 'setup', projectDirectory: root, sleep() {} }) }));
 
 let failed = false;
 for (const { title, required, work } of tasks) {
