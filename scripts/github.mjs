@@ -7,9 +7,6 @@ import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:
 import { join, resolve } from 'node:path';
 import { isRateLimited, quotaOf, retryAt, splitResponse, untilText, waitInterval } from './quota.mjs';
 
-// Commands that sleep until the quota reset instead of failing, with the points they keep in reserve.
-export const sleepers = { wait: 300, reviews: 50, handoff: 50, done: 50, 'quota-wait': 300 };
-
 /** A quota pause that would end after the deadline: `wait` ends "still waiting" instead of sleeping through it. */
 export class StillWaiting extends Error {
   constructor(resetAt) { super('still waiting'); this.resetAt = resetAt; }
@@ -24,20 +21,22 @@ let adapter; // (args, options) => stdout text, like execFileSync of `gh`; unset
 export const useGhAdapter = fake => { adapter = fake; };
 
 /**
+ * `reserve` (from the caller): the points a run keeps in reserve; with it the run sleeps until the reset instead of failing. `pauses`: a quota
+ * pause is thrown as QuotaPause (the caller keeps looking over REST) instead of slept through.
  * `tool` is the found `gh` ({ file, env }). `github.quota`, `spent`, `calls` and `deadline` (set by the waiting commands) are read by board.mjs;
  * the account's GraphQL quota (5000 points an hour) is shared by every agent on it. Every response carries what is left and when it
  * resets in its headers (`gh api -i`, also on a refusal), so no extra request asks for it; a query reads its own cost.
  */
-export function createGithub({ tool, command, projectDirectory, sleep }) {
+export function createGithub({ tool, reserve, pauses = false, projectDirectory, sleep }) {
   const github = { quota: undefined, spent: 0, calls: 0, deadline: Infinity }; // the latest quota, this run's reported cost and request count
 
-  /** One `gh` call; options as for execFileSync (`input`, `stdio`). */
-  github.run = (args, options = {}) => adapter ? adapter(args, options)
+  /** One `gh` call; options as for execFileSync (`input`, `stdio`). Private: the rest of the kit uses the named operations below. */
+  const run = (args, options = {}) => adapter ? adapter(args, options)
     : execFileSync(tool.file, args, { encoding: 'utf8', env: tool.env, maxBuffer: 16 << 20, ...options });
 
   /** Say so in one line (stderr keeps stdout for the verdict) and sleep until the reset. */
   github.sleepUntilReset = resetAt => {
-    if (command === 'wait') throw new QuotaPause(resetAt);
+    if (pauses) throw new QuotaPause(resetAt);
     if (Date.parse(resetAt) > github.deadline) throw new StillWaiting(resetAt);
     console.error(`rate limited until ${untilText(resetAt)}`);
     sleep(Math.max(1, (Date.parse(resetAt) - Date.now()) / 1000 + 1));
@@ -53,12 +52,12 @@ export function createGithub({ tool, command, projectDirectory, sleep }) {
       `query=${query.startsWith('query') ? `${query.slice(0, query.lastIndexOf('}'))} rateLimit{cost remaining resetAt}}` : query}`];
     for (const [key, val] of Object.entries(variables)) args.push(typeof val === 'number' ? '-F' : '-f', `${key}=${val}`);
     for (let sleeps = 0; ; sleeps++) {
-      if (command in sleepers && github.quota?.remaining < sleepers[command] && Date.parse(github.quota.resetAt) > Date.now()) github.sleepUntilReset(github.quota.resetAt);
+      if (reserve !== undefined && github.quota?.remaining < reserve && Date.parse(github.quota.resetAt) > Date.now()) github.sleepUntilReset(github.quota.resetAt);
       try {
         beforeSend?.();
         github.calls++;
         // stderr piped: a tolerated refusal ("already exists") is no failure, and a real one reaches the error message.
-        const response = github.run(args, { stdio: 'pipe' });
+        const response = run(args, { stdio: 'pipe' });
         const { headers, body } = splitResponse(response);
         const { data, errors } = JSON.parse(body);
         // The body's rateLimit is what a real `{rateLimit{remaining}}` query returns (#625); the headers were seen 4400 points too high.
@@ -82,18 +81,18 @@ export function createGithub({ tool, command, projectDirectory, sleep }) {
         github.quota = quotaOf(headers) ?? github.quota;
         // A primary refusal whose own headers show free quota is stale (the window reset meanwhile): ask again now, never wait for a reset time.
         if (!/secondary rate limit/i.test(text) && github.quota?.remaining > 0 && quotaOf(headers)) {
-          assert.ok(sleeps < 3, `GitHub keeps refusing although its headers report ${github.quota.remaining} points left; run ${command} again later`);
+          assert.ok(sleeps < 3, `GitHub keeps refusing although its headers report ${github.quota.remaining} points left; run it again later`);
           continue;
         }
         // The refusal names its own reset; without headers, a minute from now.
         const resetAt = retryAt(text, sleeps, () => quotaOf(headers)?.resetAt ?? new Date(Date.now() + 60_000).toISOString(), Date.now(), headers);
-        assert.ok(command in sleepers && sleeps < 3, `The GitHub GraphQL quota is used up until ${untilText(resetAt)}; run ${command} again after that`);
+        assert.ok(reserve !== undefined && sleeps < 3, `The GitHub GraphQL quota is used up until ${untilText(resetAt)}; run the command again after that`);
         github.sleepUntilReset(resetAt);
       }
     }
   };
 
-  github.rest = path => JSON.parse(github.run(['api', path], { stdio: 'pipe' }));
+  github.rest = path => JSON.parse(run(['api', path], { stdio: 'pipe' }));
 
   /**
    * One REST write, the only place that builds its `gh` arguments. `fields` are strings (`-f`) or booleans (`-F`), `body` is the text of a
@@ -101,13 +100,28 @@ export function createGithub({ tool, command, projectDirectory, sleep }) {
    * to stderr, and a caller that reads the last line sees that, not the instruction (#332). Returns gh's answer text.
    */
   github.write = (method, path, { fields = {}, body, json, header } = {}) => {
-    if (adapter?.write) return adapter.write(method, path, { fields, body, json, header });
     const args = ['api', path, '-X', method, ...header ? ['-H', header] : []];
     for (const [key, val] of Object.entries(fields)) args.push(typeof val === 'boolean' ? '-F' : '-f', `${key}=${val}`);
     if (body !== undefined) args.push('-F', 'body=@-');
     if (json !== undefined) args.push('--input', '-');
-    return github.run(args, { input: json !== undefined ? JSON.stringify(json) : body, stdio: 'pipe' });
+    return run(args, { input: json !== undefined ? JSON.stringify(json) : body, stdio: 'pipe' });
   };
+
+  // Named operations: the only places that build the `gh` arguments of a pull request merge and of the board setup.
+  const text = args => run(args, { stdio: 'pipe' }).trim();
+  const json = args => JSON.parse(text(args));
+  /** Merges a PR with a merge commit if its head is still `head`; throws gh's refusal. */
+  github.mergePr = (repository, number, head) => { run(['pr', 'merge', String(number), '--repo', repository, '--merge', '--match-head-commit', head], { stdio: 'pipe' }); };
+  /** Whether gh is signed in. */
+  github.signedIn = () => { try { run(['auth', 'status'], { stdio: 'pipe' }); return true; } catch { return false; } };
+  github.viewRepository = repository => json(['repo', 'view', repository, '--json', 'viewerPermission,url']);
+  github.viewProject = (number, owner) => json(['project', 'view', String(number), '--owner', owner, '--format', 'json']);
+  github.copyProject = (number, sourceOwner, targetOwner, title) =>
+    json(['project', 'copy', String(number), '--source-owner', sourceOwner, '--target-owner', targetOwner, '--title', title, '--format', 'json']);
+  github.projectFields = (number, owner) => json(['project', 'field-list', String(number), '--owner', owner, '--format', 'json', '--limit', '100']);
+  github.linkProject = (number, owner, repository) => { text(['project', 'link', String(number), '--owner', owner, '--repo', repository]); };
+  github.labelNames = repository => json(['api', `repos/${repository}/labels?per_page=100`, '--paginate', '--slurp']).flat().map(label => label.name);
+  github.createLabel = (repository, name, color) => { text(['label', 'create', name, '--repo', repository, '--color', color]); };
 
   /** Every page, so an early bot summary on a long PR is never cut off. */
   github.restAll = (path, expected) => {

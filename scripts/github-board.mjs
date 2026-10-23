@@ -29,28 +29,27 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
   const saved = existsSync(marker) ? readProfile(root) : null;
   if (!byHand && saved?.repository?.toLowerCase() === repo.toLowerCase() && saved.number && saved.id)
     return { status: 0, note: `already bound to project #${saved.number}; run setup-github.mjs ${repo} to redo it` };
-  try { github.run(['auth', 'status'], { stdio: 'pipe' }); } catch { return { status: 1, stderr: 'gh is not signed in' }; }
+  if (!github.signedIn()) return { status: 1, stderr: 'gh is not signed in' };
 
-  const gh = (...args) => github.run(args, { stdio: 'pipe' }).trim();
   const [owner, name] = repo.split('/');
   projectFile(root, markerName); // refuses a path that leaves the checkout or a marker that is no plain file
   // GitHub names are case-insensitive: a remote written acme/app is the recorded acme/App.
   if (saved?.repository) assert.equal(saved.repository.toLowerCase(), repo.toLowerCase(), 'Recorded project belongs to another repository');
-  const meta = JSON.parse(gh('repo', 'view', repo, '--json', 'viewerPermission,url'));
+  const meta = github.viewRepository(repo);
   assert.ok(['ADMIN', 'MAINTAIN', 'WRITE'].includes(meta.viewerPermission), 'Repository write permission required');
   const number = requestedNumber ?? saved?.number;
   if (number) assert.match(String(number), /^\d+$/, 'Recorded project number must be numeric');
   const template = number ? undefined : boardTemplate(saved ?? {}, kitProject ?? readProfile(kitRoot));
   const project = number
-    ? JSON.parse(gh('project', 'view', String(number), '--owner', owner, '--format', 'json'))
-    : JSON.parse(gh('project', 'copy', String(template.number), '--source-owner', template.owner, '--target-owner', owner, '--title', name, '--format', 'json'));
+    ? github.viewProject(number, owner)
+    : github.copyProject(template.number, template.owner, owner, name);
   const saveProject = () => {
     // Keep project-owned settings such as "start"; only the board binding is rewritten.
     writeProjectFile(root, markerName, JSON.stringify({ ...saved?.raw, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
   };
   // Retain newly copied boards on failure so retry cannot create duplicates.
   if (!number) saveProject();
-  const fields = JSON.parse(gh('project', 'field-list', String(project.number), '--owner', owner, '--format', 'json', '--limit', '100'));
+  const fields = github.projectFields(project.number, owner);
   const status = fields.fields.find(f => f.name === 'Status');
   const mismatch = statusMismatch(status?.options?.map(o => o.name) ?? [], saved ?? {});
   assert.ok(!mismatch, mismatch);
@@ -61,10 +60,10 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
     'query($id:ID!) { node(id:$id) { ... on ProjectV2SingleSelectField { issueField { ... on IssueFieldSingleSelect { options { name } } } } } }',
     { id: priority.id }).node?.issueField?.options;
   assert.ok(priorityOptions?.length >= 2, 'Priority needs a usable explicit scale; configure/verify its choices before completing setup');
-  gh('project', 'link', String(project.number), '--owner', owner, '--repo', repo);
-  const labels = new Set(JSON.parse(gh('api', `repos/${repo}/labels?per_page=100`, '--paginate', '--slurp')).flat().map(l => l.name));
+  github.linkProject(project.number, owner, repo);
+  const labels = new Set(github.labelNames(repo));
   for (const { name: label, color } of projectLabels(saved ?? {}))
-    if (!labels.has(label)) gh('label', 'create', label, '--repo', repo, '--color', color);
+    if (!labels.has(label)) github.createLabel(repo, label, color);
   saveProject();
   return {
     status: 0, note: `bound to project #${project.number}`,

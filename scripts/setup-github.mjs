@@ -10,7 +10,7 @@ if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo ?? '') || (requestedNumber !
   process.exit(2);
 }
 const root = realpathSync(process.cwd());
-const github = createGithub({ tool: externalTool('gh', root), command: 'setup', projectDirectory: root, sleep() {} });
+const github = createGithub({ tool: externalTool('gh', root), projectDirectory: root, sleep() {} });
 const result = setupBoard({ root, github, repo, number: requestedNumber });
 if (result.status !== 0) { console.error(result.stderr); process.exit(1); }
 console.log(result.text);

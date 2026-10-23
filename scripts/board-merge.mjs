@@ -161,8 +161,7 @@ async function merge() {
     asynchronous = true;
   };
   // A stack is merged by GitHub from its top, and a plain `gh pr merge` of the top would land it in the layer below: merge-async only.
-  const ghMerge = () => github.run(['pr', 'merge', String(number), '--repo', project.repository, '--merge', '--match-head-commit', headRefOid],
-    { stdio: 'pipe' });
+  const ghMerge = () => github.mergePr(project.repository, number, headRefOid);
   if (gate.merged) progress(`note: PR #${number} is already merged`); else if (stack) mergeAsync(); else try {
     try {
       ghMerge();
