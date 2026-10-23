@@ -43,7 +43,7 @@ function start(h) {
     return;
   }
   const child = spawnSync(command.file, command.args, { ...command.options, input: h.raw, encoding: 'utf8', stdio: ['pipe', 'pipe', 'inherit'], windowsHide: true });
-  process.exitCode = child.status ?? 0;
+  h.exitCode = child.status ?? 0;
   const text = (child.stdout ?? '').trim();
   try {
     const parsed = JSON.parse(text);
