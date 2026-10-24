@@ -5,7 +5,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { detectAgent } from './agents.mjs';
-import { claimIn, claimLine, claimOf, commentClaims, hasClaim, recordSession, withClaim } from './claim.mjs';
+import { claimIn, claimLine, claimOf, commentClaims,recordSession, withClaim } from './claim.mjs';
 import { shared } from './board-args.mjs';
 import { pushPlan, targetBranch } from './board-checkout.mjs';
 import { result } from './board-result.mjs';
@@ -111,9 +111,10 @@ function start() {
   const stacked = state.stackedOn, login = issue.viewer.login;
   // #943/#979: the comment ids up to now, read BEFORE the free check; a claim above this bound was written after it (a claim between bound and check would count as old and be missed).
   const comments = `repos/${issueProject.repository}/issues/${number}/comments`;
-  const seen = Math.max(0, ...restAll(comments).map(comment => comment.id));
+  const listed = restAll(comments), seen = Math.max(0, ...listed.map(comment => comment.id));
   // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
-  const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
+  // #1005: the claims come from the same REST list that gave the bound; GraphQL may lag behind it.
+  const fresh = { ...readIssue(), comments: { nodes: listed } }, raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
   // #657: an empty base field must not fall back to the default branch silently (a tooling issue says `main` in the field).
   const unset = baseOf(issue);
@@ -126,7 +127,7 @@ function start() {
   const claim = () => {
     github.write('POST', comments, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
     // #943: of the claims written since the read above, the oldest wins; a loser withdraws its own comment, so the winner's claim stays the newest.
-    const written = restAll(comments).filter(comment => comment.id > seen && hasClaim(comment.body));
+    const written = restAll(comments).filter(comment => comment.id > seen && claimIn(comment.body)?.session);
     const winner = claimIn(written[0]?.body);
     if (winner && winner.session !== session) {
       const own = written.find(comment => claimIn(comment.body)?.session === session);
