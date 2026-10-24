@@ -379,7 +379,9 @@ related references do not expand the declared scope. Creating a backlink never c
    stands. A reviewer the project lists as
    `"optionalReviewers"` ([setup](../SETUP.md#3-board-and-labels)) is never awaited,
    re-requested or replaced by a self-review: `wait` and `done` ignore its traces,
-   while its findings, open threads and change requests count like any other. Once all threads
+   while its findings, open threads and change requests count like any other. `board.mjs threads PR`
+   lists the open threads; after you fixed or answered a finding, `board.mjs threads PR --resolve NUMBER... [--reply TEXT]`
+   closes exactly the threads you name ([details](board/threads.md)). Once all threads
    are resolved, `done` dismisses its standing change request itself (GitHub's ruleset would block the merge).
 4. To change code: run `start` again,
    set the PR to Draft, batch fixes and rerun affected checks. Push and run `done` again (Ready for Review,

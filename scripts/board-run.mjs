@@ -31,6 +31,7 @@ import * as block from './board-block.mjs';
 import * as start from './board-start.mjs';
 import * as done from './board-done.mjs';
 import * as merge from './board-merge.mjs';
+import * as threads from './board-threads.mjs';
 
 /**
  * `argv`: the arguments after the script name. `env`: the environment the call reads. `cwd`: the directory `--cwd` and the tool lookup start from.
@@ -137,7 +138,7 @@ async function runCall({ argv: call, env, cwd, io }) {
       // Lines that must show while the command runs; field and new have none (a failed call must not show a write as confirmed).
       progress: oneLine ? () => undefined : output.progress, step: oneLine ? () => undefined : output.step });
     quotaLine = quotaLineOf;
-    const commands = { ...check, ...claims, ...sweep, ...next, ...stack, ...fields, ...create, ...body, ...handoff, ...wait, ...block, ...start, ...done, ...merge };
+    const commands = { ...check, ...claims, ...sweep, ...next, ...stack, ...fields, ...create, ...body, ...handoff, ...wait, ...block, ...start, ...done, ...merge, ...threads };
     // check, reviews, handoff, ready and link are the steps `start` and `done` take (`hidden` in their description): callable for those two and for the tests, but not listed.
     const outcome = await commands[spec.run]();
     if (isResult(outcome)) {
