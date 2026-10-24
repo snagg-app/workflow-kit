@@ -141,7 +141,7 @@ exec /bin/sh "\${0%/*}/launch.sh" "$@"
     const { updatePatch } = await import('./ponytail-patch.mjs'); // only the maintainer's update needs it
     await updatePatch(c.kit, this.source, patch, from);
     // The snapshot folder name comes from the manifest, so it must name the pinned version (Impeccable's release does the same).
-    const ponytail = JSON.parse(c.text(path.join(c.source, 'package.json'))).version;
+    const ponytail = JSON.parse(c.text(path.join(c.kit, this.source, 'package.json'))).version;
     setVersion('ponytail', ponytail, c.kit);
     await c.setup();
   },

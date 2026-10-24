@@ -1,5 +1,5 @@
 diff --git a/hooks/ponytail-activate.js b/hooks/ponytail-activate.js
-index 3680e2e..432a6ba 100644
+index 3680e2e..d96f985 100644
 --- a/hooks/ponytail-activate.js
 +++ b/hooks/ponytail-activate.js
 @@ -3,14 +3,10 @@
@@ -230,10 +230,33 @@ index 3680e2e..432a6ba 100644
 +  // Silent fail — stdout closed/EPIPE at hook exit must not surface as a hook failure
 +}
 diff --git a/hooks/ponytail-mode-tracker.js b/hooks/ponytail-mode-tracker.js
-index bb4381d..c9c83c4 100644
+index 1f1f129..c9c83c4 100644
 --- a/hooks/ponytail-mode-tracker.js
 +++ b/hooks/ponytail-mode-tracker.js
-@@ -187,21 +187,19 @@ function finish() {
+@@ -4,7 +4,6 @@
+ 
+ const fs = require('fs');
+ const path = require('path');
+-const { spawn } = require('child_process');
+ const { getClaudeDir, getDefaultMode, isDeactivationCommand, writeDefaultMode } = require('./ponytail-config');
+ const {
+   clearMode,
+@@ -79,14 +78,6 @@ function finish() {
+         // prompt (hooks/band reads this flag). It outlives the session; absent = shown.
+         // Other hosts have no band, so there the word stays an unknown argument.
+         if (arg === 'band' && !isCopilot && !isCodex && !isQoder && !isCodeBuddy && !isCursor) {
+-          // `/ponytail band import`: past sessions into the board, in the background, so the prompt
+-          // is answered right away while the transcripts are read. Detached, it outlives this hook's
+-          // process.exit below.
+-          if (parts[2] === 'import') {
+-            spawn(process.execPath, [path.join(__dirname, 'ponytail-band-import.js')], { detached: true, stdio: 'ignore' });
+-            writeHookOutput('UserPromptSubmit', readMode() || 'off', 'PONYTAIL BAND IMPORT: past Claude Code sessions (cost, agent time, tokens) are being added to the board in the background. Open the board in a minute. Confirm in one short line.');
+-            return;
+-          }
+           const flag = path.join(getClaudeDir(), '.ponytail-band');
+           let hidden = false;
+           try { hidden = fs.readFileSync(flag, 'utf8').trim() === 'off'; } catch (e) {}
+@@ -196,21 +187,19 @@ function finish() {
  }
  
  process.stdin.on('data', chunk => { input += chunk; });
@@ -267,7 +290,7 @@ index bb4381d..c9c83c4 100644
 +// Keep fallback alive for stuck stdin; normal EOF cancels it.
 +const fallback = setTimeout(finishInput, 1000);
 diff --git a/hooks/ponytail-runtime.js b/hooks/ponytail-runtime.js
-index 27e9cee..82241ae 100644
+index 27e9cee..6b8980b 100644
 --- a/hooks/ponytail-runtime.js
 +++ b/hooks/ponytail-runtime.js
 @@ -2,9 +2,13 @@ const fs = require('fs');
@@ -452,10 +475,10 @@ index 3124f52..bbc4bf5 100644
 +the repository's CONTRIBUTING.md, not in a second ledger file. One-shot.
 +"stop ponytail-debt" or "normal mode" to revert.
 diff --git a/skills/ponytail-help/SKILL.md b/skills/ponytail-help/SKILL.md
-index 5d09772..3dc9a4c 100644
+index 34fccb3..70012fb 100644
 --- a/skills/ponytail-help/SKILL.md
 +++ b/skills/ponytail-help/SKILL.md
-@@ -31,44 +31,31 @@ Level sticks until changed or session end.
+@@ -31,45 +31,31 @@ Level sticks until changed or session end.
  | **ponytail-gain** | `/ponytail-gain` | Measured-impact scoreboard: less code, less cost, more speed. |
  | **ponytail-help** | `/ponytail-help` | This card. |
  
@@ -478,6 +501,7 @@ index 5d09772..3dc9a4c 100644
  
 -`/ponytail band` hides the band above the prompt, the same command brings it back.
 -`/ponytail band on` and `/ponytail band off` set it directly. The level stays.
+-`/ponytail band import` adds your past Claude Code sessions (cost, agent time, tokens) to the board.
 -
 -## Configure Default Mode
 -

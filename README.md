@@ -58,9 +58,11 @@ provider directory stays visible with `!/.claude/skills/my-skill/` in `.ignore`.
 the generators (`git diff --exit-code`) fails on an uncommitted `.ignore`.
 
 There is no kit update step in a project: the next session start pulls the shared checkout, so
-every branch and worktree has the newest kit without a merge. After a kit update, run
-`kit setup` again and commit what it changes; a run that changes nothing proves nothing
-about the new kit.
+every branch and worktree has the newest kit without a merge. A plain `kit setup` never changes a
+Git-tracked file under `.agents`, `.claude/skills`, `.claude/agents` or `.codex/agents`: the committed copies are the
+project's snapshot, so starting an agent leaves `git status` clean (#877). After a kit update, refresh the snapshot on purpose:
+run `kit setup --refresh` (or `setup-skills.mjs --refresh`) and commit what it changes; a run without `--refresh`
+proves nothing about the new kit.
 
 The kit has hook adapters only for Codex and Claude Code. Any other agent works at level 0
 (`AGENTS.md`, skills, `board.mjs`, `kit.mjs check`; see [Hooks](AGENT_RULES.md#hooks)); an
@@ -76,7 +78,7 @@ commands by name. Generated discovery files are ordinary committed files in
 content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
 A fresh clone/worktree discovers the committed files without generation or dependency
-installation; Claude Code additionally needs the skill links from `setup-skills`. Generate only during kit installation/update. An update PR reruns both generators above and commits their intended outputs. Changed
+installation; Claude Code additionally needs the skill links from `setup-skills`. Generate only during kit installation/update. An update PR reruns both generators above with `--refresh` and commits their intended outputs. Changed
 hook snapshots also need the [installers](#hooks).
 
 ### Commit generated files
@@ -278,7 +280,7 @@ is refused by Docker and stays.
 ```sh
 git submodule update --init --recursive    # the tests clone the pinned submodules
 node scripts/init-project.mjs --existing
-node scripts/setup-skills.mjs
+node scripts/setup-skills.mjs --refresh
 git status --short    # review intended outputs; preserve unrelated work
 node --test scripts/tests/<affected>.test.mjs    # add --test-name-pattern for one test
 node scripts/affected-tests.mjs    # test files for the changed files (--run runs them); new scripts need a row in its table
@@ -304,8 +306,8 @@ Renovate pull requests from this repository that change `.vendor/*`. It starts o
 definition that holds the write token. That is safe only because the job never runs code of the
 branch (see below), and it must stay so. The job runs
 `scripts/provider.mjs ponytail update` and `scripts/provider.mjs impeccable update` as needed, then the CI
-generators, pushes the result to the Renovate branch and approves the repository CI run for the
-new head: a push with `GITHUB_TOKEN` makes GitHub create the `pull_request` run but hold it as
+generators, pushes the result to the Renovate branch and approves the repository CI and CodeQL runs for the
+new head: a push with `GITHUB_TOKEN` makes GitHub create the `pull_request` runs but hold them as
 `action_required`, and the required check `Workflow Kit checks` stays "expected" until it has run
 (a `workflow_dispatch` run beside it is not accepted). The job holds `contents: write`
 and `actions: write` (the checkout action fetches with it and drops it; no step that runs a script sees it except the push and approval steps), runs only for
@@ -316,9 +318,10 @@ kept as input. Whoever wrote its commits, the branch may not change any workflow
 `.node-version` or `renovate.json` against main, apart from the three files the updaters
 generate (the Ponytail adaptation patch and `scripts/versions.json` and the Impeccable `SHA256SUMS`). The job
 fails instead of running, because the approved CI run executes the branch's workflow definition
-(read-only token, no secrets). The job approves only the `pull_request` run of the commit it
-pushed (the list is asked for that commit), waits up to two minutes for it and fails when none
-appears. Commit author names prove nothing,
+(no secrets or contents write; CodeQL can upload security events). The job approves only the
+`pull_request` runs of `repository.yml` and `codeql.yml` for the commit it pushed (each list is
+asked for that commit), waits up to two minutes per workflow and fails when either never appears.
+Commit author names prove nothing,
 so the bot-author rule only leaves branches with other people's commits alone. If the approval
 fails, approve the held run on the pull request ("Approve and run") or restart it:
 `gh run rerun <id>`. `renovate.json` lists the bot's commit address in

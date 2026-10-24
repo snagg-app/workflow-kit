@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       # contents: push the regenerated outputs. actions: a push with GITHUB_TOKEN makes GitHub create the
-      # pull_request run of the repository CI but hold it as action_required; the job approves that run.
+      # pull_request CI runs but hold them as action_required; the job approves the two named workflows.
       contents: write
       actions: write
     env:
@@ -96,7 +96,7 @@ jobs:
           if grep -qx '.vendor/ponytail' <<<"$changed"; then node scripts/provider.mjs ponytail update; fi
           if grep -qx '.vendor/impeccable' <<<"$changed"; then node scripts/provider.mjs impeccable update; fi
           node scripts/init-project.mjs --existing
-          node scripts/setup-skills.mjs
+          node scripts/setup-skills.mjs --refresh
       - name: Commit and push
         if: env.SKIP != 'true'
         env:
@@ -118,8 +118,8 @@ jobs:
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $auth" push origin "HEAD:refs/heads/$BRANCH"
       # GitHub creates the pull_request run for a commit pushed with GITHUB_TOKEN but holds it as action_required
       # until someone approves it, and a dispatched run is not accepted for the required check beside it. Approve
-      # that run (the repository CI has no secrets and a read-only token, and the branch may not change its
-      # workflow, see above). A run on the head that is going or has a verdict is enough; cancelled or skipped
+      # those runs (neither workflow has secrets or contents write; CodeQL can upload security events, and
+      # the branch may not change either workflow, see above). A run on the head that is going or has a verdict is enough; cancelled or skipped
       # ones are not. If the run never appears or the approval fails, the job fails visibly; then approve it
       # by hand ("Approve and run" on the pull request, or the same API call) or: gh run rerun <id>.
       - name: Approve the repository CI
@@ -129,19 +129,23 @@ jobs:
         run: |
           set -euo pipefail
           head=$(git rev-parse HEAD)
-          for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow repository.yml --event pull_request --commit "$head" --json databaseId,conclusion \
-              --jq '.[] | select(.conclusion != "cancelled" and .conclusion != "skipped") | "\(.databaseId) \(.conclusion)"') \
-              || runs=''   # a transient API error costs one poll, not the step
-            if [ -n "$runs" ]; then
-              while read -r id conclusion; do
-                if [ "$conclusion" = action_required ]; then
-                  gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve"
-                fi
-              done <<< "$runs"
-              exit 0
+          for workflow in repository.yml codeql.yml; do
+            for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
+              runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow "$workflow" --event pull_request --commit "$head" --json databaseId,conclusion \
+                --jq '.[] | select(.conclusion != "cancelled" and .conclusion != "skipped") | "\(.databaseId) \(.conclusion)"') \
+                || runs=''   # a transient API error costs one poll, not the step
+              if [ -n "$runs" ]; then
+                while read -r id conclusion; do
+                  if [ "$conclusion" = action_required ]; then
+                    gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve"
+                  fi
+                done <<< "$runs"
+                break
+              fi
+              sleep 10
+            done
+            if [ -z "$runs" ]; then
+              echo "::error::No pull_request run of $workflow appeared for $head; start it by hand."
+              exit 1
             fi
-            sleep 10
           done
-          echo "::error::No pull_request run of the repository CI appeared for $head; start it by hand."
-          exit 1

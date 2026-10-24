@@ -9,6 +9,7 @@ import { linkSkills, materialize } from './provider-links.mjs';
 import { checkDirectory } from './write-guard.mjs';
 import { providerList, skillsOf } from './provider-list.mjs';
 import { context, setup } from './provider.mjs';
+import { keepCommitted } from './keep-committed.mjs';
 
 /** The skills of the kit itself: the canonical copy lives in the kit's .agents/skills. */
 const kitOwnedSkills = ['find-skills', 'spec-review'];
@@ -17,8 +18,14 @@ const kitOwnedSkills = ['find-skills', 'spec-review'];
  * Writes the skills of every provider and of the kit into the project the process runs in (see projectRoot in checkout-root.mjs),
  * then trims them to the project's "skills" choice. Throws on any problem; prints what it did.
  */
-export async function setupSkills({ log = console.log, profile } = {}) {
-  const c = context({ log }), { kit, root } = c;
+export async function setupSkills({ log = console.log, profile, refresh = false } = {}) {
+  const c = context({ log }), { root } = c;
+  // Committed copies stay as committed (#877); only `refresh` rewrites them.
+  return keepCommitted(root, () => writeSkills(c, { log, profile }), { refresh, log });
+}
+
+async function writeSkills(c, { log, profile }) {
+  const { kit, root } = c;
   // Check Matt's ownership manifests before another generator changes discovery files (the list is in that order).
   for (const provider of providerList()) await setup(provider, c);
   for (const skill of kitOwnedSkills) {
@@ -60,9 +67,9 @@ export async function setupSkills({ log = console.log, profile } = {}) {
 // `--cwd PROJECT_DIR` as the argument picks the project; the default is the checkout the command runs in.
 if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    console.log('Usage: node <kit>/scripts/setup-skills.mjs [--cwd PROJECT_DIR]');
+    console.log('Usage: node <kit>/scripts/setup-skills.mjs [--cwd PROJECT_DIR] [--refresh]');
     process.exit(0);
   }
   enterCwd();
-  await setupSkills();
+  await setupSkills({ refresh: process.argv.includes('--refresh') });
 }

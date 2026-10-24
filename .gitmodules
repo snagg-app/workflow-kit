@@ -1,11 +1,11 @@
 [submodule ".vendor/ponytail"]
 	path = .vendor/ponytail
 	url = https://github.com/DietrichGebert/ponytail.git
-	branch = v5.3.0
+	branch = v5.3.2
 [submodule ".vendor/impeccable"]
 	path = .vendor/impeccable
 	url = https://github.com/pbakaus/impeccable.git
-	branch = skill-v4.6.0
+	branch = skill-v4.7.0
 [submodule ".vendor/matt-pocock-skills"]
 	path = .vendor/matt-pocock-skills
 	url = https://github.com/mattpocock/skills.git
