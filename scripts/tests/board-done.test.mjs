@@ -296,6 +296,23 @@ test('done can explicitly skip local tests through preparation and handoff witho
   assert.match(json('issues-comments.json').at(-1).body, new RegExp(`Head: ${head.slice(0, 7)}`));
 });
 
+test('a repeated done --skip-local-tests does not merge a moved base again (#927)', t => {
+  const { run, git, checkout, file, json } = delivery(t, handoffFixture);
+  const reason = 'Proof unchanged';
+  moveBase(git, checkout, { 'other.txt': 'base' }, { 'fix.txt': 'fix' });
+  run('done', '1', '--skip-local-tests', reason);
+  const merged = git('rev-parse', 'HEAD');
+  git('merge-base', '--is-ancestor', 'origin/release/0.1.1', merged);
+  showPr(file, json, { headRefOid: merged });
+  git('checkout', '-q', '-b', 'side', 'origin/release/0.1.1');
+  git('commit', '--allow-empty', '-q', '-m', 'base moved again');
+  git('push', '-q', 'origin', 'side:release/0.1.1');
+  git('checkout', '-q', 'work');
+  git('branch', '-q', '-D', 'side');
+  run('done', '1', '--skip-local-tests', reason);
+  assert.equal(git('rev-parse', 'HEAD'), merged, 'no second merge');
+});
+
 test('done skip preserves an old tested SHA and still refuses failed CI on the new head', t => {
   const { run, head, text, json, file, git } = delivery(t, handoffFixture);
   writeFileSync(file('.git/board-done-tested'), head);
