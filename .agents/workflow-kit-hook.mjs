@@ -3,7 +3,7 @@
 //         Der erste Befehl im frischen Worktree (auch ohne Hooks): `node .agents/workflow-kit-hook.mjs link` verknüpft `.vendor/workflow-kit` (#896).
 // Nutzen: Fehlt das Kit, fehlt auch kit-hook.mjs; dieser Einstieg braucht nur Node und klont dann selbst, statt dass drei Shells es nachbauen.
 import { spawnSync } from 'node:child_process';
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -18,7 +18,28 @@ export function sharedKit(commonDir) {
 
 // Git runs from the temp folder, so a checkout cannot put its own program in the way; it never prompts.
 const git = (...args) => spawnSync('git', ['-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', ...args],
-  { cwd: tmpdir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, timeout: 90_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } });
+  { cwd: tmpdir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, timeout: 90_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } });
+
+/** Clones next to the target and renames at the end, so an aborted clone never leaves a folder that blocks the next start (#974). Returns '' or git's real error. */
+export function cloneKit(kit, url = kitUrl) {
+  const temp = `${kit}.clone-${process.pid}`;
+  rmSync(temp, { recursive: true, force: true });
+  const run = git('clone', '--quiet', url, temp);
+  if (run.status !== 0) {
+    rmSync(temp, { recursive: true, force: true });
+    return (run.stderr || run.error?.message || 'git clone failed').trim();
+  }
+  try {
+    if (existsSync(path.join(kit, 'scripts/kit-hook.mjs'))) throw new Error('kit already present');
+    rmSync(kit, { recursive: true, force: true }); // half folder left by an older aborted clone
+    renameSync(temp, kit);
+  } catch (error) {
+    rmSync(temp, { recursive: true, force: true });
+    // A parallel start may have finished first; then the kit is there and fine.
+    if (!existsSync(path.join(kit, 'scripts/kit-hook.mjs'))) return error.message;
+  }
+  return '';
+}
 
 /** `link`: the one first command of a fresh worktree; reports what is in order or what needs a human. */
 async function linkNow(project, kit) {
@@ -41,9 +62,9 @@ function main() {
     const kit = sharedKit(common);
     file = kit && path.join(kit, 'scripts/kit-hook.mjs');
     // Only the events that may speak clone; the others stay silent without a kit.
-    if (file && !existsSync(file) && start) git('clone', '--quiet', kitUrl, kit);
+    const cloneError = file && !existsSync(file) && start ? cloneKit(kit) : '';
     if (!file || !existsSync(file)) {
-      if (start) console.log(JSON.stringify({ systemMessage: 'The shared Workflow Kit checkout is missing and could not be cloned (offline?). Clone https://github.com/snagg-app/workflow-kit.git to a folder named workflow-kit next to the project, or set WORKFLOW_KIT_DIR.' }));
+      if (start) console.log(JSON.stringify({ systemMessage: `The shared Workflow Kit checkout is missing and could not be cloned${cloneError ? `: ${cloneError}` : ' (offline?)'}. Clone https://github.com/snagg-app/workflow-kit.git to a folder named workflow-kit next to the project, or set WORKFLOW_KIT_DIR.` }));
       if (link) process.exitCode = 1;
       return;
     }
