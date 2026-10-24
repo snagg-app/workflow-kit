@@ -15,7 +15,8 @@ const scripts = path.dirname(fileURLToPath(import.meta.url));
 /** The profile's texts of a project directory; English without a readable profile (a broken one is board.mjs's to report, not the check's). */
 const textsAt = dir => textsFor(readProfileLenient(dir));
 
-const isDirectory = dir => existsSync(dir) && statSync(dir).isDirectory();
+// A folder removed between the existence check and the stat (another worktree deleted at once) counts as absent, not as a crash of the Start hook (#991).
+export const isDirectory = dir => { try { return existsSync(dir) && statSync(dir).isDirectory(); } catch { return false; } };
 const real = file => { try { return realpathSync.native(file); } catch { return ''; } };
 const mentionsKit = root => hookFiles.some(file => {
   try { return new RegExp(`"id":\\s*"${handlerId}"`).test(readFileSync(path.join(root, file), 'utf8')); } catch { return false; }

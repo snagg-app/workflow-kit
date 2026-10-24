@@ -493,3 +493,16 @@ test('start --takeover switches to a branch another worktree holds and catches u
   assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');
   assert.equal(git(checkout, 'rev-parse', 'HEAD'), ahead);
 });
+
+test('start of the own session continues the pushed branch of the issue instead of branching anew (#995)', t => {
+  const { checkout, run, writeIssue, git, file } = startFixture(t);
+  const ahead = git(checkout, 'commit-tree', '-p', 'main', '-m', 'ahead', 'main^{tree}');
+  git(checkout, 'push', '-q', 'origin', `${ahead}:refs/heads/claude/1-fixture`);
+  writeFileSync(file('branches.json'), JSON.stringify(['claude/1-fixture']));
+  const claim = { createdAt: new Date().toISOString(), url: 'u', body: 'Beansprucht.\nAgent: claude, Session: S2\nBasis: main\n' };
+  writeIssue({ ...issue('In progress'), updatedAt: new Date().toISOString(), comments: { nodes: [claim] }, branches: [{ name: 'claude/1-fixture' }] });
+  const result = run('start', '1', '--session', 'S2');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');
+  assert.equal(git(checkout, 'rev-parse', 'HEAD'), ahead);
+});

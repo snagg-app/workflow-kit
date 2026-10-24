@@ -35,7 +35,7 @@ issue(number:$number){
 ${issueFields(predecessorFields)}
 closedByPullRequestsReferences(first:100){totalCount nodes{number state body updatedAt mergeStateStatus repository{nameWithOwner} headRefName}}
 labels(first:20){totalCount nodes{name}}
-comments(last:50){nodes{${feedbackNode}}}
+comments(last:${claimComments}){nodes{${feedbackNode}}}
 ${subIssues ? `subIssues(first:${subIssues}){totalCount nodes{${issueFields('number state stateReason repository{nameWithOwner}')}}}` : ''}}}}`;
 
 /** Names the issue in failures (a bare "Could not resolve to an Issue" hides which repository was meant). */
@@ -106,7 +106,8 @@ const decisionWait = 'waits for the decision of';
 // Feedback after a handoff (#554): issue comments ride along with the searches; PR feedback is read by actual ids,
 // so two connections per PR do not multiply every search slot by ten hypothetical PRs.
 const feedbackNode = 'createdAt url body';
-const issueFeedback = `comments(last:10){nodes{${feedbackNode}}}`;
+const claimComments = 50; // #995: next and check read the same window, so both see the same claims
+const issueFeedback = `comments(last:${claimComments}){nodes{${feedbackNode}}}`;
 // #N in the project's repository, OWNER/REPO#N elsewhere: a bare number must never name a same-number issue or PR of another repository.
 const refOf = (repository, number) => `${repository.nameWithOwner.toLowerCase() === project.repository.toLowerCase() ? '' : repository.nameWithOwner}#${number}`;
 const logins = issue => issue.assignees.nodes.map(assignee => assignee.login).join(', ');
