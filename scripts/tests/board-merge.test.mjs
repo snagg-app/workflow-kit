@@ -7,7 +7,7 @@ import { isolatedGit } from './fixtures.mjs';
 
 
 test('merge merges the checked head by its full id only when no review is running, and proves the merge', t => {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, queries } = fixture(t);
   const merges = join(checkout, 'merges');
   const oid = 'abcdef1' + '0'.repeat(33);
   const commit = handoffPr().commits.nodes[0].commit;
@@ -47,9 +47,11 @@ test('merge merges the checked head by its full id only when no review is runnin
   rmSync(join(checkout, 'stacks.json'));
   // GitHub computes the merge state late (#721): merge reads again, longer than handoff, and merges once it is CLEAN.
   write(withHead(oid, { mergeStateStatus: 'UNKNOWN' }));
-  writeFileSync(join(checkout, 'pr-reads.json'), JSON.stringify([...Array(8).fill({ mergeStateStatus: 'UNKNOWN' }), { mergeStateStatus: 'CLEAN' }]));
+  writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify([...Array(8).fill({ mergeStateStatus: 'UNKNOWN' }), { mergeStateStatus: 'CLEAN' }]));
+  queries();
   assert.equal(run('merge', '7', '--interval', '0').status, 0, 'UNKNOWN turns CLEAN after several reads');
-  rmSync(join(checkout, 'pr-reads.json'));
+  assert.deepEqual(queries().filter(query => query.includes('headRefOid mergeStateStatus') || query.includes('mergeCommit{oid}')), [], 'the loops ask REST, no GraphQL query (#882)');
+  rmSync(join(checkout, 'pr-rest-reads.json'));
   rmSync(merges);
   // The refusal names the reviewer that is still running.
   write(withHead(oid), [codexRunning]);
@@ -102,7 +104,7 @@ function mergeFixture(t) {
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr({ headRefName: 'claude/7-topic', isCrossRepository: false,
       headRepository: { nameWithOwner: 'Test/Example' }, ...headOf(first), ...changes })));
     writeFileSync(join(checkout, 'issues-comments.json'), '[]');
-    for (const file of ['calls', 'merges', 'pr-reads.json', 'compare.json', 'dependents.json', 'update-fails', 'delete-fails', 'delete-gone', 'auto-delete', 'merge-403', 'merge-async-late', 'merge-async-fails', 'async-merges']) rmSync(join(checkout, file), { force: true });
+    for (const file of ['calls', 'merges', 'pr-reads.json', 'pr-rest-reads.json', 'updated-pr.json', 'compare.json', 'dependents.json', 'update-fails', 'delete-fails', 'delete-gone', 'auto-delete', 'merge-403', 'merge-async-late', 'merge-async-fails', 'async-merges']) rmSync(join(checkout, file), { force: true });
   };
   const calls = () => existsSync(join(checkout, 'calls')) ? readFileSync(join(checkout, 'calls'), 'utf8').trim().split('\n') : [];
   const flag = name => writeFileSync(join(checkout, name), '');
@@ -205,7 +207,7 @@ test('merge merges the base for a red check from updateBranchChecks, but only wh
   assert.match(run('wait', '7').stdout, /^FAILED: check Restart CI after retarget FAILURE asks for the base: run board\.mjs merge 7/m);
 
   show(headOf(first, restart));
-  json('pr-reads.json', [{}, {}, headOf(second)]);
+  json('updated-pr.json', headOf(second));
   const merged = run('merge', '7', '--interval', '0');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.deepEqual(calls(), [`update-branch ${first}`, 'merge', 'delete claude/7-topic']);
@@ -245,7 +247,7 @@ test('merge merges the base when the Sonar analysis of the head links another PR
   const sonar = pullRequest => ({ statusCheckRollup: { contexts: { totalCount: 1, nodes: [{ __typename: 'CheckRun', name: 'SonarCloud Code Analysis', status: 'COMPLETED', conclusion: 'SUCCESS',
     summary: '[0 New issues]', detailsUrl: `https://sonarcloud.io/dashboard?id=test_example&pullRequest=${pullRequest}`, checkSuite: { app: { slug: 'sonarqubecloud' } } }] } } });
   show(headOf(first, sonar(9)));
-  json('pr-reads.json', [{}, {}, {}, headOf(second, sonar(7))]);
+  json('updated-pr.json', headOf(second, sonar(7)));
   const merged = run('merge', '7', '--interval', '0');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.deepEqual(calls(), [`update-branch ${first}`, 'merge', 'delete claude/7-topic']);
@@ -258,7 +260,7 @@ test('merge merges the base once for any red check when the base moved, and a se
   // The base gained commits (no shared file): the red CI may be stale, so the base is merged and the new head decides.
   show(headOf(first, red));
   json('compare.json', { behind: 2, own: ['a.txt'], base: ['c.txt'] });
-  json('pr-reads.json', [{}, {}, headOf(second)]);
+  json('updated-pr.json', headOf(second));
   const merged = run('merge', '7', '--interval', '0');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.deepEqual(calls(), [`update-branch ${first}`, 'merge', 'delete claude/7-topic']);
@@ -266,7 +268,7 @@ test('merge merges the base once for any red check when the base moved, and a se
   // Still red on the new head: FAILED, no second update, no merge.
   show(headOf(first, red));
   json('compare.json', { behind: 2, own: ['a.txt'], base: ['c.txt'] });
-  json('pr-reads.json', [{}, {}, headOf(second, red)]);
+  json('updated-pr.json', headOf(second, red));
   assert.equal(run('merge', '7', '--interval', '0').status, 1);
   assert.deepEqual(calls(), [`update-branch ${first}`]);
 
@@ -308,6 +310,7 @@ test('merge gives both CI waits around a base update one shared --max-minutes de
   // Each answer carries its own update time: merge reads GraphQL again only when REST shows a change, as it does in life.
   json('pr-reads.json', [{ updatedAt: 'u1' }, { ...headOf(first, check('FAILURE')), updatedAt: 'u2' }, { ...headOf(second, check(null, 'IN_PROGRESS', 'CI')), updatedAt: 'u3' },
     { ...headOf(second, check(null, 'IN_PROGRESS', 'CI')), updatedAt: 'u4' }, { ...headOf(second), updatedAt: 'u5' }]);
+  json('updated-pr.json', headOf(second));
   const waiting = run('merge', '7', '--interval', '0.4', '--max-minutes', '0.005');
   assert.equal(waiting.status, 4, waiting.stdout + waiting.stderr);
   assert.deepEqual(calls(), [`update-branch ${first}`], 'the second wait has no time left of its own: nothing is merged');

@@ -113,7 +113,7 @@ function api(argv, input, stdout, stderr, exit) {
     // What merge does to the repository, in order (calls): update-branch, merge, delete of the head branch.
     if (parts[3] === 'pulls' && parts[5] === 'update-branch' && argv.includes('PUT')) {
       // update-fails: GitHub refuses (conflict, or the head is not the expected one). Otherwise the base is part of the branch now;
-      // the new head shows through pr-reads.json, which GitHub also shows late.
+      // the new head is what updated-pr.json overlays on pr.json (without the file the PR stays as it is).
       fs.appendFileSync('calls', `update-branch ${argv.find(arg => arg.startsWith('expected_head_sha=')).slice(18)}\n`);
       // update-fails: GitHub refuses; "403" in the file: the refusal of a PR with stacked children, "no-code": the same text without the status.
       if (fs.existsSync('update-fails')) {
@@ -122,6 +122,7 @@ function api(argv, input, stdout, stderr, exit) {
         exit(1);
       }
       fs.rmSync('compare.json', { force: true });
+      if (fs.existsSync('updated-pr.json')) fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), ...JSON.parse(fs.readFileSync('updated-pr.json')) }));
       stdout('{"message":"Updating pull request branch."}');
       exit(0);
     }
@@ -133,7 +134,7 @@ function api(argv, input, stdout, stderr, exit) {
       fs.appendFileSync('async-merges', argv.filter(arg => /^(merge_action|merge_method|sha)=/.test(arg)).join(' ') + '\n');
       if (fs.existsSync('merge-async-fails')) { stderr('gh: Forbidden (HTTP 403)\n'); exit(1); }
       const merged = { state: 'MERGED', mergeCommit: { oid: 'f'.repeat(40) } };
-      if (fs.existsSync('merge-async-late')) fs.writeFileSync('pr-reads.json', JSON.stringify([{}, merged]));
+      if (fs.existsSync('merge-async-late')) fs.writeFileSync('pr-rest-reads.json', JSON.stringify([{}, merged]));
       else fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), ...merged }));
       // stack-prs.json: GitHub merges the layers below the merged top with it (`merge --stack`), unless stack-layers-stay is set.
       if (fs.existsSync('stack-prs.json') && !fs.existsSync('stack-layers-stay')) {
@@ -228,8 +229,10 @@ function api(argv, input, stdout, stderr, exit) {
         fs.writeFileSync('pr-rest-reads.json', JSON.stringify(reads));
         fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), ...overlay }));
       }
-      const pr = JSON.parse(fs.readFileSync('pr.json'));
-      stdout(JSON.stringify({ node_id: pr.id, number: pr.number, html_url: pr.url, state: pr.state === 'OPEN' ? 'open' : 'closed', merged: pr.state === 'MERGED', draft: pr.isDraft, changed_files: pr.changedFiles, body: pr.body, updated_at: pr.updatedAt ?? 'u',
+      // A layer of a stack (stack-prs.json) shows as its own PR, like in GraphQL.
+      const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};
+      const pr = stackPrs[Number(parts[4])] ?? JSON.parse(fs.readFileSync('pr.json'));
+      stdout(JSON.stringify({ node_id: pr.id, number: pr.number, html_url: pr.url, state: pr.state === 'OPEN' ? 'open' : 'closed', merged: pr.state === 'MERGED', merge_commit_sha: pr.mergeCommit?.oid, draft: pr.isDraft, changed_files: pr.changedFiles, body: pr.body, updated_at: pr.updatedAt ?? 'u',
         mergeable_state: String(pr.mergeStateStatus).toLowerCase(), head: { sha: pr.headRefOid, ref: pr.headRefName, repo: { id: pr.isCrossRepository ? 2 : 1, full_name: pr.headRepository?.nameWithOwner } }, base: { ref: pr.baseRefName, sha: pr.baseRefOid, repo: { id: 1 } } }));
       exit(0);
     }

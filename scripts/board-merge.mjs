@@ -9,8 +9,8 @@ import { readProfileAt, textsFor } from './project-profile.mjs';
 import { SonarOtherPr } from './sonar.mjs';
 import { shared } from './board-args.mjs';
 import { failed, isResult, result } from './board-result.mjs';
-import { github, graphql, gitAt, name, number, numberOption, owner, progress, project, projectDirectory, rest, runShell, sleep, stack, memory } from './board-context.mjs';
-import { readyQuery } from './board-common.mjs';
+import { github, graphql, gitAt, number, numberOption, progress, project, projectDirectory, rest, runShell, sleep, stack, memory } from './board-context.mjs';
+import { pullState } from './board-common.mjs';
 import { dependentPrs } from './board-claims.mjs';
 import { mergeGate, stackReasons } from './board-stack.mjs';
 import { poll, reviewsForHead } from './board-wait.mjs';
@@ -39,7 +39,7 @@ function updateBranch(head, base) {
   }
   // update-branch answers 202 before the new head exists, and the PR reports the previous head for a moment.
   for (let read = 1; ; read++) {
-    const fresh = graphql(readyQuery, { owner, name, number }).repository.pullRequest.headRefOid;
+    const fresh = pullState(number).headRefOid;
     if (fresh !== head) return fresh;
     assert.ok(read < 10, `PR #${number} still shows head ${head.slice(0, 7)} after the branch update; run merge again`);
     sleep(numberOption('--interval', 3));
@@ -219,8 +219,7 @@ async function merge() {
   // merge-async answers 202 and merges in the background: read until the PR shows it (a stack layer too).
   const readMerged = (layer, until) => {
     for (let read = 1; ; read++) {
-      const current = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
-        pullRequest(number:$number){state mergeCommit{oid}}}}`, { owner, name, number: layer }).repository.pullRequest;
+      const current = pullState(layer);
       if (!until || current.state === 'MERGED' || read >= 10) return current;
       sleep(numberOption('--interval', 3));
     }

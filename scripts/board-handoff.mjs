@@ -8,7 +8,7 @@ import { connectedIssues } from './board-body.mjs';
 import { check, mayStart } from './board-check.mjs';
 import { hasHandoffHead } from './claim.mjs';
 import { isPartialPr } from './board-claims.mjs';
-import { isSpec, projectItem, projectStatus, readIssue, specRefusal, text } from './board-common.mjs';
+import { isSpec, projectItem, pullState, projectStatus, readIssue, specRefusal, text } from './board-common.mjs';
 import { set } from './board-fields.mjs';
 import { readPr, reviews } from './board-reviews.mjs';
 import { reviewOutcome } from './board-wait.mjs';
@@ -165,8 +165,7 @@ function finishedPr(prNumber, action, expectedHead, extra = () => [], prior = []
   // merge looks longer than handoff (#721): about a minute at the default 3 s pause.
   for (let read = 1; undetermined(state) && read < (action === 'merge' ? 20 : mergeReads); read++) {
     sleep(numberOption('--interval', 3));
-    const fresh = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
-    pullRequest(number:$number){headRefOid mergeStateStatus}}}`, { owner, name, number: prNumber }).repository.pullRequest;
+    const fresh = pullState(prNumber);
     assert.equal(fresh?.headRefOid, review.pr.headRefOid, `PR head changed during ${action}`);
     state = fresh.mergeStateStatus;
   }
