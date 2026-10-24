@@ -7,12 +7,13 @@
 // Volumes: `worktreeVolumePrefixes` in .github/workflow-project.json lists the name prefixes; a volume is
 // `<prefix><sha256(worktree root)[0:12]>[-suffix]`. Only those names are ever touched, and never a name containing
 // one of `worktreeVolumeProtect` (the project's long-lived volumes; also --volume-protect, repeatable).
+// A volume is deleted only if its compose label `working_dir` lies inside this clone and is gone; anything else is "unclear" and stays (#951).
 // A worktree is deleted only if ALL hold: no local changes, no commits missing on the remote (or in a merged PR),
 // no running process, not locked by a living session, older than --min-age. Anything unclear is kept.
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { gitAsyncIn } from './git-tool.mjs';
@@ -66,12 +67,23 @@ export function keepReason(w, { minAge = 120, explicit = false } = {}) {
   return null;
 }
 
-/** Volumes of vanished roots: starts with a configured prefix, then 12 hex digits of a root hash nobody lives in. */
-export function orphanVolumes(names, prefixes, liveHashes, protect = []) {
+/** Volumes of vanished roots: starts with a configured prefix, then 12 hex digits of a root hash nobody lives in,
+ * and `provablyGone(name)` says the volume belonged to a worktree of this clone that no longer exists (#951).
+ * Without that proof (default) nothing is orphaned: a foreign clone's volume has an unknown hash too. */
+export function orphanVolumes(names, prefixes, liveHashes, protect = [], provablyGone = () => false) {
   return names.filter(name => !protect.some(word => name.toLowerCase().includes(word.toLowerCase())) && prefixes.some(prefix => {
     const id = name.startsWith(prefix) && name.slice(prefix.length).match(/^([0-9a-f]{12})(?![0-9a-f])/)?.[1];
-    return id && !liveHashes.has(id);
+    return id && !liveHashes.has(id) && provablyGone(name);
   }));
+}
+
+/** Proof from the compose label `working_dir`: it lies inside this clone (`owned` = its worktree paths), is gone, and its parent
+ * still exists (so it is not an unmounted drive). No label, a foreign folder or a reachable folder: not proven. */
+export function goneWorkdir(dir, owned, exists = existsSync) {
+  if (!dir) return false;
+  const here = norm(dir);
+  if (!owned.some(path => here === norm(path) || here.startsWith(`${norm(path)}/`))) return false;
+  return !exists(dir) && exists(dirname(dir));
 }
 
 /** All spellings of a root that a tool may have hashed (slashes, drive letter case). */
@@ -196,9 +208,17 @@ ${error.message}`);
   const all = names.out.split(/\s+/).filter(Boolean);
   const livePaths = existsSync(root) ? worktrees.filter(w => !w.missing && (!option.rm || !removed.includes(w))) : [];
   const hashesOf = list => new Set(list.flatMap(w => rootHashes(w.path)));
-  const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths), protect);
-  const afterRm = orphanVolumes(all, prefixes, hashesOf(livePaths.filter(w => !finished.includes(w))), protect);
-  console.log(`Volumes: ${all.length} in total, ${all.filter(n => protect.some(word => n.toLowerCase().includes(word.toLowerCase()))).length} protected (never touched), ${orphans.length} orphaned${option.rm ? '' : `, ${afterRm.length - orphans.length} more once the finished worktrees are gone`}`);
+  // Only a volume whose compose working_dir was inside this clone and is gone counts as orphaned; the rest is "unclear" and stays.
+  const suspects = orphanVolumes(all, prefixes, hashesOf(livePaths), protect, () => true);
+  const label = 'com.docker.compose.project.working_dir';
+  const inspected = suspects.length ? await exec(docker, ['volume', 'inspect', '--format', `{{.Name}}\t{{index .Labels "${label}"}}`, ...suspects]) : { ok: true, out: '' };
+  const workdirs = new Map(inspected.ok ? inspected.out.split(/\r?\n/).map(line => line.split('\t')) : []);
+  const owned = worktrees.map(w => w.path);
+  const goneAfterRm = name => goneWorkdir(workdirs.get(name), owned, path => existsSync(path) && !finished.some(w => norm(path) === norm(w.path) || norm(path).startsWith(`${norm(w.path)}/`)));
+  const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths), protect, name => goneWorkdir(workdirs.get(name), owned));
+  const afterRm = orphanVolumes(all, prefixes, hashesOf(livePaths.filter(w => !finished.includes(w))), protect, goneAfterRm);
+  console.log(`Volumes: ${all.length} in total, ${all.filter(n => protect.some(word => n.toLowerCase().includes(word.toLowerCase()))).length} protected (never touched), ${orphans.length} orphaned, ${suspects.length - orphans.length} unclear (kept)${option.rm ? '' : `, ${afterRm.length - orphans.length} more once the finished worktrees are gone`}`);
+  if (!option.rm) for (const name of suspects.filter(n => !orphans.includes(n))) console.log(`  unclear: ${name}`);
   if (option.rm) {
     let deleted = 0;
     await pool(orphans, async name => { if ((await exec(docker, ['volume', 'rm', name])).ok) deleted++; });
