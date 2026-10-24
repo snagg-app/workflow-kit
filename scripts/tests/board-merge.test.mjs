@@ -74,7 +74,7 @@ test('merge merges the checked head by its full id only when no review is runnin
     rmSync(merges);
     write(withHead(oid));
     writeFileSync(join(checkout, flag), '');
-    const result = run('merge', '7');
+    const result = run('merge', '7', '--interval', '0');
     assert.equal(result.status, 2, `${flag}: ${result.stdout}${result.stderr}`);
     assert.match(result.stdout, /^ERROR$/m);
     assert.doesNotMatch(result.stdout, /^MERGED/m, 'Only a read-back showing the merge counts');
@@ -520,10 +520,11 @@ test('merge runs the push commands of the project file as of the merge commit, o
 });
 
 test('merge deletes the whole folder of the agent worktree of the merged branch, and a link in it only goes itself, not its target', t => {
-  const { checkout, run, show } = mergeFixture(t);
+  const { checkout, run, show, headOf } = mergeFixture(t);
   const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
   git(checkout, 'init', '-q', '-b', 'main');
   git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'start');
+  writeFileSync(join(checkout, '.git/info/exclude'), 'node_modules\nlink\n'); // as a project's .gitignore does: these are not unsaved work
   const agent = join(checkout, '.claude/worktrees/agent-1'), other = join(checkout, '.claude/worktrees/agent-2'), target = join(dirname(checkout), 'link-target');
   git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic', agent);
   git(checkout, 'worktree', 'add', '-q', '-b', 'claude/8-other', other);
@@ -532,7 +533,7 @@ test('merge deletes the whole folder of the agent worktree of the merged branch,
   mkdirSync(target);
   writeFileSync(join(target, 'kept'), 'x');
   symlinkSync(target, join(agent, 'link'), 'junction');
-  show();
+  show(headOf(git(checkout, 'rev-parse', 'HEAD')));
   const merged = run('merge', '7');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.equal(existsSync(agent), false, 'the folder is gone');
@@ -542,7 +543,7 @@ test('merge deletes the whole folder of the agent worktree of the merged branch,
 });
 
 test('merge deletes only the worktree of the exact merged branch, never one whose branch name only starts with it (#948)', t => {
-  const { checkout, run, show } = mergeFixture(t);
+  const { checkout, run, show, headOf } = mergeFixture(t);
   const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
   git(checkout, 'init', '-q', '-b', 'main');
   git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'start');
@@ -554,7 +555,7 @@ test('merge deletes only the worktree of the exact merged branch, never one whos
   const listed = git(checkout, 'worktree', 'list', '--porcelain').split(/\r?\n/).filter(line => line.startsWith('branch refs/heads/claude/7-topic'));
   assert.deepEqual(listed, ['branch refs/heads/claude/7-topic-2', 'branch refs/heads/claude/7-topic'], 'git lists the similar branch before the merged one; without this order the test would not catch the bug');
   writeFileSync(join(similar, 'unpushed'), 'x');
-  show();
+  show(headOf(git(checkout, 'rev-parse', 'HEAD')));
   const merged = run('merge', '7');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.equal(existsSync(similar), true, 'the worktree of the similar branch stays with its unpushed work');
@@ -572,4 +573,38 @@ test('merge keeps a worktree of the merged branch outside the agent folder of th
   const merged = run('merge', '7');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.equal(existsSync(foreign), true, 'a folder of another place stays');
+});
+
+test('merge keeps the worktree of the merged branch when it holds uncommitted files or commits no remote has, and says so in one line (#966)', t => {
+  const { checkout, run, show, headOf } = mergeFixture(t);
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
+  git(checkout, 'init', '-q', '-b', 'main');
+  git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'start');
+  const merged = git(checkout, 'rev-parse', 'HEAD'), agent = join(checkout, '.claude/worktrees/agent-1');
+  git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic', agent);
+  show(headOf(merged));
+  // an uncommitted file
+  writeFileSync(join(agent, 'later'), 'x');
+  const dirty = run('merge', '7');
+  assert.equal(dirty.status, 0, dirty.stdout + dirty.stderr);
+  assert.equal(existsSync(join(agent, 'later')), true, 'the uncommitted file is not lost');
+  assert.match(dirty.stdout, /^worktree kept: .*agent-1 holds unsaved work \(1 changed files, 0 commits not pushed\)$/m);
+  // a commit after the merged head that is on no remote
+  rmSync(join(agent, 'later'));
+  git(agent, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'later');
+  show(headOf(merged));
+  const ahead = run('merge', '7');
+  assert.equal(ahead.status, 0, ahead.stdout + ahead.stderr);
+  assert.equal(existsSync(agent), true, 'the commit is not lost');
+  assert.match(ahead.stdout, /^worktree kept: .*agent-1 holds unsaved work \(0 changed files, 1 commits not pushed\)$/m);
+});
+
+test('merge reads a direct merge back several times when GitHub still shows the PR as open for a moment (#966)', t => {
+  const { run, show, flag, calls, first } = mergeFixture(t);
+  show();
+  flag('merge-late');
+  const result = run('merge', '7', '--interval', '0');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, new RegExp(`^MERGED #7 head ${first} `, 'm'));
+  assert.deepEqual(calls(), ['merge', 'delete claude/7-topic'], 'the branch step ran after the late read-back');
 });

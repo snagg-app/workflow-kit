@@ -32,5 +32,5 @@ layer (`NOT MERGED (STATE) #N …` and exit 2 when GitHub left one open), `issue
 the branch is not of this repository, is the default branch or is the base of another open PR (a stack: GitHub would close
 that PR); it prints `branch kept: …` with the reason. A failed or already done delete is a `note:` or `branch gone:` line,
 never an error of the merge. Without `--stack` it does not read the issue, claims or the [handoff comment](../../README.md#handoff-comment).
-It then deletes the whole folder of the agent worktree (`.claude/worktrees/NAME`) that has the merged branch checked out, with what Git does not track (`worktree deleted: …`); links in it are unlinked, their targets stay. The folder this run works in is kept.
+It then deletes the whole folder of the agent worktree (`.claude/worktrees/NAME`) that has the merged branch checked out, with what Git does not track (`worktree deleted: …`); links in it are unlinked, their targets stay. The folder this run works in is kept, and so is one with uncommitted files or commits beyond the merged head that no remote has (`worktree kept: … holds unsaved work`).
 After a merge into `main` or a `release/*` branch it runs the project's `push` commands ([Push commands](../../README.md#push-commands)).

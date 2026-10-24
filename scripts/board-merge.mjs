@@ -74,7 +74,7 @@ function deleteHeadBranch(pr) {
  * Delete the folder of an agent worktree (under an agent's `worktrees` folder of the agent table) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
  * (node_modules, .vendor, links). `rmSync` unlinks a junction or symlink without entering it, so a link's target stays. Never the folder this run works in. Returns the line to report, or nothing.
  */
-function removeAgentWorktree(branch) {
+function removeAgentWorktree(branch, head) {
   if (!existsSync(join(projectDirectory, '.git')) || (statSync(join(projectDirectory, '.git')).isDirectory() && !existsSync(join(projectDirectory, '.git/HEAD')))) return;
   try {
     const here = process.cwd().replaceAll('\\', '/').toLowerCase();
@@ -85,6 +85,10 @@ function removeAgentWorktree(branch) {
       if (!path || !block.split(/\r?\n/).includes(`branch refs/heads/${branch}`) || !agentNames().some(agent => agents[agent].worktrees && parent === `${root}/${agents[agent].worktrees.toLowerCase()}`)) continue;
       const own = path.replaceAll('\\', '/').toLowerCase();
       if (here === own || here.startsWith(`${own}/`)) return `worktree kept: ${path} is the folder of this run`;
+      // Work after the merge (a partial delivery) would be gone with the folder: tracked or new files, or commits beyond the merged head that no remote has.
+      const changed = gitAt(path, 'status', '--porcelain').split(/\r?\n/).filter(Boolean).length;
+      const unpushed = Number(gitAt(path, 'rev-list', '--count', 'HEAD', '--not', head, '--remotes'));
+      if (changed || unpushed) return `worktree kept: ${path} holds unsaved work (${changed} changed files, ${unpushed} commits not pushed)`;
       rmSync(path, { recursive: true, force: true });
       gitAt(projectDirectory, 'worktree', 'prune');
       return `worktree deleted: ${path}`;
@@ -224,7 +228,8 @@ async function merge() {
       sleep(numberOption('--interval', 3));
     }
   };
-  const { state, mergeCommit } = readMerged(number, asynchronous);
+  // A direct merge reads back the same way: GitHub may show the PR as open for a moment after `gh pr merge` (#966).
+  const { state, mergeCommit } = readMerged(number, true);
   assert.equal(state, 'MERGED', `Merge read-back shows #${number} as ${state}${asynchronous ? '; merge-async was accepted and may still land: read the PR before merging again' : ''}`);
   // The line an agent reads first comes before the slow steps below (layers, issues, push commands), which may run for minutes or fail.
   const headline = `MERGED #${number} head ${headRefOid} merge commit ${mergeCommit?.oid}`;
@@ -256,7 +261,7 @@ async function merge() {
     }
   }
   dropBranch(gate.pr);
-  const folder = removeAgentWorktree(gate.pr.headRefName);
+  const folder = removeAgentWorktree(gate.pr.headRefName, headRefOid);
   if (folder) notes.push(folder);
   const pushed = runPush(stack ? memory.stackState.trunk : gate.pr.baseRefName, mergeCommit?.oid);
   if (pushed) notes.push(pushed);
