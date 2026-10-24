@@ -10,6 +10,26 @@ class Exit extends Error {
   constructor(code) { super(`exit ${code}`); this.code = code; }
 }
 
+/**
+ * The read series of a PR (see board-fixture.mjs graphqlReads / restOverlays): each read takes the next prepared overlay and the last one stays,
+ * metadata that catches up after a push. The overlay is applied to pr.json; returns the PR as it shows now.
+ */
+function applyReadSeries(file, pr) {
+  let reads;
+  try { reads = JSON.parse(fs.readFileSync(file)); } catch (error) { // no series prepared: the PR shows as it is (no existsSync first: file system race)
+    if (error.code === 'ENOENT') return pr;
+    throw error;
+  }
+  pr ??= JSON.parse(fs.readFileSync('pr.json'));
+  const overlay = reads.length > 1 ? reads.shift() : reads[0];
+  fs.writeFileSync(file, JSON.stringify(reads));
+  const shown = { ...pr, ...overlay };
+  fs.writeFileSync('pr.json', JSON.stringify(shown));
+  return shown;
+}
+// The one place that consumes the GraphQL series: every PR number reads it, through the review query and the plain pullRequest query alike.
+const applyGraphqlRead = pr => applyReadSeries('pr-reads.json', pr);
+
 /** gh api GRAPHQL_OR_REST_PATH … */
 function api(argv, input, stdout, stderr, exit) {
   const path = argv[2] ?? '';
@@ -223,12 +243,7 @@ function api(argv, input, stdout, stderr, exit) {
       // The PR as REST shows it, derived from pr.json so GraphQL and REST agree. Each read takes the next overlay of pr-rest-reads.json
       // (the last one stays) and applies it to pr.json: a change that becomes visible between two rounds of `wait`. Reads are counted in rest-reads.
       fs.appendFileSync('rest-reads', 'x\n');
-      if (fs.existsSync('pr-rest-reads.json')) {
-        const reads = JSON.parse(fs.readFileSync('pr-rest-reads.json'));
-        const overlay = reads.length > 1 ? reads.shift() : reads[0];
-        fs.writeFileSync('pr-rest-reads.json', JSON.stringify(reads));
-        fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), ...overlay }));
-      }
+      applyReadSeries('pr-rest-reads.json');
       // A layer of a stack (stack-prs.json) shows as its own PR, like in GraphQL.
       const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};
       const pr = stackPrs[Number(parts[4])] ?? JSON.parse(fs.readFileSync('pr.json'));
@@ -453,13 +468,7 @@ function api(argv, input, stdout, stderr, exit) {
   else if (query.includes('reviewThreads(first:100')) {
     const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};
     let pr = stackPrs[Number(argv.find(arg => arg.startsWith('number='))?.slice(7))] ?? JSON.parse(fs.readFileSync('pr.json'));
-    if (query.includes('readyEvents') && fs.existsSync('pr-reads.json')) {
-      const reads = JSON.parse(fs.readFileSync('pr-reads.json'));
-      const overlay = reads.length > 1 ? reads.shift() : reads[0];
-      fs.writeFileSync('pr-reads.json', JSON.stringify(reads));
-      pr = { ...pr, ...overlay };
-      fs.writeFileSync('pr.json', JSON.stringify(pr));
-    }
+    if (query.includes('readyEvents')) pr = applyGraphqlRead(pr);
     const pages = pr.threadPages ?? [[]];
     const cursor = argv.find(arg => arg.startsWith('after='));
     const index = cursor ? Number(cursor.slice(6)) : 0;
@@ -498,13 +507,7 @@ function api(argv, input, stdout, stderr, exit) {
   }
   else if (query.includes('pullRequest(number')) {
     const number = Number(argv.find(arg => arg.startsWith('number='))?.slice(7));
-    if (number === 7 && fs.existsSync('pr-reads.json')) {
-      // Each read takes the next prepared overlay and the last one stays: metadata that catches up after a push.
-      const reads = JSON.parse(fs.readFileSync('pr-reads.json'));
-      const overlay = reads.length > 1 ? reads.shift() : reads[0];
-      fs.writeFileSync('pr-reads.json', JSON.stringify(reads));
-      fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), ...overlay }));
-    }
+    applyGraphqlRead();
     const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};
     data = answerFrom(query, { repository: { pullRequest: stackPrs[number] ?? JSON.parse(fs.readFileSync('pr.json')) } });
   }

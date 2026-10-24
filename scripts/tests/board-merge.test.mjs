@@ -7,7 +7,7 @@ import { isolatedGit } from './fixtures.mjs';
 
 
 test('merge merges the checked head by its full id only when no review is running, and proves the merge', t => {
-  const { checkout, run, queries } = fixture(t);
+  const { checkout, run, queries, restOverlays, reset } = fixture(t);
   const merges = join(checkout, 'merges');
   const oid = 'abcdef1' + '0'.repeat(33);
   const commit = handoffPr().commits.nodes[0].commit;
@@ -47,12 +47,11 @@ test('merge merges the checked head by its full id only when no review is runnin
   rmSync(join(checkout, 'stacks.json'));
   // GitHub computes the merge state late (#721): merge reads again, longer than handoff, and merges once it is CLEAN.
   write(withHead(oid, { mergeStateStatus: 'UNKNOWN' }));
-  writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify([...Array(8).fill({ mergeStateStatus: 'UNKNOWN' }), { mergeStateStatus: 'CLEAN' }]));
+  restOverlays([...Array(8).fill({ mergeStateStatus: 'UNKNOWN' }), { mergeStateStatus: 'CLEAN' }]);
   queries();
   assert.equal(run('merge', '7', '--interval', '0').status, 0, 'UNKNOWN turns CLEAN after several reads');
   assert.deepEqual(queries().filter(query => query.includes('headRefOid mergeStateStatus') || query.includes('mergeCommit{oid}')), [], 'the loops ask REST, no GraphQL query (#882)');
-  rmSync(join(checkout, 'pr-rest-reads.json'));
-  rmSync(merges);
+  reset();
   // The refusal names the reviewer that is still running.
   write(withHead(oid), [codexRunning]);
   assert.match(run('merge', '7', '--max-minutes', '0.01').stdout, /waiting: chatgpt-codex-connector running since/);
@@ -96,7 +95,7 @@ test('merge takes a Refs PR beside the closing PR of its issue through the gate 
 
 /** A checkout whose PR 7 is ready to merge from the branch `claude/7-topic` of this repository; `calls` is what merge did, in order. */
 function mergeFixture(t) {
-  const { checkout, run, queries } = fixture(t);
+  const { checkout, run, queries, graphqlReads, restOverlays, reset } = fixture(t);
   const [first, second] = ['abcdef1', '1234567'].map(prefix => prefix + '0'.repeat(33));
   const commit = handoffPr().commits.nodes[0].commit;
   const headOf = (oid, changes) => ({ headRefOid: oid, commits: { nodes: [{ commit: { ...commit, oid, ...changes } }] } });
@@ -104,12 +103,12 @@ function mergeFixture(t) {
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr({ headRefName: 'claude/7-topic', isCrossRepository: false,
       headRepository: { nameWithOwner: 'Test/Example' }, ...headOf(first), ...changes })));
     writeFileSync(join(checkout, 'issues-comments.json'), '[]');
-    for (const file of ['calls', 'merges', 'pr-reads.json', 'pr-rest-reads.json', 'updated-pr.json', 'compare.json', 'dependents.json', 'update-fails', 'delete-fails', 'delete-gone', 'auto-delete', 'merge-403', 'merge-async-late', 'merge-async-fails', 'async-merges']) rmSync(join(checkout, file), { force: true });
+    reset();
   };
   const calls = () => existsSync(join(checkout, 'calls')) ? readFileSync(join(checkout, 'calls'), 'utf8').trim().split('\n') : [];
   const flag = name => writeFileSync(join(checkout, name), '');
   const json = (name, data) => writeFileSync(join(checkout, name), JSON.stringify(data));
-  return { checkout, run, queries, show, calls, flag, json, first, second, headOf };
+  return { checkout, run, queries, graphqlReads, restOverlays, show, calls, flag, json, first, second, headOf };
 }
 
 test('merge reuses its immediate successful poll gate and still refuses a racing head', t => {
@@ -165,11 +164,11 @@ test('merge refuses a PR text that closes a spec, also when it changed after the
 });
 
 test('merge looks again at a running check from the first look on, merges once it is green, and ends with exit 4 when --max-minutes runs out', t => {
-  const { run, show, calls, json, first, headOf } = mergeFixture(t);
+  const { run, show, calls, json, first, headOf, graphqlReads } = mergeFixture(t);
   const running = { statusCheckRollup: { contexts: { totalCount: 1, nodes: [{ __typename: 'CheckRun', name: 'CI', status: 'IN_PROGRESS', conclusion: null }] } } };
 
   show();
-  json('pr-reads.json', [headOf(first, running), headOf(first)]);
+  graphqlReads([headOf(first, running), headOf(first)]);
   const merged = run('merge', '7', '--interval', '0', '--max-minutes', '1');
   assert.equal(merged.status, 0, merged.stdout + merged.stderr);
   assert.deepEqual(calls(), ['merge', 'delete claude/7-topic']);
@@ -301,14 +300,14 @@ test('merge merges the base once for any red check when the base moved, and a se
 });
 
 test('merge gives both CI waits around a base update one shared --max-minutes deadline', t => {
-  const { checkout, run, show, calls, json, first, second, headOf } = mergeFixture(t);
+  const { checkout, run, show, calls, json, first, second, headOf, graphqlReads } = mergeFixture(t);
   const check = (conclusion, status = 'COMPLETED', name = 'Restart CI after retarget') => ({ statusCheckRollup: { contexts: { totalCount: 1, nodes: [{ __typename: 'CheckRun', name, status, conclusion }] } } });
   const config = join(checkout, '.github/workflow-project.json'), plain = JSON.parse(readFileSync(config, 'utf8'));
   writeFileSync(config, JSON.stringify({ ...plain, updateBranchChecks: ['Restart CI after retarget'] }));
   // The restart check fails only when the deadline (0.3 s) is reached; the new head's CI is still running, then green.
   show(headOf(first, check(null, 'IN_PROGRESS')));
   // Each answer carries its own update time: merge reads GraphQL again only when REST shows a change, as it does in life.
-  json('pr-reads.json', [{ updatedAt: 'u1' }, { ...headOf(first, check('FAILURE')), updatedAt: 'u2' }, { ...headOf(second, check(null, 'IN_PROGRESS', 'CI')), updatedAt: 'u3' },
+  graphqlReads([{ updatedAt: 'u1' }, { ...headOf(first, check('FAILURE')), updatedAt: 'u2' }, { ...headOf(second, check(null, 'IN_PROGRESS', 'CI')), updatedAt: 'u3' },
     { ...headOf(second, check(null, 'IN_PROGRESS', 'CI')), updatedAt: 'u4' }, { ...headOf(second), updatedAt: 'u5' }]);
   json('updated-pr.json', headOf(second));
   const waiting = run('merge', '7', '--interval', '0.4', '--max-minutes', '0.005');

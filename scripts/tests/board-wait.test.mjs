@@ -108,7 +108,7 @@ function restFixture(t) {
     },
     restReads: () => readFileSync(join(checkout, 'rest-reads'), 'utf8').trim().split('\n').length,
     // One full GraphQL query carries both PR state and its first page of review threads.
-    graphqlReads: () => {
+    graphqlSent: () => {
       const sent = queries();
       return { pr: sent.filter(query => query.includes('readyEvents')).length,
         threads: sent.filter(query => query.includes('reviewThreads') && !query.includes('readyEvents')).length, all: sent.length };
@@ -117,20 +117,20 @@ function restFixture(t) {
 }
 
 test('wait reads PR and threads in one GraphQL query per change REST reports', t => {
-  const { checkout, run, check, pr, show, restReads, graphqlReads } = restFixture(t);
+  const { checkout, run, check, pr, show, restReads, graphqlSent, restOverlays } = restFixture(t);
   show(pr({ contexts: [check('IN_PROGRESS')] })); // CI never finishes
   assert.equal(run('wait', '7', '--interval', '0', '--max-minutes', '0.02').status, 4, 'Precondition: the wait is still waiting');
   assert.ok(restReads() >= 3, 'Precondition: several rounds ran');
-  assert.deepEqual(graphqlReads(), { pr: 1, threads: 0, all: 1 }, 'Many rounds without a change: one query carries PR and threads');
+  assert.deepEqual(graphqlSent(), { pr: 1, threads: 0, all: 1 }, 'Many rounds without a change: one query carries PR and threads');
 
   // The third look at REST shows a new update time, the later ones keep it.
-  writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify([{}, {}, { updatedAt: 'later' }]));
+  restOverlays([{}, {}, { updatedAt: 'later' }]);
   assert.equal(run('wait', '7', '--interval', '0', '--max-minutes', '0.02').status, 4);
-  assert.deepEqual(graphqlReads(), { pr: 2, threads: 0, all: 2 }, 'The change costs exactly one more query');
+  assert.deepEqual(graphqlSent(), { pr: 2, threads: 0, all: 2 }, 'The change costs exactly one more query');
 });
 
 test('wait retries a missing cache when GraphQL initially lags behind the REST head', t => {
-  const { checkout, run, check, pr, show, restReads, graphqlReads } = restFixture(t);
+  const { checkout, run, check, pr, show, restReads, graphqlSent, restOverlays, graphqlReads } = restFixture(t);
   const oldHead = 'a'.repeat(40), newHead = 'b'.repeat(40);
   for (const [reason, changes] of [
     ['CI', { contexts: [check('IN_PROGRESS')] }],
@@ -142,36 +142,36 @@ test('wait retries a missing cache when GraphQL initially lags behind the REST h
     outdated.headRefOid = outdated.commits.nodes[0].commit.oid = oldHead;
     show(data);
     writeFileSync(join(checkout, 'rest-reads'), '');
-    writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify([{ headRefOid: newHead }]));
-    writeFileSync(join(checkout, 'pr-reads.json'), JSON.stringify([outdated, data]));
+    restOverlays([{ headRefOid: newHead }]);
+    graphqlReads([outdated, data]);
     const result = run('wait', '7', '--interval', '0', '--max-minutes', '0.02');
     assert.equal(result.status, 4, `${reason} must keep waiting after the first uncached round: ${result.stdout}${result.stderr}`);
     assert.match(result.stdout, /^WAITING$/m);
     assert.doesNotMatch(result.stdout, /^DONE$/m, `${reason} is still a blocker`);
     assert.ok(restReads() >= 3, 'Precondition: at least two rounds followed the mismatched head');
-    assert.deepEqual(graphqlReads(), { pr: 2, threads: 0, all: 2 }, 'The missing cache is read again, then the matching head can be cached');
+    assert.deepEqual(graphqlSent(), { pr: 2, threads: 0, all: 2 }, 'The missing cache is read again, then the matching head can be cached');
     assert.equal(readFileSync(join(checkout, 'pr.json'), 'utf8').includes(newHead), true, 'GraphQL caught up to the REST head');
   }
 });
 
 test('wait confirms every end with a full read', t => {
-  const { run, check, readyHead, show, graphqlReads } = restFixture(t);
+  const { run, check, readyHead, show, graphqlSent } = restFixture(t);
   // Ready since 5 minutes with a 5 minute and 2 second grace: the cached look says "waiting" first, then "done" once the clock passed the grace.
   show(readyHead([check('COMPLETED')]));
   const result = run('wait', '7', '--interval', '0', '--max-minutes', '0.2', '--grace', String(5 + 2 / 60));
   assert.equal(result.status, 0, 'The grace ends the wait');
-  assert.deepEqual(graphqlReads(), { pr: 2, threads: 0, all: 2 }, 'The first read, and the full read that confirms the end');
+  assert.deepEqual(graphqlSent(), { pr: 2, threads: 0, all: 2 }, 'The first read, and the full read that confirms the end');
 });
 
 test('wait keeps reading REST while the GraphQL quota is used up, and finishes after the reset', t => {
-  const { checkout, run, check, pr, show, restReads, graphqlReads } = restFixture(t);
+  const { checkout, run, check, pr, show, restReads, graphqlSent } = restFixture(t);
   show(pr({ contexts: [check('COMPLETED')] }));
   // GitHub refuses the first query and names a reset within a second: wait does not sleep through it or give up, it looks over REST meanwhile.
   writeFileSync(join(checkout, 'limited'), '');
   const result = run('wait', '7', '--interval', '0.2', '--max-minutes', '0.2');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.ok(restReads() >= 2, 'REST was read in the round of the pause');
-  assert.ok(graphqlReads().pr >= 1, 'and the full read followed');
+  assert.ok(graphqlSent().pr >= 1, 'and the full read followed');
 
   // A GraphQL quota refusal with a reset beyond --max-minutes still reads REST until its deadline.
   writeFileSync(join(checkout, 'limited'), '');
@@ -192,12 +192,12 @@ test('wait treats HTTP 200 GraphQL quota errors as a pause and keeps reading RES
 });
 
 test('wait --merged reads REST only, and --interval is bounded', t => {
-  const { run, pr, show, graphqlReads } = restFixture(t);
+  const { run, pr, show, graphqlSent } = restFixture(t);
   show(pr());
   assert.equal(run('wait', '7', '--merged', '--interval', '0', '--max-minutes', '0.02').status, 4, 'An open PR keeps waiting');
   show({ ...pr(), state: 'MERGED' });
   assert.equal(run('wait', '7', '--merged').status, 0);
-  assert.equal(graphqlReads().all, 0, 'No GraphQL point is spent while waiting for the merge');
+  assert.equal(graphqlSent().all, 0, 'No GraphQL point is spent while waiting for the merge');
   assert.equal(run('wait', '7', '--interval', '301').status, 2, 'A pause above 5 minutes is refused');
   assert.equal(run('wait', '7', '--interval', 'x').status, 2, 'and so is a bad one');
 });
