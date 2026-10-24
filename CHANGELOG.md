@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **Quota-Messung zeigt Hilfe statt eine Datei namens `--help` anzulegen (#901).** `node scripts/quota-sample.mjs --help` (oder `-h`) druckt die Hilfe und endet mit Exit 0. Ein Argument, das mit `-` beginnt, wird abgelehnt (Exit 2 mit Hinweis), statt als Dateiname zu dienen. Eine echte Messung startet nur mit einem Dateinamen ohne `-`.
+
 - **Ein Befehl für den frischen Worktree (#896).** Fehlt `.vendor/workflow-kit`, genügt `node .agents/workflow-kit-hook.mjs link`: Die Einstiegsdatei findet das gemeinsame Kit (klont es bei Bedarf) und legt die Verknüpfung an, auch ohne Hooks (Codex, Handarbeit). Der Befehl steht in `AGENT_RULES.md` und `docs/parallel-drivers.md`; der alte Umweg über `start --cwd` ist gestrichen.
 
 - **Hooks laufen wieder über die Einstiegsdatei (#895).** Seit #824 führte `kit-hook.mjs` seinen Hook-Teil nur aus, wenn es selbst gestartet wurde; über `.agents/workflow-kit-hook.mjs` geladen tat es nichts (keine Ausgabe, Exit 0). Jetzt läuft der Hook auch über die Einstiegsdatei, ohne dass Projekte sie neu erzeugen müssen. Ein ungültiges Ereignis gibt dort nun die Usage-Zeile und Exit 2.

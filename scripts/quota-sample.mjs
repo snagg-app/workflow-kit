@@ -39,7 +39,18 @@ async function sample(output) {
   if (errors) process.exitCode = 1;
 }
 
+const usage = 'Usage: node scripts/quota-sample.mjs OUTPUT.jsonl\n'
+  + 'Samples the account GraphQL rate limit once a minute for one hour into OUTPUT.jsonl.\n'
+  + 'Options: -h, --help (print this help and exit 0)';
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  if (process.argv.length !== 3) throw new Error('Usage: node scripts/quota-sample.mjs OUTPUT.jsonl');
-  await sample(process.argv[2]);
+  const [option] = process.argv.slice(2);
+  if (option === '--help' || option === '-h') {
+    console.log(usage);
+  } else if (process.argv.length !== 3 || option.startsWith('-')) {
+    console.error(`${usage}\nOUTPUT.jsonl must be a file name; an argument starting with "-" is refused.`);
+    process.exitCode = 2;
+  } else {
+    await sample(option);
+  }
 }
