@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isolatedGit, run, temporary } from './fixtures.mjs';
-import { busyFrom, keepReason, mergedHeads, orphanVolumes, rootHashes, unpushedCount, unpushedFor } from '../worktree-gc.mjs';
+import { busyFrom, goneWorkdir, keepReason, mergedHeads, orphanVolumes, rootHashes, unpushedCount, unpushedFor } from '../worktree-gc.mjs';
 
 const script = fileURLToPath(new URL('../worktree-gc.mjs', import.meta.url));
 const finished = { dirty: false, unpushed: 0, busy: false, locked: null, ageMinutes: 1000 };
@@ -59,8 +59,26 @@ test('volumes: protected names are never touched, living roots keep theirs, othe
   const live = new Set(rootHashes('/work/live'));
   const gone = rootHashes('/work/gone')[0];
   const names = [`cache-${live.values().next().value}`, `cache-${gone}`, `cache-${gone}-build-api`, `other-${gone}`, 'cache-nothex000000', `keepme_${gone}`];
-  assert.deepEqual(orphanVolumes(names, ['cache-'], live), [`cache-${gone}`, `cache-${gone}-build-api`]);
-  assert.deepEqual(orphanVolumes(names, ['keepme_'], live, ['KEEPME']), [], 'a protected name is never listed, even under a matching prefix');
+  assert.deepEqual(orphanVolumes(names, ['cache-'], live, [], () => true), [`cache-${gone}`, `cache-${gone}-build-api`]);
+  assert.deepEqual(orphanVolumes(names, ['keepme_'], live, ['KEEPME'], () => true), [], 'a protected name is never listed, even under a matching prefix');
+});
+
+test('volumes: an unknown hash alone is no proof, a foreign clone or an unreachable worktree keeps its volume (#951)', () => {
+  const live = new Set(rootHashes('/work/live'));
+  const foreign = `cache-${rootHashes('/other/clone/wt')[0]}`;
+  const vanished = `cache-${rootHashes('/work/clone/wt')[0]}`;
+  const unlabeled = `cache-${rootHashes('/work/clone/nolabel')[0]}`;
+  const names = [foreign, vanished, unlabeled];
+  const owned = ['/work/clone', '/work/clone/wt'];
+  const dirs = new Map([[foreign, '/other/clone/wt/docker'], [vanished, '/work/clone/wt/docker']]);
+  const exists = path => path === '/work/clone' || path === '/other/clone' || path === '/other/clone/wt/docker' ? true : path === '/work/clone/wt' ? false : path === '/other/clone/wt';
+  assert.deepEqual(orphanVolumes(names, ['cache-'], live), [], 'without proof nothing is orphaned');
+  const proof = name => goneWorkdir(dirs.get(name), owned, exists);
+  assert.deepEqual(orphanVolumes(names, ['cache-'], live, [], proof), [], 'parent of the vanished dir is missing too: unreachable, kept');
+  const mounted = path => path === '/work/clone/wt' || exists(path);
+  assert.deepEqual(orphanVolumes(names, ['cache-'], live, [], name => goneWorkdir(dirs.get(name), owned, mounted)), [vanished], 'only the own clone with a gone dir under a reachable parent');
+  assert.equal(goneWorkdir('/work/clone/wt/docker', owned, () => true), false, 'dir still exists');
+  assert.equal(goneWorkdir(undefined, owned, () => false), false, 'no label');
 });
 
 test('dry run is the default and deletes nothing; --rm deletes only finished worktrees', async t => {
