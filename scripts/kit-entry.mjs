@@ -22,7 +22,7 @@ const git = (...args) => spawnSync('git', ['-c', 'credential.interactive=false',
 function main() {
   const [event] = process.argv.slice(2);
   const start = event === 'SessionStart' || event === 'SubagentStart';
-  const project = process.env.CLAUDE_PROJECT_DIR || '.';
+  const project = path.resolve(process.cwd(), process.env.CLAUDE_PROJECT_DIR || '.');
   const own = ['.vendor/workflow-kit/scripts/kit-hook.mjs', 'scripts/kit-hook.mjs'].map(file => path.join(project, file)).find(existsSync);
   let file = own;
   if (!file) {

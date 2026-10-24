@@ -400,6 +400,14 @@ for (const [agent, key, shell, args] of entries) {
       assert.equal(readFileSync(env.HOOK_MARKER, 'utf8'), `${event} --agent ${agent}`);
     }
 
+    // Empty and relative project paths still resolve to this checkout when Git runs from its safe temp cwd.
+    for (const projectPath of ['', '.']) {
+      rmSync(env.HOOK_MARKER, { force: true });
+      const result = await run(handler('SessionStart'), { CLAUDE_PROJECT_DIR: projectPath, WORKFLOW_KIT_DIR: undefined });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(env.HOOK_MARKER, 'utf8'), 'SessionStart --agent ' + agent);
+    }
+
     // WORKFLOW_KIT_DIR names another place.
     const chosen = join(temp, 'chosen');
     await run(handler('UserPromptSubmit'), { WORKFLOW_KIT_DIR: chosen });
