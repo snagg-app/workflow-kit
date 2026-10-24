@@ -44,8 +44,12 @@ function followBase(git, root, say) {
   }
 }
 
+/** Milliseconds `start` waits for another run's kit update (#923); the hook passes 0 and never waits. */
+const KIT_LOCK_WAIT_MS = 60_000;
+const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
 /** `git pull --ff-only` and the kit's own submodules. Work in progress in the checkout is never touched, only reported. */
-function updateKit(git, kit, say, root) {
+function updateKit(git, kit, say, root, wait = 0) {
   const branch = git(kit, 'symbolic-ref', '--short', '-q', 'HEAD').out;
   if (branch !== 'main')
     return say(textsAt(root).kitNotMain(kit, branch), true);
@@ -53,11 +57,16 @@ function updateKit(git, kit, say, root) {
     return say(textsAt(root).kitDirty(kit), true);
   // Never prompt, never run hooks of the checkout (the runner carries the timeout and the no-prompt environment, see `hookGit`).
   const step = (...args) => git(kit, ...unattended, ...args).ok;
-  const ran = locked(path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock'), 10 * 60_000, () => {
+  const lock = path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock');
+  const work = () => {
     if (!step('pull', '--ff-only', '--quiet') || (existsSync(path.join(kit, '.gitmodules')) && !step('submodule', 'update', '--init', '--quiet')))
       say(textsAt(root).kitNotUpdated(kit), true);
-  });
-  // Another run holds the lock: the hook stays silent, but the kit is not known to be current (#813), so `start` stops.
+  };
+  // #923: `start` waits up to `wait` ms for another run's update to finish; the hook (wait 0) stays silent at once.
+  const give = Date.now() + wait;
+  let ran = locked(lock, 10 * 60_000, work);
+  while (!ran && Date.now() < give) { pause(200); ran = locked(lock, 10 * 60_000, work); }
+  // Another run still holds the lock: the hook stays silent, but the kit is not known to be current (#813), so `start` stops.
   if (!ran) say(null, true);
 }
 
@@ -78,7 +87,7 @@ export function linkKit(root, kit) {
 }
 
 /** Check one checkout: link it to the shared kit, then update the kit; report what needs a human. */
-function checkKit(git, dir, update, say, updated, shared) {
+function checkKit(git, dir, update, say, updated, shared, wait = 0) {
   const top = git(dir, 'rev-parse', '--show-toplevel');
   if (!top.ok || !top.out) {
     if (isDirectory(path.join(dir, '.vendor/workflow-kit')))
@@ -92,7 +101,7 @@ function checkKit(git, dir, update, say, updated, shared) {
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
   const kit = shared ?? sharedKit(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out), problem = linkKit(root, kit);
   if (problem) return say(problem, true);
-  if (update && !updated.has(kit)) { updated.add(kit); updateKit(git, kit, (message, stuck) => { if (stuck) updated.delete(kit); say(message, stuck); }, root); } // a failed update is tried again by the next call of this process
+  if (update && !updated.has(kit)) { updated.add(kit); updateKit(git, kit, (message, stuck) => { if (stuck) updated.delete(kit); say(message, stuck); }, root, wait); } // a failed update is tried again by the next call of this process
   return kit;
 }
 
@@ -150,7 +159,7 @@ export function kitCheck(dir, { update = false, force = false, git: run = gitIn(
   const stamp = gitStamp(gitDir, 'kit-ok'), known = force ? null : stamp.read();
   if (known && known.git === gitDir && known.head === head && Date.now() - known.at < fresh && (known.pulled || !update)
     && (!shared || shared === known.kit) && kitHead(known.kit) === known.kitHead) return result;
-  const kit = checkKit(git, dir, update, say, updated, shared);
+  const kit = checkKit(git, dir, update, say, updated, shared, force ? KIT_LOCK_WAIT_MS : 0);
   if (kit && !messages.length && !result.stuck)
     stamp.write({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() }); // the check may have fast-forwarded the project, so the commit is read again
   return result;
