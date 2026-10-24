@@ -95,7 +95,10 @@ async function done() {
     } catch (error) { return failed(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
     // #646: no PR delivers nothing for review; only an exploration that says so (--no-pr) gets Human review, otherwise nothing changes.
     if (!pull && !args.flag('--no-pr')) return failed(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
-    github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `## ${texts.handoff}\n\n${lines(file)}\n` });
+    // #993: a run again after a later step failed finds its own result comment (no head to name here: the same text by the same user).
+    const resultBody = `## ${texts.handoff}\n\n${lines(file)}\n`;
+    const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).some(comment => comment.user?.login?.toLowerCase() === issue.viewer.login.toLowerCase() && comment.body?.trim() === resultBody.trim());
+    if (!posted) github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: resultBody });
     if (pull) github.write('PATCH', `repos/${project.repository}/pulls/${prNumber}`, { fields: { state: 'closed' } });
     const written = writeBody(before => tickAcceptance(before));
     if (written.exitCode) return written;
