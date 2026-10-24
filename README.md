@@ -306,8 +306,8 @@ Renovate pull requests from this repository that change `.vendor/*`. It starts o
 definition that holds the write token. That is safe only because the job never runs code of the
 branch (see below), and it must stay so. The job runs
 `scripts/provider.mjs ponytail update` and `scripts/provider.mjs impeccable update` as needed, then the CI
-generators, pushes the result to the Renovate branch and approves the repository CI run for the
-new head: a push with `GITHUB_TOKEN` makes GitHub create the `pull_request` run but hold it as
+generators, pushes the result to the Renovate branch and approves the repository CI and CodeQL runs for the
+new head: a push with `GITHUB_TOKEN` makes GitHub create the `pull_request` runs but hold them as
 `action_required`, and the required check `Workflow Kit checks` stays "expected" until it has run
 (a `workflow_dispatch` run beside it is not accepted). The job holds `contents: write`
 and `actions: write` (the checkout action fetches with it and drops it; no step that runs a script sees it except the push and approval steps), runs only for
@@ -318,9 +318,10 @@ kept as input. Whoever wrote its commits, the branch may not change any workflow
 `.node-version` or `renovate.json` against main, apart from the three files the updaters
 generate (the Ponytail adaptation patch and `scripts/versions.json` and the Impeccable `SHA256SUMS`). The job
 fails instead of running, because the approved CI run executes the branch's workflow definition
-(read-only token, no secrets). The job approves only the `pull_request` run of the commit it
-pushed (the list is asked for that commit), waits up to two minutes for it and fails when none
-appears. Commit author names prove nothing,
+(no secrets or contents write; CodeQL can upload security events). The job approves only the
+`pull_request` runs of `repository.yml` and `codeql.yml` for the commit it pushed (each list is
+asked for that commit), waits up to two minutes per workflow and fails when either never appears.
+Commit author names prove nothing,
 so the bot-author rule only leaves branches with other people's commits alone. If the approval
 fails, approve the held run on the pull request ("Approve and run") or restart it:
 `gh run rerun <id>`. `renovate.json` lists the bot's commit address in
