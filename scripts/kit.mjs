@@ -8,6 +8,7 @@ import { agentLabels, agents, projectAgents } from './agents.mjs';
 import { setupBoard, setupGithub } from './github-board.mjs';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { initProject } from './init-project.mjs';
+import { keepCommitted } from './keep-committed.mjs';
 import { installGitHooks } from './install-git-hooks.mjs';
 import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
@@ -55,7 +56,8 @@ export async function kitSetup(root, { onStep = () => {}, refresh = false } = {}
   const step = (title, required, work) => tasks.push({ title, required, work });
 
   // A new project (no AGENTS.md yet) also gets the starter files; an existing one keeps everything of its own.
-  step('link, kit hooks, ignore files', true, log => { initProject({ root, existing: existsSync(join(root, 'AGENTS.md')), log, profile: current() }); return ok(); });
+  // A committed hook entry file stays as committed (reported once) until `setup --refresh` (#985).
+  step('link, kit hooks, ignore files', true, async log => { await keepCommitted(root, () => initProject({ root, existing: existsSync(join(root, 'AGENTS.md')), log, profile: current() }), { refresh, log }); return ok(); });
   // The check the session start runs (without the pull): it reports what the other steps cannot repair.
   step('kit check', false, () => {
     const hints = [...kitCheck(root, { ...kitEnvironment(), kit: dirname(scripts) }).messages, ...modulesCheck(root)];

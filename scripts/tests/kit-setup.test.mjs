@@ -100,6 +100,17 @@ test('kit setup keeps the own hooks, settings and AGENTS.md of an existing proje
   assert.equal(readFileSync(join(project, 'AGENTS.md'), 'utf8'), 'my rules\n');
   assert.equal(existsSync(join(project, 'CONTRIBUTING.md')), false, 'an existing project gets no starter files');});
 
+test('kit setup leaves a committed hook entry file as it is and says so once (#985)', { skip: skipWithoutSubmodules() }, t => {
+  const { project, run } = setup(t);
+  mkdirSync(join(project, '.agents'));
+  writeFileSync(join(project, '.agents/workflow-kit-hook.mjs'), '// older kit\n');
+  execFileSync('git', ['-C', project, 'add', '.agents/workflow-kit-hook.mjs']);
+  const result = run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(readFileSync(join(project, '.agents/workflow-kit-hook.mjs'), 'utf8'), '// older kit\n');
+  assert.equal(result.stdout.match(/Kept \d+ committed kit file/g)?.length, 1, result.stdout);
+});
+
 test('a board with a differently named status is told which name is missing and how to map it', () => {
   const board = ['Backlog', 'Ready', 'In progress', 'Auto review', 'Human review', 'Done'];
   assert.equal(statusMismatch([...board.slice(0, 3), 'Automated review', ...board.slice(4)], {}), null);

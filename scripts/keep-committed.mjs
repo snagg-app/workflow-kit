@@ -2,12 +2,12 @@
 // Nutzen: Das Kit läuft als geteilter Checkout vor jedem Projektstand; ohne diese Regel schreibt jeder Agent-Start den neueren Kit-Stand über die eingecheckten Kopien.
 import { closeSync, fchmodSync, fstatSync, mkdirSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { agents, sourceProviders } from './agents.mjs';
+import { agents, entryFile, sourceProviders } from './agents.mjs';
 import { gitIn } from './git-tool.mjs';
 import { keepFiles } from './write-guard.mjs';
 
 /** The generated outputs a project commits (skills and agent definitions of every agent, hook sources); the project's settings and hook entries are not among them. */
-const outputs = () => [...new Set([...Object.values(agents).flatMap(agent => [agent.skills, agent.agents]), ...sourceProviders])];
+const outputs = () => [...new Set([...Object.values(agents).flatMap(agent => [agent.skills, agent.agents]), ...sourceProviders, entryFile])];
 
 /** Content and executable bits of a file, or null when it is absent. Works on one open file, so nothing can change between the check and the read. */
 function snapshot(path) {

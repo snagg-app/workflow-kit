@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **`kit setup` schreibt die eingecheckte Hook-Einstiegsdatei nicht mehr über (#985).** `.agents/workflow-kit-hook.mjs` bleibt, wie das Projekt sie eingecheckt hat, und `setup` meldet das einmal in einer Zeile. Neu schreiben lässt sie sich mit `setup --refresh`. So findet kein Treiber nach `bootstrap` oder `start` mehr eine fremde Änderung im Arbeitsbaum.
+
 - **`setup-github` legt aus dem falschen Ordner kein zweites Board mehr an (#920).** Das Skript nutzt jetzt die Projektwurzel (auch aus einem Unterordner wie `docs/`) und akzeptiert `--cwd`. Außerhalb eines Git-Checkouts endet es mit Exit 2, ohne bei GitHub etwas zu schreiben. `--help` zeigt die Hilfe (Exit 0), unbekannte Optionen enden mit Exit 2. Wird das Skript nur eingebunden, passiert nichts.
 
 - **`worktree-gc` löscht bei Tippfehlern und verworfenen PRs nichts mehr (#919).** `--min-age 30m`, `--min-age -1`, `--jobs abc` und ein unbekanntes `--only` enden mit Hilfetext und Exit 2, auch mit `--rm` (vorher fiel die Altersgrenze weg oder es gab ein Fehlerprotokoll). Außerdem gilt der letzte Commit eines PRs, der ohne Merge geschlossen wurde, nicht mehr als gesichert: Worktree und Branch bleiben erhalten. Gemergte PRs, auch per Squash, werden weiter aufgeräumt.
