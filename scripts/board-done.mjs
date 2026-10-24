@@ -109,6 +109,9 @@ async function done() {
   // The tests of a head run once: a call that only waits (after exit 4) neither repeats them nor merges a base that moved meanwhile.
   const tested = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-tested'));
   const isTested = () => existsSync(tested) && readFileSync(tested, 'utf8') === localHead();
+  // #927: a skipped head is also settled for the base merge (not for the tests: a later call without skip still runs them).
+  const skipped = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-skipped'));
+  const isSettled = () => isTested() || (existsSync(skipped) && readFileSync(skipped, 'utf8') === localHead());
   let gate;
   try {
     useBaseSettings({ baseRefName: pull.base.ref });
@@ -116,7 +119,7 @@ async function done() {
   } catch (error) { return failed(`cannot read the base-merge policy: ${error.message}`); }
   // An untested head applies the target base's policy (#558, #579). A conflict is aborted, the branch stays as it was.
   // #656: a head the PR does not show yet is pushed even when its tested marker exists (a run that ended after the tests).
-  if (!isTested() || localHead() !== pull.head.sha) {
+  if (!isSettled() || localHead() !== pull.head.sha) {
     const base = `origin/${pull.base.ref}`, failure = error => String(error.stderr || error.message).trim();
     // Only the PR's own branch of this repository is merged into and pushed.
     const pr = { branch: pull.head.ref, head: pull.head.sha, number: prNumber, repository: project.repository, sameRepo: pull.head.repo?.full_name?.toLowerCase() === project.repository.toLowerCase() };
@@ -154,8 +157,10 @@ async function done() {
   const sha = localHead();
   // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.
   const prepare = !file && !findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
-  if (skipReason) progress(`LOCAL TESTS SKIPPED ${sha}: ${skipReason}`);
-  else if (!isTested()) {
+  if (skipReason) {
+    progress(`LOCAL TESTS SKIPPED ${sha}: ${skipReason}`);
+    writeFileSync(skipped, sha);
+  } else if (!isTested()) {
     // The green steps of this head are kept (--resume): after a red step the next call runs only the open ones.
     const steps = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-steps'));
     try {
