@@ -550,6 +550,9 @@ test('merge deletes only the worktree of the exact merged branch, never one whos
   const similar = join(checkout, '.claude/worktrees/agent-1'), exact = join(checkout, '.claude/worktrees/agent-2');
   git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic-2', similar);
   git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic', exact);
+  // the bug only shows when git lists the similar branch first: check that order, or the test proves nothing
+  const listed = git(checkout, 'worktree', 'list', '--porcelain').split(/\r?\n/).filter(line => line.startsWith('branch refs/heads/claude/7-topic'));
+  assert.deepEqual(listed, ['branch refs/heads/claude/7-topic-2', 'branch refs/heads/claude/7-topic'], 'git lists the similar branch before the merged one; without this order the test would not catch the bug');
   writeFileSync(join(similar, 'unpushed'), 'x');
   show();
   const merged = run('merge', '7');
