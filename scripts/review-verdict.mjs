@@ -245,11 +245,12 @@ function judgeDraftSkips({ pr, now, contexts, isOptionalCheck, isIgnoredCheck },
     && !(startedAt(check) < convertEvent))) {
     const { event } = check.checkSuite.workflowRun;
     assert.equal(typeof event, 'string', `The event of skipped check ${check.name} is unreadable`);
-    if (!['pull_request', 'pull_request_target'].includes(event)) continue;
+    // #940: pull_request_target does not start on Ready by default, so its skip (e.g. Dependency automerge) is final, not a Draft guard.
+    if (event !== 'pull_request') continue;
     assert.ok(runs.filter(run => flowOf(run) === flowOf(check)).every(run => Number.isFinite(startedAt(run))), `A run of the workflow of skipped check ${check.name} has no readable start time`);
     if (!readyFlows.has(flowOf(check)) && !readyJobs.has(jobKey(check))) draftSkipped.add(check.name);
   }
-  // A workflow whose trigger does not fire on Ready (pull_request_target or pull_request without ready_for_review, a path filter) leaves
+  // A workflow whose trigger does not fire on Ready (pull_request without ready_for_review, a path filter) leaves
   // its skip from opening as the only run. Ready starts a run within seconds, so none after this long is not coming: note it, stop waiting.
   // ponytail: fixed 10 minutes for every workflow; replace by the workflow's own trigger types when they are readable.
   for (const label of draftSkipped) {
