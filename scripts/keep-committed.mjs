@@ -1,7 +1,7 @@
 // Zweck: `kit setup` ändert keine eingecheckte Skill-, Agenten- oder Hook-Quelldatei des Projekts; nur `--refresh` darf sie überschreiben (#877).
 // Nutzen: Das Kit läuft als geteilter Checkout vor jedem Projektstand; ohne diese Regel schreibt jeder Agent-Start den neueren Kit-Stand über die eingecheckten Kopien.
 import { closeSync, fchmodSync, fstatSync, mkdirSync, openSync, readFileSync, writeSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { agents, sourceProviders } from './agents.mjs';
 import { gitIn } from './git-tool.mjs';
 
@@ -27,6 +27,14 @@ function put(path, old) {
   } finally { closeSync(fd); }
 }
 
+let kept = new Set();
+
+/** True while a `keepCommitted` run covers `path` (a committed file or a folder holding one): the writers leave it alone, so no backup of a file that stays as committed. */
+export const isKept = (root, path) => {
+  const rel = relative(root, path).replaceAll('\\', '/');
+  return [...kept].some(file => file === rel || file.startsWith(`${rel}/`));
+};
+
 /**
  * Runs `work`, then puts every Git-tracked output file back that `work` changed (content and executable bit),
  * unless `refresh`. Files Git does not track (new skills, links) are left as `work` made them.
@@ -36,9 +44,11 @@ export async function keepCommitted(root, work, { refresh = false, log = console
   let tracked;
   try { tracked = gitIn({}, root)(root, 'ls-files', '-z', '--', ...outputs()).split('\0').filter(Boolean); } catch { return work(); } // not a Git checkout: nothing is committed
   const before = new Map(tracked.map(file => [file, snapshot(join(root, file))]));
+  kept = new Set(tracked);
   try {
     return await work();
   } finally { // also after a failed run: no half-written committed file
+    kept = new Set();
     const restored = [];
     for (const [file, old] of before) {
       if (!old || isSame(snapshot(join(root, file)), old)) continue; // absent before: nothing to preserve

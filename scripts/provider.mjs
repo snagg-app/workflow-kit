@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { ancestors, enterCwd, hasGit, projectRoot } from './checkout-root.mjs';
 import { gitIn } from './git-tool.mjs';
 import { withLock } from './lock.mjs';
+import { isKept } from './keep-committed.mjs';
 import { linkSkills, materialize } from './provider-links.mjs';
 import { checkDirectory, localDirectory, moveAside, rename } from './write-guard.mjs';
 import { providerList, providerNamed } from './provider-list.mjs';
@@ -95,7 +96,7 @@ export async function publish(p, c) {
       checkDirectory(c.root, join(state, 'replaced'));
       for (const [path] of outputs) localDirectory(c.root, dirname(join(c.root, path)));
       for (const [path, from] of outputs) materialize(c.root, join(c.root, path), join(next, from), c.log);
-      for (const path of retire) moveAside(c.root, path, c.log);
+      for (const path of retire.filter(path => !isKept(c.root, path))) moveAside(c.root, path, c.log);
       linkSkills(c.root, c.log);
       (c.log ?? console.log)(message);
     } finally {

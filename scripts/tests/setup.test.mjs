@@ -104,6 +104,10 @@ test('setup leaves committed kit files as committed; only --refresh rewrites the
   assert.equal(git('status', '--porcelain', '--untracked-files=no'), '', 'setup changed no committed file');
   assert.equal(readFileSync(older, 'utf8'), 'older kit text\n');
   assert.ok(existsSync(dropped), 'a committed skill the profile drops stays');
+  // Committed copies are not moved aside first (#881): not by the first run, and not by two more, also with CRLF line ends.
+  writeFileSync(older, 'older kit text\r\n');
+  for (let run = 0; run < 2; run++) assert.equal(setup().status, 0);
+  assert.equal(existsSync(join(fixture, '.workflow-kit/replaced')), false, 'no backup of a file that stays as committed');
   assert.equal(setup('--refresh').status, 0);
   assert.notEqual(readFileSync(older, 'utf8'), 'older kit text\n', '--refresh writes the kit state over the committed copy');
   assert.ok(!existsSync(dropped), '--refresh applies the profile');
