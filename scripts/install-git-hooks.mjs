@@ -5,10 +5,25 @@ import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { projectRoot } from './checkout-root.mjs';
 import { gitResultIn } from './git-tool.mjs';
 import { isMain } from './is-main.mjs';
+import { rename } from './write-guard.mjs';
 
 // Explicit setup, per clone: copies the project's .githooks into the clone's
 // Git directory and points core.hooksPath there, so a checked-out branch cannot replace the hooks Git runs (#194).
 // Only a rerun updates the copy. Automatic hooks never run this file. --check only reports.
+/** Makes `to` hold exactly what `from` holds: renames over existing files, drops entries `from` lacks. */
+function moveIn(from, to) {
+  const wanted = readdirSync(from, { withFileTypes: true });
+  for (const entry of readdirSync(to, { withFileTypes: true }))
+    if (!wanted.some(item => item.name === entry.name && item.isDirectory() === entry.isDirectory()))
+      rmSync(join(to, entry.name), { recursive: true, force: true });
+  for (const entry of wanted) {
+    if (entry.isDirectory()) {
+      mkdirSync(join(to, entry.name), { recursive: true });
+      moveIn(join(from, entry.name), join(to, entry.name));
+    } else rename(join(from, entry.name), join(to, entry.name));
+  }
+}
+
 /** Copies the project's .githooks into the clone's Git directory and points core.hooksPath there; `check` only reports. Prints what it did. */
 export function installGitHooks({ root, check = false, log = console.log }) {
   // Inherited repository selection (e.g. when called from a Git hook) would redirect Git away from root.
@@ -155,10 +170,18 @@ export function installGitHooks({ root, check = false, log = console.log }) {
         log(`hooks: ${hooksValue} is current`);
       else log(`hooks: would copy .githooks into ${hooksValue}`);
     } else {
-      rmSync(hooksDir, { recursive: true, force: true });
-      mkdirSync(hooksDir, { recursive: true });
-      cpSync(join(root, '.githooks'), hooksDir, { recursive: true, filter: source => !lstatSync(source).isSymbolicLink() });
-      for (const name of readdirSync(hooksDir)) if (lstatSync(join(hooksDir, name)).isFile()) chmodSync(join(hooksDir, name), 0o755);
+      // core.hooksPath already points at hooksDir and is shared by every worktree: build the copy beside it,
+      // then move it in file by file (each rename atomic), so there is never a moment without complete hooks (#975).
+      const staging = `${hooksDir}.new-${process.pid}`;
+      try {
+        rmSync(staging, { recursive: true, force: true });
+        cpSync(join(root, '.githooks'), staging, { recursive: true, filter: source => !lstatSync(source).isSymbolicLink() });
+        for (const name of readdirSync(staging)) if (lstatSync(join(staging, name)).isFile()) chmodSync(join(staging, name), 0o755);
+        mkdirSync(hooksDir, { recursive: true });
+        moveIn(staging, hooksDir);
+      } finally {
+        rmSync(staging, { recursive: true, force: true });
+      }
       log(`hooks: copied .githooks into ${hooksValue}; rerun after changing a hook`);
     }
   }
