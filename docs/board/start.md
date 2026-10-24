@@ -1,7 +1,7 @@
 # board.mjs start
 
 `start ISSUE [--session ID]`: everything from Ready to the claim (assignment, In progress, claim comment), each write read back; a repeated call resumes (a step already
-done is skipped). The session is `--session`, else the `sessionEnv` variable of an agent whose session is marked by `detectEnv` in `scripts/agents.mjs` (`CODEX_THREAD_ID`), else the `agent-<id>` of a Claude Code worktree,
+done is skipped). The session is `--session`, else the `sessionEnv` variable of an agent whose session is marked by `detectEnv` in `scripts/agents.mjs` (`CODEX_THREAD_ID`), else the session the last `start` recorded in this worktree's git dir (`workflow-kit-session`, #973: so `done` and `check` need no `--session` and ignore the variable a subagent inherits), else the `agent-<id>` of a Claude Code worktree,
 else the `sessionEnv` variable of the other agents (`CLAUDE_CODE_SESSION_ID`). It starts with the execution check of the issue, printed (exit 0 STARTABLE, 1 BLOCKED, 2 UNKNOWN, 4 STACKABLE:
 only an open predecessor PR holds the issue, see [Stacked pull requests](../CONTRIBUTING.md#stacked-pull-requests)); BLOCKED and
 UNKNOWN write nothing. The check shows the open PRs with the session their claim names and one line per native sub-issue; with

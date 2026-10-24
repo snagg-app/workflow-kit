@@ -97,7 +97,7 @@ async function runCall({ argv: call, env, cwd, io }) {
   const { spec, args } = parsed;
   // From here on the call is valid: the printer knows --json and --verbose (a refused call above prints plain text).
   output = createOutput({ json: args.flag('--json'), verbose: args.flag('--verbose'), io });
-  const options = createOptions({ project, args, env });
+  const options = createOptions({ project, args, env, projectDirectory });
   // `--issue-repo OWNER/NAME` (start, done): the issue lives in that repository and on its board (a kit issue fixed in
   // the project); PR, branch and tests stay in the project's.
   const issueRepoOption = args.value('--issue-repo');
