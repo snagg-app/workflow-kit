@@ -1,36 +1,48 @@
 // Zweck: `kit setup` ändert keine eingecheckte Skill-, Agenten- oder Hook-Quelldatei des Projekts; nur `--refresh` darf sie überschreiben (#877).
 // Nutzen: Das Kit läuft als geteilter Checkout vor jedem Projektstand; ohne diese Regel schreibt jeder Agent-Start den neueren Kit-Stand über die eingecheckten Kopien.
-import { chmodSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, fchmodSync, fstatSync, mkdirSync, openSync, readFileSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { agents, sourceProviders } from './agents.mjs';
 import { gitIn } from './git-tool.mjs';
 
-/** The generated outputs a project commits; settings and hook entries of the project are not among them. */
-const outputs = ['.agents', '.claude/skills', '.claude/agents', '.codex/agents'];
+/** The generated outputs a project commits (skills and agent definitions of every agent, hook sources); the project's settings and hook entries are not among them. */
+const outputs = () => [...new Set([...Object.values(agents).flatMap(agent => [agent.skills, agent.agents]), ...sourceProviders])];
+
+/** Content and executable bits of a file, or null when it is absent. Works on one open file, so nothing can change between the check and the read. */
+function snapshot(path) {
+  let fd;
+  try { fd = openSync(path, 'r'); } catch { return null; }
+  try { return { data: readFileSync(fd), mode: fstatSync(fd).mode & 0o777 }; } finally { closeSync(fd); }
+}
+
+const isSame = (now, old) => now && now.data.equals(old.data) && (process.platform === 'win32' || now.mode === old.mode);
+
+/** Writes `old` to `path` through one open file (content and mode). */
+function put(path, old) {
+  mkdirSync(dirname(path), { recursive: true });
+  const fd = openSync(path, 'w', old.mode);
+  try {
+    writeSync(fd, old.data);
+    if (process.platform !== 'win32') fchmodSync(fd, old.mode);
+  } finally { closeSync(fd); }
+}
 
 /**
- * Runs `work`, then puts every Git-tracked output file back that `work` changed or removed (content and executable bit),
- * unless `refresh`. Files Git does not track (new skills, links) are left as `work` made them. Returns the restored paths.
+ * Runs `work`, then puts every Git-tracked output file back that `work` changed (content and executable bit),
+ * unless `refresh`. Files Git does not track (new skills, links) are left as `work` made them.
  */
 export async function keepCommitted(root, work, { refresh = false, log = console.log } = {}) {
   if (refresh) return work();
-  const git = gitIn({}, root);
   let tracked;
-  try { tracked = git(root, 'ls-files', '-z', '--', ...outputs).split('\0').filter(Boolean); } catch { return work(); } // not a Git checkout: nothing is committed
-  const before = new Map(tracked.map(file => {
-    const entry = lstatSync(join(root, file), { throwIfNoEntry: false });
-    return [file, entry?.isFile() ? { data: readFileSync(join(root, file)), mode: entry.mode & 0o777 } : null];
-  }));
+  try { tracked = gitIn({}, root)(root, 'ls-files', '-z', '--', ...outputs()).split('\0').filter(Boolean); } catch { return work(); } // not a Git checkout: nothing is committed
+  const before = new Map(tracked.map(file => [file, snapshot(join(root, file))]));
   try {
     return await work();
   } finally { // also after a failed run: no half-written committed file
     const restored = [];
     for (const [file, old] of before) {
-      if (!old) continue; // absent or a link before: nothing to preserve
-      const path = join(root, file), entry = lstatSync(path, { throwIfNoEntry: false });
-      if (entry?.isFile() && readFileSync(path).equals(old.data) && (process.platform === 'win32' || (entry.mode & 0o777) === old.mode)) continue;
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, old.data);
-      if (process.platform !== 'win32') chmodSync(path, old.mode);
+      if (!old || isSame(snapshot(join(root, file)), old)) continue; // absent before: nothing to preserve
+      put(join(root, file), old);
       restored.push(file);
     }
     if (restored.length) log(`Kept ${restored.length} committed kit file(s) as they are (e.g. ${restored[0]}). The kit is newer; refresh them on purpose with "setup --refresh" and commit the result.`);
