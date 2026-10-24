@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **`worktree-gc` behält Worktrees, wenn die Zählung ungepushter Commits fehlschlägt (#917).** Schlägt das Zählen fehl, galt die Zahl als 0 und der Worktree wurde mit `--rm` gelöscht, obwohl dort Commits liegen konnten. Jetzt zählt eine fehlgeschlagene oder leere Ausgabe als unbekannt, und der Worktree bleibt erhalten.
+
 - **`done` sagt bei einem Claim ohne Commit den echten Grund (#907).** Wer `start` gelaufen hat, aber noch nicht committet hat, bekommt bei `done ISSUE` ohne Datei jetzt „commit your work first, then run done again“ statt des Hinweises „run board.mjs start“, der in die Irre führte. Ohne Claim bleibt der Hinweis auf `start`. Die Meldung nennt weiter `done ISSUE FILE --no-pr` für eine reine Erkundung.
 
 - **`worktree-gc` behält Worktrees, wenn die Prozessliste nicht lesbar ist (#910).** Kann das Kit die laufenden Prozesse nicht abfragen, weiß es nicht, ob ein Worktree gerade benutzt wird. Bisher galt er dann als frei und wurde mit `--rm` gelöscht. Jetzt bleibt er erhalten, bis die Prozessliste wieder lesbar ist.
