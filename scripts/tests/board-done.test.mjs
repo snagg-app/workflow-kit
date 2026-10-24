@@ -680,3 +680,40 @@ test('done keeps an empty --refs PR on the regular test and review path', t => {
   assert.equal(text('stored'), 'In progress');
   assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'));
 });
+
+test('done with a handoff file moves a head without handoff off Human review and leaves it there after a red wait (#947)', t => {
+  const { run, file, json, text } = delivery(t, handoffFixture);
+  writeFileSync(file('stored'), 'Human review');
+  const pr = json('pr.json');
+  pr.commits.nodes[0].commit.statusCheckRollup.contexts.nodes = [{ __typename: 'CheckRun', name: 'CI', status: 'COMPLETED', conclusion: 'FAILURE' }];
+  writeFileSync(file('pr.json'), JSON.stringify(pr));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(text('stored'), 'Automated review');
+  assert.deepEqual(json('issues-comments.json'), [], 'no handoff for a red head');
+});
+
+test('done ends a PR without any check as a blocker instead of waiting forever (#947)', t => {
+  const { run, file, json } = delivery(t, handoffFixture);
+  const pr = json('pr.json');
+  const commit = pr.commits.nodes[0].commit;
+  commit.statusCheckRollup.contexts = { totalCount: 0, nodes: [] };
+  commit.checkSuites = { totalCount: 0, nodes: [] };
+  writeFileSync(file('pr.json'), JSON.stringify(pr));
+  const result = run('done', '1', 'result.md', '--max-minutes', '0.01');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /no CI run on the head/);
+});
+
+test('done writes no handoff when another push changed the head during the wait (#947)', t => {
+  const { run, file, json, text } = delivery(t, handoffFixture);
+  // The REST reads before the wait show the pushed head; the next one shows a foreign push.
+  const foreign = 'b'.repeat(40), commits = json('pr.json').commits;
+  commits.nodes[0].commit.oid = foreign;
+  writeFileSync(file('pr-rest-reads.json'), JSON.stringify([...Array(4).fill({}), { headRefOid: foreign, commits }]));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /head changed while waiting/);
+  assert.equal(text('stored'), 'Automated review');
+  assert.deepEqual(json('issues-comments.json'), []);
+});

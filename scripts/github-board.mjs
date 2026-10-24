@@ -48,12 +48,13 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
   const project = number
     ? github.viewProject(number, owner)
     : github.copyProject(template.number, template.owner, owner, name);
-  const saveProject = () => {
-    // Keep project-owned settings such as "start"; only the board binding is rewritten.
-    writeProjectFile(root, markerName, JSON.stringify({ ...saved?.raw, repository: saved?.repository ?? repo, owner, number: project.number, id: project.id, url: project.url }, null, 2) + '\n');
+  const saveProject = done => {
+    // Keep project-owned settings such as "start"; only the board binding is rewritten. "id" is the marker of a finished setup: only the last save writes it.
+    const { id: _unfinished, ...kept } = saved?.raw ?? {};
+    writeProjectFile(root, markerName, JSON.stringify({ ...kept, repository: saved?.repository ?? repo, owner, number: project.number, ...(done ? { id: project.id } : {}), url: project.url }, null, 2) + '\n');
   };
-  // Retain newly copied boards on failure so retry cannot create duplicates.
-  if (!number) saveProject();
+  // Retain newly copied boards on failure so retry cannot create duplicates; without "id" the next setup continues here.
+  if (!number) saveProject(false);
   const fields = github.projectFields(project.number, owner);
   const status = fields.fields.find(f => f.name === 'Status');
   const mismatch = statusMismatch(status?.options?.map(o => o.name) ?? [], saved ?? {});
@@ -70,7 +71,7 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
   const labels = new Set(github.labelNames(repo).map(name => name.toLowerCase()));
   for (const { name: label, color } of projectLabels(saved ?? {}))
     if (!labels.has(label.toLowerCase())) github.createLabel(repo, label, color);
-  saveProject();
+  saveProject(true);
   return {
     status: 0, note: `bound to project #${project.number}`,
     text: `Project linked: ${project.url}\nLabels configured; existing labels preserved.\n`

@@ -104,7 +104,10 @@ test('reviews reads CI checks, check suites and the traces of reviewers on the h
   assert.equal(reviews(pr({ contexts: [check('COMPLETED', 'SKIPPED')] })), 0);
   assert.equal(reviews(pr({ contexts: [check('IN_PROGRESS')] })), 3);
   assert.equal(reviews(pr({ pushed: 60, contexts: [check('IN_PROGRESS')] })), 3, 'Running CI never stalls');
-  assert.equal(reviews(pr({ pushed: 60, contexts: [] })), 3, 'CI that has not started yet never stalls');
+  writeFileSync(join(checkout, 'activity.json'), JSON.stringify([{ after: 'abcdef1234', timestamp: minutesAgo(1) }]));
+  assert.equal(reviews(pr({ contexts: [] })), 3, 'CI that has not started yet waits for the first minutes');
+  rmSync(join(checkout, 'activity.json'));
+  assert.equal(reviews(pr({ pushed: 60, contexts: [] })), 1, 'A CLEAN head without any check ten minutes after its push is a blocker, not an endless wait (#947)');
   assert.equal(reviews(pr(), { comments: [codex('Running', 1)] }), 3, 'A running summary for the head waits');
   assert.equal(reviews(pr(), { comments: [codex('Completed', 0)] }), 0);
   assert.equal(reviews(pr(), { comments: [codex('Running', 60)] }), 0, 'A review running past the usual duration stalls');

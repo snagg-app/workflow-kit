@@ -156,7 +156,10 @@ test('reviews reads Codex rows, blockers and threads, and wait ends with the ver
   const teamRequest = { ...pr(), reviewRequests: { totalCount: 1, nodes: [{ requestedReviewer: { __typename: 'Team', name: 'coderabbitai' } }] }, requestEvents: { totalCount: 0, nodes: [] } };
   assert.equal(reviews(teamRequest), 3, 'A team with an optional name is no optional reviewer');
   assert.match(look(rabbitTraces[0][0]).stdout, /Review rate limited/, 'The optional trace keeps its description');
+  writeFileSync(join(checkout, 'activity.json'), JSON.stringify([{ after: 'abcdef1234', timestamp: minutesAgo(1) }]));
   assert.equal(reviews(pr({ contexts: [rabbitStatus('SUCCESS')] })), 3, 'An optional check alone is no CI: the first CI check is still awaited');
+  rmSync(join(checkout, 'activity.json'));
+  assert.equal(reviews(pr({ contexts: [rabbitStatus('SUCCESS')] })), 1, 'A CLEAN head that got no CI check ten minutes after its push is a blocker (#947)');
   const rabbitSuite = { ...suite('QUEUED', 0, 1), app: { slug: 'coderabbitai' } };
   writeFileSync(config, JSON.stringify({ ...JSON.parse(plain), awaitApps: ['coderabbitai'] }));
   assert.equal(reviews(pr({ suites: [suite('COMPLETED', 1, 1), rabbitSuite] })), 3, 'Precondition: an awaited app that is not optional waits');

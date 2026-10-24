@@ -7,6 +7,8 @@ test('handoff diagnoses draft and unreadable draft state before waiting for CI',
   const { checkout, run, writeIssue } = handoffFixture(t);
   writeIssue({ ...issue('Automated review'), assignees: { nodes: [{ login: 'worker' }] } });
   const commit = handoffPr().commits.nodes[0].commit;
+  // A fresh push: a head without any check only blocks ten minutes after its push (#947).
+  writeFileSync(join(checkout, 'activity.json'), JSON.stringify([{ after: handoffPr().headRefOid, timestamp: new Date().toISOString() }]));
   for (const checks of [[], [{ __typename: 'CheckRun', name: 'CI', status: 'IN_PROGRESS' }]]) {
     for (const isDraft of [true, null, undefined, false]) {
       const pr = handoffPr({ isDraft, commits: { nodes: [{ commit: {

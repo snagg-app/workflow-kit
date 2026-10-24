@@ -129,6 +129,30 @@ const lists = {
 };
 const numbers = { reviewerGraceMinutes: [3, 'a number of minutes, 0 or more (0 turns the grace off)'], staleHours: [6, 'a number of hours, 0 or more'] };
 
+// Keys the kit reads besides the checked fields above: the board binding, "start" and "baseBranch" (board-common.mjs), "boardTemplate", "labels", "statuses", "skills", "language".
+const otherKeys = ['repository', 'owner', 'number', 'id', 'url', 'start', 'baseBranch', 'boardTemplate', 'labels', 'statuses', 'skills', 'language'];
+
+/** Edit distance of two short names (a typo is one or two edits). */
+function distance(a, b) {
+  let row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+    for (let j = 1; j <= b.length; j++) next[j] = Math.min(row[j] + 1, next[j - 1] + 1, row[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    row = next;
+  }
+  return row[b.length];
+}
+
+/** Refuses a top-level key the kit does not read: it would be ignored silently, a typo like "doneBaseMerges" included. */
+function assertKnownKeys(raw, where) {
+  const known = [...new Set([...otherKeys, ...Object.keys(lists), ...Object.keys(numbers), 'specLabel', 'doneBaseMerge', 'setup', ...featureProviders().map(({ name }) => name)])];
+  for (const key of Object.keys(raw)) {
+    if (known.includes(key)) continue;
+    const near = known.map(name => [name, distance(key.toLowerCase(), name.toLowerCase())]).sort((a, b) => a[1] - b[1])[0];
+    assert.fail(`Unknown key "${key}" in ${where}${near[1] <= 3 ? `; did you mean "${near[0]}"?` : ''} Known keys: ${known.join(', ')}`);
+  }
+}
+
 /**
  * The one check of a profile: parses the text, checks every known field once and returns the view: the file's fields with the defaults filled in
  * (`.raw` is the file as written, for a writer that must not copy defaults into it). `where` names the file in the message of a broken one.
@@ -137,6 +161,7 @@ export function parseProfile(source, where = profileFile) {
   let raw;
   try { raw = JSON.parse(source); } catch (error) { throw new Error(`${where} is not valid JSON: ${error.message}`); }
   assert.ok(raw && typeof raw === 'object' && !Array.isArray(raw), `${where} must be a JSON object`);
+  assertKnownKeys(raw, where);
   const view = { ...raw, statuses: statusNames(raw), language: raw.language ?? 'en', labels: projectLabels(raw) };
   textsFor(view);
   activeSkills(raw);
