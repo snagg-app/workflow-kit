@@ -32,11 +32,14 @@ export async function installersDone(home, timeout, installed = () => true) {
   }
 }
 
+/** Removes a temporary tree. A detached hook installer may still have its working directory in it for a moment; Windows refuses
+ * to remove it until that ends, so the removal retries for about 10 s (EPERM/EBUSY, #890). */
+export const removeTree = path => rmSync(path, { recursive: true, force: true, maxRetries: 50, retryDelay: 200 });
+
 /** A temporary directory that is removed with the test. */
 export function temporary(t, name) {
   const path = mkdtempSync(join(tmpdir(), name));
-  // A detached hook installer may still have its working directory in here for a moment; Windows refuses to remove it until it ends.
-  t.after(() => rmSync(path, { recursive: true, force: true, maxRetries: 50, retryDelay: 200 }));
+  t.after(() => removeTree(path));
   return path;
 }
 
