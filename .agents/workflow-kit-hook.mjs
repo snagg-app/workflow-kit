@@ -52,7 +52,7 @@ export function cloneKit(kit, url = kitUrl) {
 
 /** `link`: the one first command of a fresh worktree; reports what is in order or what needs a human. */
 async function linkNow(project, kit) {
-  const root = git('-C', project, 'rev-parse', '--show-toplevel').stdout.trim() || project;
+  const root = git('-C', project, 'rev-parse', '--show-toplevel').stdout?.trim() || project;
   const { linkKit } = await import(pathToFileURL(path.join(kit, 'scripts/kit-check.mjs')).href);
   const problem = linkKit(root, kit);
   console.log(problem || `.vendor/workflow-kit links to ${kit}`);
@@ -67,7 +67,7 @@ function main() {
   const own = ['.vendor/workflow-kit/scripts/kit-hook.mjs', 'scripts/kit-hook.mjs'].map(file => path.join(project, file)).find(existsSync);
   let file = link ? '' : own;
   if (!file) {
-    const common = git('-C', project, 'rev-parse', '--path-format=absolute', '--git-common-dir').stdout.trim();
+    const common = git('-C', project, 'rev-parse', '--path-format=absolute', '--git-common-dir').stdout?.trim();
     const kit = sharedKit(common);
     file = kit && path.join(kit, 'scripts/kit-hook.mjs');
     // Only the events that may speak clone; the others stay silent without a kit.
