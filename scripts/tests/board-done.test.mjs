@@ -459,6 +459,22 @@ test('done fails on a conflict with the base, names the files and leaves no merg
   assert.equal(text('affected-tests-calls'), '', 'the tests did not run');
 });
 
+test('done does not abort a merge the user resolved and has not committed yet', t => {
+  const { run, git, checkout, text } = delivery(t, handoffFixture);
+  moveBase(git, checkout, { 'a.txt': 'theirs' }, { 'a.txt': 'mine' });
+  const own = git('rev-parse', 'HEAD');
+  try { git('merge', '--no-commit', 'origin/release/0.1.1'); } catch { /* the conflict is resolved below */ }
+  writeFileSync(join(checkout, 'a.txt'), 'resolved');
+  git('add', 'a.txt');
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /commit the resolved merge, then run done again/);
+  assert.ok(existsSync(join(checkout, '.git', 'MERGE_HEAD')), 'the resolved merge is still in progress');
+  assert.equal(git('rev-parse', 'HEAD'), own, 'no commit was made or aborted');
+  assert.equal(git('diff', '--cached', '--name-only'), 'a.txt', 'the resolved file is still staged');
+  assert.equal(text('affected-tests-calls'), '', 'the tests did not run');
+});
+
 
 test('done counts --max-minutes from its start, so slow tests leave less time to wait and the call ends before the shell limit', t => {
   const { run, file, json } = delivery(t, handoffFixture);
