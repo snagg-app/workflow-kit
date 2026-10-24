@@ -19,7 +19,7 @@ export const specs = [
  */
 function sweep() {
   let plan, resets = 0, read = 0;
-  const closed = [], reset = [];
+  const closed = [], reset = [], skipped = [];
   for (let after; ;) {
     const { search } = graphql(`query($q:String!,$after:String){search(query:$q,type:ISSUE_ADVANCED,first:100,after:$after){
     issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{id number
@@ -27,7 +27,7 @@ function sweep() {
     labels(first:20){totalCount nodes{name}}
     closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{number url state merged mergedAt baseRefName mergeStateStatus headRefName repository{nameWithOwner}}}}}}}`,
     { q: `repo:${project.repository} is:issue is:open`, ...(after && { after }) });
-    for (const issue of search.nodes) {
+    for (const issue of search.nodes) try {
       if (isSpec(issue)) continue;
       const linked = issue.closedByPullRequestsReferences;
       const own = linked.nodes.filter(node => node.repository.nameWithOwner.toLowerCase() === project.repository.toLowerCase());
@@ -45,8 +45,10 @@ function sweep() {
         continue;
       }
       if (delivered) {
-        graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id,
-          body: texts.delivered(delivered.number, delivered.baseRefName) });
+        // A close that failed in an earlier run left the comment behind: write it once (REST read, only for the issues that would be closed).
+        const body = texts.delivered(delivered.number, delivered.baseRefName);
+        if (!restAll(`repos/${project.repository}/issues/${issue.number}/comments`).some(comment => comment.body === body))
+          graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id, body });
         graphql('mutation($issue:ID!){closeIssue(input:{issueId:$issue,stateReason:COMPLETED}){clientMutationId}}', { issue: issue.id });
         closed.push(issue.number);
         progress(`#${issue.number} closed: delivered with PR #${delivered.number} in ${delivered.baseRefName}`);
@@ -65,6 +67,9 @@ function sweep() {
       reset.push(issue.number);
       progress(`#${issue.number} reset to ${statuses.automatedReview}: PR #${pr.number} has merge conflicts`);
       resets++;
+    } catch (error) {
+      // One issue sweep cannot judge or write must not stop the others; the run reports it and ends red.
+      skipped.push(`#${issue.number} skipped: ${String(error?.message ?? error).split('\n')[0]}`);
     }
     read += search.nodes.length;
     if (!search.pageInfo.hasNextPage) {
@@ -74,7 +79,8 @@ function sweep() {
     assert.ok(search.pageInfo.endCursor && search.pageInfo.endCursor !== after, 'Search pagination did not advance');
     after = search.pageInfo.endCursor;
   }
-  const data = { closed, reset };
+  const data = { closed, reset, skipped };
+  if (skipped.length) return result('failed', 'FAILED', { headline: null, blockers: skipped, data });
   return resets ? result('ok', 'SWEPT', { headline: null, data }) : result('ok', 'CLEAN', { headline: 'clean', data });
 }
 
