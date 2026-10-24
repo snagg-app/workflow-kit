@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { basename, dirname, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { skipWithoutSubmodules } from './fixtures.mjs';
+import { copyKitScripts, skipWithoutSubmodules } from './fixtures.mjs';
 
 const skip = skipWithoutSubmodules();
 const kit = fileURLToPath(new URL('../../', import.meta.url));
@@ -30,9 +30,7 @@ test('all pinned Matt Pocock skills survive a fresh checkout, rerun and local so
     + '\tpath = .vendor/matt-pocock-skills\n\turl = https://github.com/mattpocock/skills.git\n');
   git(fixture, 'add', '.gitmodules');
   git(fixture, 'update-index', '--add', '--cacheinfo', `160000,${revision},.vendor/matt-pocock-skills`);
-  mkdirSync(join(fixture, 'scripts'));
-  for (const name of ['setup-skills.mjs', 'provider.mjs', 'provider-matt-pocock.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'lock.mjs', 'provider-links.mjs', 'write-guard.mjs', 'provider-list.mjs', 'project-profile.mjs', 'git-tool.mjs', 'run-program.mjs', 'agents.mjs', 'versions.json', 'versions.mjs'])
-    copyFileSync(join(kit, 'scripts', name), join(fixture, 'scripts', name));
+  copyKitScripts(fixture);
   for (const name of ['ponytail', 'impeccable'])
     write(join(fixture, 'scripts', `provider-${name}.mjs`), `import {writeFileSync} from "node:fs"; export default { name: "${name}", label: "${name}", source: ".vendor/${name}", skills: [], build() { writeFileSync("other-generator-ran", ""); return { outputs: [], message: "" }; } };\n`);
   const run = (script = 'provider.mjs') => spawnSync(process.execPath, [join(fixture, 'scripts', script), ...script === 'provider.mjs' ? ['matt-pocock', 'setup'] : []], { cwd: consumer, encoding: 'utf8' });

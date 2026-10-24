@@ -4,7 +4,7 @@
 import { execFile, execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync, writeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Git for Windows stops at 260 characters; the long TEMP of an agent session pushes the clones of these fixtures
@@ -67,6 +67,9 @@ export function requireSubmodules(root = kit) {
   process.exit(1);
 }
 
+/** Copies this checkout's `scripts/` without `tests/` to `<kitDir>/scripts`: a new import between scripts needs no list (#888). */
+export const copyKitScripts = kitDir => cpSync(join(kit, 'scripts'), join(kitDir, 'scripts'), { recursive: true, filter: source => basename(source) !== 'tests' });
+
 /** A throwaway kit for scripts that write to the kit they live in (`git submodule update --init` registers
  * submodules in its .git): this checkout's scripts and data, its pinned vendor sources as shared clones,
  * and a Git repository of its own. The suite's own checkout and its .git/modules stay untouched. */
@@ -76,8 +79,9 @@ export function kitCheckout(t) {
   const env = isolatedGit(root);
   const git = (cwd, ...args) => execFileSync('git', args, { cwd, env, encoding: 'utf8' }).trim();
   git(root, 'init', '-q');
-  for (const path of ['.gitattributes', '.gitmodules', 'AGENT_RULES.md', '.agents/skills/find-skills', '.agents/skills/spec-review', 'scripts', 'templates'])
-    cpSync(join(kit, path), join(root, path), { recursive: true, filter: source => !source.endsWith('tests') });
+  for (const path of ['.gitattributes', '.gitmodules', 'AGENT_RULES.md', '.agents/skills/find-skills', '.agents/skills/spec-review', 'templates'])
+    cpSync(join(kit, path), join(root, path), { recursive: true });
+  copyKitScripts(root);
   for (const line of git(kit, 'ls-files', '-s', '--', '.vendor').split('\n')) {
     const [mode, sha, , path] = line.split(/\s+/);
     git(root, '-c', 'advice.detachedHead=false', 'clone', '--quiet', '--shared', join(kit, path), join(root, path));
