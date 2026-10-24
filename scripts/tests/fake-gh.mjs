@@ -15,9 +15,12 @@ class Exit extends Error {
  * metadata that catches up after a push. The overlay is applied to pr.json; returns the PR as it shows now.
  */
 function applyReadSeries(file, pr) {
-  if (!fs.existsSync(file)) return pr;
+  let reads;
+  try { reads = JSON.parse(fs.readFileSync(file)); } catch (error) { // no series prepared: the PR shows as it is (no existsSync first: file system race)
+    if (error.code === 'ENOENT') return pr;
+    throw error;
+  }
   pr ??= JSON.parse(fs.readFileSync('pr.json'));
-  const reads = JSON.parse(fs.readFileSync(file));
   const overlay = reads.length > 1 ? reads.shift() : reads[0];
   fs.writeFileSync(file, JSON.stringify(reads));
   const shown = { ...pr, ...overlay };
