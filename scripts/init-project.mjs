@@ -15,7 +15,7 @@ import { projectFile, writeProjectFile } from './write-guard.mjs';
 import { isMain } from './is-main.mjs';
 
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
-const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
+const text = p => readFileSync(p, 'utf8').replace(/^﻿/, '').replaceAll('\r\n', '\n'); // Windows PowerShell 5.1 writes a BOM
 // Every kit handler carries this id; the template files stay the only place that names it.
 const ours = handler => handler.id === handlerId;
 
@@ -50,7 +50,9 @@ export function initProject({ root, existing = false, log = console.log, profile
   if (root !== kit) { const problem = linkKit(root, kit); assert.ok(!problem, problem); }
 
   const templates = readdirSync(join(kit, 'templates'), { recursive: true })
-    .filter(file => lstatSync(join(kit, 'templates', file)).isFile()).map(file => file.split(sep).join('/'));
+    .filter(file => lstatSync(join(kit, 'templates', file)).isFile()).map(file => file.split(sep).join('/'))
+    // AGENTS.md marks a project as set up (kit.mjs); written last, an aborted first run still counts as new and the next run completes it.
+    .sort((a, b) => (a === 'AGENTS.md') - (b === 'AGENTS.md'));
   const language = profile.language ?? 'en';
   for (const file of templates) {
     // templates/<language>/ holds the texts that differ by language; the project gets the one of its profile.
