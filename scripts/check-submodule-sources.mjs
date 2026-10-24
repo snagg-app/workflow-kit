@@ -2,10 +2,9 @@
 // before fetching any submodule: a branch that points a submodule at another repository would otherwise get that
 // repository's files turned into generated hooks.
 import assert from 'node:assert/strict';
-import { realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { gitResultIn } from './git-tool.mjs';
+import { isMain } from './is-main.mjs';
 
 /** The `submodule.<name>.url <url>` lines of a .gitmodules file, sorted; no submodule at all is an empty list. */
 export function submoduleSources(file) {
@@ -20,7 +19,7 @@ export function checkSubmoduleSources(branchFile, mainFile) {
   assert.deepEqual(submoduleSources(branchFile), submoduleSources(mainFile), '.gitmodules names other submodule sources than main; not fetching them.');
 }
 
-if (process.argv[1] && realpathSync.native(fileURLToPath(import.meta.url)) === realpathSync.native(process.argv[1])) {
+if (isMain(import.meta.url)) {
   try { checkSubmoduleSources('.gitmodules', process.argv[2]); }
   catch (error) { console.error(error.message); process.exitCode = 1; }
 }

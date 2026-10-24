@@ -3,7 +3,7 @@
 // Nutzen: Die Agent-Einstellungen enthalten nur noch diesen Aufruf; Versionen stehen im Versions-Manifest.
 // Als Funktion: `runHook({ event, agent, env, stdin })` liefert { exitCode, stdout, stderr } und beendet nichts; nur der Skript-Teil unten liest stdin, druckt und beendet den Prozess.
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,7 @@ import { kitCheck, kitEnvironment, linkWorktrees, modulesCheck } from './kit-che
 import { locate, markUsed } from './provider.mjs';
 import { featureProviders, providerList, providerNamed } from './provider-list.mjs';
 import { projectFeatures, readProfileLenient, textsFor } from './project-profile.mjs';
+import { isMain } from './is-main.mjs';
 
 const self = fileURLToPath(import.meta.url);
 const scripts = path.dirname(self);
@@ -150,7 +151,7 @@ async function readInput() {
 
 // Script part: the only place that reads stdin, prints and ends the process.
 // Also run when the project's entry file (kit-entry.mjs copy) imported this module (#895).
-if (process.argv[1] && (realpathSync.native(process.argv[1]) === realpathSync.native(self) || process.argv[1].replaceAll('\\', '/').endsWith(`/${entryFile}`))) {
+if (process.argv[1] && (isMain(import.meta.url) || process.argv[1].replaceAll('\\', '/').endsWith(`/${entryFile}`))) {
   const [event, ...rest] = process.argv.slice(2);
   if (event === '--install') { if (rest.length) install(rest); process.exit(0); }
   const agent = rest[rest.indexOf('--agent') + 1];

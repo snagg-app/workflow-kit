@@ -12,13 +12,13 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { gitAsyncIn } from './git-tool.mjs';
 import { readProfile } from './project-profile.mjs';
+import { isMain } from './is-main.mjs';
 
 const norm = path => resolve(path).replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
 
@@ -164,4 +164,4 @@ async function main() {
   }
 }
 
-if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) await main();
+if (isMain(import.meta.url)) await main();

@@ -1,7 +1,7 @@
 // Zweck: `kit setup` stellt den Sollzustand des Kits in einem Projekt her (neu, nach Update, halb kaputt) und nennt am Ende nur die Schritte für Menschen.
 // Aufruf: node <kit>/scripts/kit.mjs [--cwd PROJEKT] setup; beliebig oft, ein zweiter Lauf ändert nichts. `check` meldet nur den Zustand (kit-check.mjs). Oder `import { kitSetup }`: eine Funktion mit Ergebnis, der Import führt nichts aus.
 // Nutzen: Die Einzelskripte (init-project, setup-skills, provider install, install-git-hooks, setup-github) laufen als Funktionen; hier steht keine eigene Logik dafür.
-import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { agentLabels, agents, projectAgents } from './agents.mjs';
@@ -16,6 +16,7 @@ import { featureProviders } from './provider-list.mjs';
 import { context, install } from './provider.mjs';
 import { setupSkills } from './setup-skills.mjs';
 import { writeProjectFile } from './write-guard.mjs';
+import { isMain } from './is-main.mjs';
 
 const scripts = dirname(fileURLToPath(import.meta.url));
 
@@ -101,7 +102,7 @@ export async function kitSetup(root, { onStep = () => {}, refresh = false } = {}
   return { steps, plugin, humans, exitCode: 0 };
 }
 
-if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
+if (isMain(import.meta.url)) {
   enterCwd();
   const refresh = process.argv[2] === 'setup' && process.argv[3] === '--refresh';
   if (!['setup', 'check'].includes(process.argv[2]) || process.argv.length > (refresh ? 4 : 3)) {
