@@ -150,7 +150,7 @@ function start() {
     branch = current.headRefName;
     continueOn(branch);
     // #979: two sessions taking over one PR both patch its body and each reads back only its own line; the claim comment decides (oldest wins), the body follows.
-    if (!ownPr(issue, session)) {
+    if (!ownPr(fresh, session)) {
       claim();
       const path = `repos/${project.repository}/pulls/${current.number}`, body = rest(path).body ?? '';
       github.write('PATCH', path, { body: withClaim(body, line) });

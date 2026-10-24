@@ -146,6 +146,7 @@ test('two sessions start at once: the claim comment written first wins, the othe
   assert.notEqual(result.status, 0, result.stdout);
   assert.match(result.stdout, /session S2 claimed #1 first/);
   assert.equal(text('comment-deletes'), '2\n', 'only the own comment is withdrawn');
+  assert.deepEqual(JSON.parse(text('backlink-comments-1.json')).map(comment => comment.id), [1], 'only the winner claim stays');
 });
 
 test('two sessions take over the same PR at once: the older claim wins, the other writes no PR body (#979)', t => {
@@ -160,6 +161,7 @@ test('two sessions take over the same PR at once: the older claim wins, the othe
   assert.notEqual(result.status, 0, result.stdout);
   assert.match(result.stdout, /session S3 claimed #1 first/);
   assert.equal(JSON.parse(text('pr.json')).body, body, 'the PR body is untouched');
+  assert.deepEqual(JSON.parse(text('backlink-comments-1.json')).map(comment => comment.id), [1], 'only the winner claim stays');
 });
 
 test('start that fails on the branch switch leaves the issue unassigned and not In progress (#979)', t => {

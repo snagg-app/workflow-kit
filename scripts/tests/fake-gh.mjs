@@ -127,6 +127,8 @@ function api(argv, input, stdout, stderr, exit) {
     }
     if (parts[3] === 'issues' && parts[4] === 'comments' && argv.includes('DELETE')) {
       fs.appendFileSync('comment-deletes', parts[5] + '\n');
+      const file = 'backlink-comments-1.json';
+      if (fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify(JSON.parse(fs.readFileSync(file)).filter(item => String(item.id) !== parts[5])));
       stdout('');
       exit(0);
     }
