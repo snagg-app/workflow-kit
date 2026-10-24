@@ -1,6 +1,6 @@
 // `merge PR [--stack]`: the merge gate, the head-bound merge, the branch update and what follows a merge (branch delete, push commands).
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, realpathSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,7 +9,7 @@ import { readProfileAt, textsFor } from './project-profile.mjs';
 import { SonarOtherPr } from './sonar.mjs';
 import { shared } from './board-args.mjs';
 import { failed, isResult, result } from './board-result.mjs';
-import { github, graphql, gitAt, number, numberOption, progress, project, projectDirectory, rest, runShell, sleep, stack, memory } from './board-context.mjs';
+import { github, graphql, gitAt, number, numberOption, progress, project, projectDirectory, rest, restAll, runShell, sleep, stack, memory } from './board-context.mjs';
 import { pullState } from './board-common.mjs';
 import { dependentPrs } from './board-claims.mjs';
 import { mergeGate, stackReasons } from './board-stack.mjs';
@@ -70,6 +70,8 @@ function deleteHeadBranch(pr) {
   return `branch deleted: ${branch}`;
 }
 
+const buildFolders = /(?:^|\/)(?:node_modules|\.vendor|build|dist|out|target|coverage|\.gradle|\.next|\.cache)\//;
+
 /**
  * Delete the folder of an agent worktree (under an agent's `worktrees` folder of the agent table) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
  * (node_modules, .vendor, links). `rmSync` unlinks a junction or symlink without entering it, so a link's target stays. Never the folder this run works in. Returns the line to report, or nothing.
@@ -89,6 +91,11 @@ function removeAgentWorktree(branch, head) {
       const changed = gitAt(path, 'status', '--porcelain').split(/\r?\n/).filter(Boolean).length;
       const unpushed = Number(gitAt(path, 'rev-list', '--count', 'HEAD', '--not', head, '--remotes'));
       if (changed || unpushed) return `worktree kept: ${path} holds unsaved work (${changed} changed files, ${unpushed} commits not pushed)`;
+      // #993: a locked worktree belongs to a session; ignored files (notes, .env) outside the usual build folders would go with the folder.
+      if (/^locked(?: |$)/m.test(block)) return `worktree kept: ${path} is locked`;
+      // One line per file (status would collapse a folder such as backend/ that only holds ignored build output); a link is unlinked, its target stays.
+      const ignored = gitAt(path, 'ls-files', '--others', '--ignored', '--exclude-standard').split(/\r?\n/).filter(file => file && !buildFolders.test(file) && !file.split('/').some((_, index, parts) => lstatSync(join(path, ...parts.slice(0, index + 1))).isSymbolicLink()));
+      if (ignored.length) return `worktree kept: ${path} holds ignored files: ${ignored.join(', ')}`;
       rmSync(path, { recursive: true, force: true });
       gitAt(projectDirectory, 'worktree', 'prune');
       return `worktree deleted: ${path}`;
@@ -252,8 +259,9 @@ async function merge() {
         let open;
         for (let read = 1; (open = rest(path).state !== 'closed') && read < 5; read++) sleep(numberOption('--interval', 3));
         if (open) {
-          github.write('POST', `${path}/comments`,
-            { body: `${textsFor(project).closedByMerge(layer, memory.stackState.trunk)}\n` });
+          // #993: a close that failed after the comment must not write it again on the next run.
+          const body = textsFor(project).closedByMerge(layer, memory.stackState.trunk);
+          if (!restAll(`${path}/comments`).some(comment => comment.body?.trim() === body)) github.write('POST', `${path}/comments`, { body: `${body}\n` });
           github.write('PATCH', path, { fields: { state: 'closed', state_reason: 'completed' } });
         }
         notes.push(`issue #${issueNumber} (PR #${layer}): closed`);

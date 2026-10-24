@@ -496,6 +496,16 @@ test('merge --stack gates every layer, merges only the top through merge-async a
     assert.deepEqual(calls().filter(call => call.startsWith('close')), expected, label);
     assert.equal(JSON.parse(readFileSync(join(checkout, 'backlink-comments-1.json'), 'utf8')).length, expected.length, `${label}: one comment per close`);
   }
+  // #993: the close failed after the comment: the run again closes, but writes the comment only once.
+  const written = JSON.parse(readFileSync(join(checkout, 'backlink-comments-1.json'), 'utf8'));
+  prepare();
+  json('stacks.json', [{ number: 42, open: true, base: { ref: 'release/0.1.1' }, pull_requests: [5, 7].map(number => ({ number, state: 'open' })) }]);
+  json('backlink-1.json', { number: 1, state: 'open', comments: 1 });
+  json('backlink-comments-1.json', written);
+  const again = run('merge', '7', '--stack', '--interval', '0');
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.equal(JSON.parse(readFileSync(join(checkout, 'backlink-comments-1.json'), 'utf8')).length, 1, 'the comment is not written twice');
+  assert.deepEqual(calls().filter(call => call.startsWith('close')), ['close 1 state_reason=completed']);
 });
 
 test('merge runs the push commands of the project file as of the merge commit, one after the other, and the merge stands when one fails', t => {
@@ -598,6 +608,43 @@ test('merge keeps the worktree of the merged branch when it holds uncommitted fi
   assert.equal(ahead.status, 0, ahead.stdout + ahead.stderr);
   assert.equal(existsSync(agent), true, 'the commit is not lost');
   assert.match(ahead.stdout, /^worktree kept: .*agent-1 holds unsaved work \(0 changed files, 1 commits not pushed\)$/m);
+});
+
+test('merge keeps a locked worktree and one with ignored files outside the build folders (#993)', t => {
+  const { checkout, run, show, headOf } = mergeFixture(t);
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
+  git(checkout, 'init', '-q', '-b', 'main');
+  git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'start');
+  const merged = git(checkout, 'rev-parse', 'HEAD'), agent = join(checkout, '.claude/worktrees/agent-1');
+  git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic', agent);
+  show(headOf(merged));
+  git(checkout, 'worktree', 'lock', '--reason', 'session', agent);
+  const locked = run('merge', '7');
+  assert.equal(locked.status, 0, locked.stdout + locked.stderr);
+  assert.equal(existsSync(agent), true, 'a locked worktree stays');
+  assert.match(locked.stdout, /^worktree kept: .*agent-1 is locked$/m);
+  git(checkout, 'worktree', 'unlock', agent);
+  writeFileSync(join(checkout, '.gitignore'), '.env\nnode_modules\nbuild\n');
+  git(checkout, 'add', '.gitignore');
+  git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'ignore');
+  git(agent, 'merge', '-q', 'main');
+  mkdirSync(join(agent, 'node_modules'));
+  writeFileSync(join(agent, 'node_modules/x'), 'x');
+  writeFileSync(join(agent, '.env'), 'x');
+  show(headOf(git(agent, 'rev-parse', 'HEAD')));
+  const ignored = run('merge', '7');
+  assert.equal(ignored.status, 0, ignored.stdout + ignored.stderr);
+  assert.equal(existsSync(join(agent, '.env')), true, 'the ignored note is not lost');
+  assert.match(ignored.stdout, /^worktree kept: .*agent-1 holds ignored files: \.env$/m);
+  // nested build output of a multi-module repo is no user file
+  rmSync(join(agent, '.env'));
+  for (const nested of ['frontend/web/node_modules', 'backend/api/build']) {
+    mkdirSync(join(agent, nested), { recursive: true });
+    writeFileSync(join(agent, nested, 'x'), 'x');
+  }
+  const nestedRun = run('merge', '7');
+  assert.equal(nestedRun.status, 0, nestedRun.stdout + nestedRun.stderr);
+  assert.equal(existsSync(agent), false, 'nested build folders do not keep the worktree');
 });
 
 test('merge reads a direct merge back several times when GitHub still shows the PR as open for a moment (#966)', t => {

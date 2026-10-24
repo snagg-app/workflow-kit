@@ -111,6 +111,8 @@ function api(argv, input, stdout, stderr, exit) {
         const now = '2999-01-01T00:00:00Z';
         posted.push({ id: 901, user: { login: 'worker', type: 'User' }, body: input, html_url: 'h', created_at: now, updated_at: now });
         fs.writeFileSync('issues-comments.json', JSON.stringify(posted));
+        // #993: the issue's own comment list shows it too (a run again reads it back)
+        if (fs.existsSync(comments)) fs.writeFileSync(comments, JSON.stringify([...JSON.parse(fs.readFileSync(comments)), posted.at(-1)]));
         stdout('{}');
         exit(0);
       }

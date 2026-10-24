@@ -574,6 +574,16 @@ test('done without any PR puts the result on the issue, ticks the boxes and move
   assert.equal(text('affected-tests-calls'), '', 'nothing to test');
 });
 
+test('done --no-pr run again after a later step failed writes the result comment only once (#993)', t => {
+  const { run, text, file, json } = delivery(t, fixture);
+  assert.equal(run('done', '1', 'result.md', '--no-pr').status, 0);
+  writeFileSync(file('stored'), 'In progress'); // the status step did not land
+  const again = run('done', '1', 'result.md', '--no-pr');
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.equal(json('issues-comments.json').length, 1, 'one result comment');
+  assert.equal(text('stored'), 'Human review');
+});
+
 test('done without a PR refuses when the issue carries a claim but no commit yet, and changes nothing (#907)', t => {
   const { run, writeIssue, text, json } = delivery(t, fixture); // the branch has no commit of its own
   writeIssue({ ...issue('In progress'), assignees: { nodes: [{ login: 'worker' }] }, comments: { nodes: [{ body: 'Agent: claude, Session: S907\nBasis: release/0.1.1' }] } });
