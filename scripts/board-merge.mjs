@@ -100,7 +100,7 @@ function removeAgentWorktree(branch, head) {
  * After a merge into main or a release branch the `push` commands of `.github/workflow-project.json` as on the merge commit run here, in the
  * foreground (sweep, release sync, pin). They run with BRANCH in a throwaway worktree on that commit, without setup (the kit is a link
  * to the kit checkout that runs this, as the session hook does), and a project without such commands touches no git at all. A merge is never undone by a failure here;
- * it returns the note that says so.
+ * it returns the note that says so, and the caller turns it into an error result (#980).
  * ponytail: the commands run in bash, on Windows the one of Git for Windows (not WSL's), elsewhere /bin/bash; the 30 minutes kill bash, not the children it started;
  * replace when a project needs another shell or tree-kill.
  */
@@ -265,8 +265,8 @@ async function merge() {
   if (folder) notes.push(folder);
   const pushed = runPush(stack ? memory.stackState.trunk : gate.pr.baseRefName, mergeCommit?.oid);
   if (pushed) notes.push(pushed);
-  // A layer below that is not merged with the top is an error, whatever the top did.
-  return result(unmerged ? 'error' : 'ok', 'MERGED', { headline: null, notes,
+  // A layer below that is not merged with the top, or a failed push command (runPush returns a note only then), is an error; the state stays MERGED.
+  return result(unmerged || pushed ? 'error' : 'ok', 'MERGED', { headline: null, notes,
     data: { pr: number, head: headRefOid, mergeCommit: mergeCommit?.oid } });
 }
 
