@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { readProfile } from './project-profile.mjs';
 import { merge } from './tests/gh-shapes.mjs';
+import { isMain } from './is-main.mjs';
 
 const dir = new URL('./tests/gh-shapes/', import.meta.url);
 /** The fields whose value is one of GitHub's fixed words; every other string is replaced. */
@@ -59,4 +60,4 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file:///${process.argv[1].replaceAll('\\', '/')}`).href) main();
+if (isMain(import.meta.url)) main();

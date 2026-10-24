@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { projectRoot } from './checkout-root.mjs';
 import { gitResultIn } from './git-tool.mjs';
+import { isMain } from './is-main.mjs';
 
 // Explicit setup, per clone: copies the project's .githooks into the clone's
 // Git directory and points core.hooksPath there, so a checked-out branch cannot replace the hooks Git runs (#194).
@@ -164,5 +164,5 @@ export function installGitHooks({ root, check = false, log = console.log }) {
   }
 }
 
-if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url)))
+if (isMain(import.meta.url))
   installGitHooks({ root: projectRoot(), check: process.argv.includes('--check') });

@@ -12,6 +12,7 @@ import { linkKit } from './kit-check.mjs';
 import { ownSkills } from './provider-list.mjs';
 import { languages, projectFeatures, readProfile } from './project-profile.mjs';
 import { projectFile, writeProjectFile } from './write-guard.mjs';
+import { isMain } from './is-main.mjs';
 
 const kit = realpathSync.native(resolve(dirname(fileURLToPath(import.meta.url)), '..'));
 const text = p => readFileSync(p, 'utf8').replaceAll('\r\n', '\n');
@@ -81,7 +82,7 @@ export function initProject({ root, existing = false, log = console.log, profile
   log('Project files configured. Generate and commit skills for this kit update; install and trust hooks explicitly.');
 }
 
-if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
+if (isMain(import.meta.url)) {
   enterCwd(); // `--cwd PROJECT_DIR` at any position
   const unknown = process.argv.slice(2).filter(argument => argument !== '--existing');
   if (unknown.length) { console.error(`Unknown argument: ${unknown.join(' ')}. Usage: init-project.mjs [--cwd PROJECT_DIR] [--existing]`); process.exit(2); }

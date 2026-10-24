@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { externalTool } from './checkout-root.mjs';
+import { isMain } from './is-main.mjs';
 
 const interval = 60_000, minutes = 60;
 
@@ -43,7 +43,7 @@ const usage = 'Usage: node scripts/quota-sample.mjs OUTPUT.jsonl\n'
   + 'Samples the account GraphQL rate limit once a minute for one hour into OUTPUT.jsonl.\n'
   + 'Options: -h, --help (print this help and exit 0)';
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+if (isMain(import.meta.url)) {
   const [option] = process.argv.slice(2);
   if (option === '--help' || option === '-h') {
     console.log(usage);

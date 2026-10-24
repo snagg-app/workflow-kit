@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
-import { lstatSync, realpathSync, rmSync, unlinkSync } from 'node:fs';
+import { lstatSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { enterCwd } from './checkout-root.mjs';
 import { providers, sourceProviders } from './agents.mjs';
 import { activeSkills, readProfile } from './project-profile.mjs';
@@ -10,6 +9,7 @@ import { checkDirectory } from './write-guard.mjs';
 import { providerList, skillsOf } from './provider-list.mjs';
 import { context, setup } from './provider.mjs';
 import { keepCommitted } from './keep-committed.mjs';
+import { isMain } from './is-main.mjs';
 
 /** The skills of the kit itself: the canonical copy lives in the kit's .agents/skills. */
 const kitOwnedSkills = ['find-skills', 'spec-review'];
@@ -65,7 +65,7 @@ async function writeSkills(c, { log, profile }) {
 }
 
 // `--cwd PROJECT_DIR` as the argument picks the project; the default is the checkout the command runs in.
-if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
+if (isMain(import.meta.url)) {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log('Usage: node <kit>/scripts/setup-skills.mjs [--cwd PROJECT_DIR] [--refresh]');
     process.exit(0);

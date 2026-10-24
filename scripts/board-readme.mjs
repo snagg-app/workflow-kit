@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { usageOf } from './board-args.mjs';
 import { commandSpecs } from './board-commands.mjs';
+import { isMain } from './is-main.mjs';
 
 const start = '<!-- board-commands:start -->', end = '<!-- board-commands:end -->';
 const cell = text => text.replaceAll('|', '\\|');
@@ -16,7 +17,7 @@ export function commandTable() {
   return ['| Command | Access | What it does |', '| --- | --- | --- |', ...rows].join('\n');
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const file = fileURLToPath(new URL('../README.md', import.meta.url)), readme = readFileSync(file, 'utf8');
   const from = readme.indexOf(start), to = readme.indexOf(end);
   if (from < 0 || to < from) throw new Error(`README.md lacks the markers ${start} and ${end}`);

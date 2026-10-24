@@ -18,6 +18,7 @@ import { linkSkills, materialize } from './provider-links.mjs';
 import { checkDirectory, isKept, localDirectory, moveAside, rename } from './write-guard.mjs';
 import { providerList, providerNamed } from './provider-list.mjs';
 import { readVersions } from './versions.mjs';
+import { isMain } from './is-main.mjs';
 
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
@@ -194,7 +195,7 @@ export async function install(p, c) {
   });
 }
 
-if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
+if (isMain(import.meta.url)) {
   enterCwd();
   const [name, action, ...extra] = process.argv.slice(2);
   const run = { setup, install };

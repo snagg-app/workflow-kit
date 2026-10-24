@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { gitIn } from './git-tool.mjs';
+import { isMain } from './is-main.mjs';
 
 const kit = fileURLToPath(new URL('..', import.meta.url));
 const tests = 'scripts/tests/';
@@ -137,7 +138,7 @@ export function quiet(verbose, command, args, options, { summary, noise, ok, lab
   return result.status ?? 1;
 }
 
-if (process.argv[1] && realpathSync.native(fileURLToPath(import.meta.url)) === realpathSync.native(process.argv[1])) {
+if (isMain(import.meta.url)) {
   enterCwd(); // `--cwd PROJECT_DIR` at any position; file arguments are relative to it
   const { values, positionals: given } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, verbose: { type: 'boolean' }, resume: { type: 'string' }, base: { type: 'string', default: 'origin/main' } } });
   // A project that uses the kit through .vendor/workflow-kit: kit tests follow the kit's own changes, the project map the project's.
