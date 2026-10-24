@@ -82,7 +82,7 @@ function removeAgentWorktree(branch) {
     for (const block of gitAt(projectDirectory, 'worktree', 'list', '--porcelain').split(/\r?\n\r?\n/)) {
       const path = /^worktree (.+)$/m.exec(block)?.[1];
       const parent = path?.replaceAll('\\', '/').replace(/\/[^/]+$/, '').toLowerCase();
-      if (!path || !block.includes(`\nbranch refs/heads/${branch}`) || !agentNames().some(agent => agents[agent].worktrees && parent === `${root}/${agents[agent].worktrees.toLowerCase()}`)) continue;
+      if (!path || !block.split(/\r?\n/).includes(`branch refs/heads/${branch}`) || !agentNames().some(agent => agents[agent].worktrees && parent === `${root}/${agents[agent].worktrees.toLowerCase()}`)) continue;
       const own = path.replaceAll('\\', '/').toLowerCase();
       if (here === own || here.startsWith(`${own}/`)) return `worktree kept: ${path} is the folder of this run`;
       rmSync(path, { recursive: true, force: true });

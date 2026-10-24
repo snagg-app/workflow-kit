@@ -541,6 +541,26 @@ test('merge deletes the whole folder of the agent worktree of the merged branch,
   assert.doesNotMatch(git(checkout, 'worktree', 'list'), /agent-1/);
 });
 
+test('merge deletes only the worktree of the exact merged branch, never one whose branch name only starts with it (#948)', t => {
+  const { checkout, run, show } = mergeFixture(t);
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
+  git(checkout, 'init', '-q', '-b', 'main');
+  git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'start');
+  // agent-1 sorts first, so git lists its block before the one of the merged branch
+  const similar = join(checkout, '.claude/worktrees/agent-1'), exact = join(checkout, '.claude/worktrees/agent-2');
+  git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic-2', similar);
+  git(checkout, 'worktree', 'add', '-q', '-b', 'claude/7-topic', exact);
+  // the bug only shows when git lists the similar branch first: check that order, or the test proves nothing
+  const listed = git(checkout, 'worktree', 'list', '--porcelain').split(/\r?\n/).filter(line => line.startsWith('branch refs/heads/claude/7-topic'));
+  assert.deepEqual(listed, ['branch refs/heads/claude/7-topic-2', 'branch refs/heads/claude/7-topic'], 'git lists the similar branch before the merged one; without this order the test would not catch the bug');
+  writeFileSync(join(similar, 'unpushed'), 'x');
+  show();
+  const merged = run('merge', '7');
+  assert.equal(merged.status, 0, merged.stdout + merged.stderr);
+  assert.equal(existsSync(similar), true, 'the worktree of the similar branch stays with its unpushed work');
+  assert.equal(existsSync(exact), false, 'the worktree of the merged branch is gone');
+});
+
 test('merge keeps a worktree of the merged branch outside the agent folder of this project', t => {
   const { checkout, run, show } = mergeFixture(t);
   const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
