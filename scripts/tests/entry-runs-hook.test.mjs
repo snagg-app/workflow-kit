@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,4 +27,16 @@ test('the real entry file runs the real hook; a plain import runs nothing (#895)
   const imported =spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(hook)})`], { cwd: project, env, input: '{}', encoding: 'utf8' });
   assert.equal(imported.status, 0, imported.stderr);
   assert.equal(imported.stdout, '');
+});
+
+test('the real entry file links the kit in a fresh worktree without .vendor (#896)', t => {
+  const project = realpathSync(mkdtempSync(join(tmpdir(), 'entry-link ')));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  mkdirSync(join(project, '.agents'));
+  copyFileSync(join(kit, 'scripts/kit-entry.mjs'), join(project, entryFile));
+  const env = { ...process.env, WORKFLOW_KIT_DIR: kit, HOME: project, USERPROFILE: project };
+  delete env.CLAUDE_PROJECT_DIR;
+  const run = spawnSync(process.execPath, [join(project, entryFile), 'link'], { cwd: project, env, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.equal(realpathSync(join(project, '.vendor/workflow-kit')), realpathSync(kit));
 });

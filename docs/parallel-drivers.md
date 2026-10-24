@@ -86,9 +86,9 @@ schreiben und per `--body-file` übergeben, nicht per Heredoc.
 Allgemeine Regeln für jeden Driver-Subagenten. Projektspezifische Regeln und die
 Modellwahl stehen hier nicht.
 
-0. **Neuer Worktree.** `board.mjs start` legt den Arbeitsbranch auf die Basis und verknüpft
-   `.vendor/workflow-kit` selbst; ein Treiber richtet nichts von Hand ein. Ruf `start` über den
-   gemeinsamen Kit-Checkout mit `--cwd <Worktree>` auf, wenn die Verknüpfung noch fehlt.
+0. **Neuer Worktree.** Fehlt `.vendor/workflow-kit`, ist der erste Befehl
+   `node .agents/workflow-kit-hook.mjs link` (legt die Verknüpfung an, klont das Kit bei Bedarf);
+   danach `board.mjs start`. Mehr richtet ein Treiber nicht von Hand ein.
 1. **Ein Issue bis „Human review“ treiben.** Früher enden nur bei einem menschlichen
    Gate (Merge, Secrets, Backlog→Ready, Produktentscheidung) oder bei einem Blocker
    (`board.mjs start` meldet BLOCKED oder UNKNOWN, eine Voraussetzung ändert sich;

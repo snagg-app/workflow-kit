@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **Ein Befehl für den frischen Worktree (#896).** Fehlt `.vendor/workflow-kit`, genügt `node .agents/workflow-kit-hook.mjs link`: Die Einstiegsdatei findet das gemeinsame Kit (klont es bei Bedarf) und legt die Verknüpfung an, auch ohne Hooks (Codex, Handarbeit). Der Befehl steht in `AGENT_RULES.md` und `docs/parallel-drivers.md`; der alte Umweg über `start --cwd` ist gestrichen.
+
 - **Hooks laufen wieder über die Einstiegsdatei (#895).** Seit #824 führte `kit-hook.mjs` seinen Hook-Teil nur aus, wenn es selbst gestartet wurde; über `.agents/workflow-kit-hook.mjs` geladen tat es nichts (keine Ausgabe, Exit 0). Jetzt läuft der Hook auch über die Einstiegsdatei, ohne dass Projekte sie neu erzeugen müssen. Ein ungültiges Ereignis gibt dort nun die Usage-Zeile und Exit 2.
 
 - **`kit setup` ändert keine eingecheckte Skill-Datei mehr (#877).** Das Kit läuft als geteilter Checkout immer auf dem neuesten Stand; die eingecheckten Kopien im Projekt sind ein älterer Schnappschuss. Bisher schrieb jeder `kit setup`-Lauf (zum Beispiel beim Bootstrap eines Worktrees) den neuen Stand darüber, und Agenten setzten ihn von Hand zurück. Jetzt bleiben Git-verfolgte Dateien unter `.agents`, `.claude/skills`, `.claude/agents` und `.codex/agents` unverändert (auch gelöschte Skills und geänderte Rechte); der Lauf nennt sie. Neue, nicht eingecheckte Dateien und die Verknüpfungen entstehen weiter. Wer die Kopien bewusst erneuern will (Kit-Update-PR), ruft `kit.mjs setup --refresh` oder `setup-skills.mjs --refresh` auf und committet das Ergebnis. Die Kit-Workflows und `impeccable-release.mjs` nutzen `--refresh`.

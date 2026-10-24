@@ -1,5 +1,6 @@
 // Zweck: Die eine Stelle, die das gemeinsame Kit findet und notfalls klont; zugleich der kleine Einstieg der Hook-Einträge im Projekt.
 // Aufruf: `kit setup` kopiert diese Datei nach .agents/workflow-kit-hook.mjs; die Hook-Einträge rufen `node <Datei> <Event> --agent <Agent>`.
+//         Der erste Befehl im frischen Worktree (auch ohne Hooks): `node .agents/workflow-kit-hook.mjs link` verknüpft `.vendor/workflow-kit` (#896).
 // Nutzen: Fehlt das Kit, fehlt auch kit-hook.mjs; dieser Einstieg braucht nur Node und klont dann selbst, statt dass drei Shells es nachbauen.
 import { spawnSync } from 'node:child_process';
 import { existsSync, realpathSync } from 'node:fs';
@@ -19,12 +20,22 @@ export function sharedKit(commonDir) {
 const git = (...args) => spawnSync('git', ['-c', 'credential.interactive=false', '-c', 'core.hooksPath=/dev/null', ...args],
   { cwd: tmpdir(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true, timeout: 90_000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: 'true', SSH_ASKPASS: 'true' } });
 
+/** `link`: the one first command of a fresh worktree; reports what is in order or what needs a human. */
+async function linkNow(project, kit) {
+  const root = git('-C', project, 'rev-parse', '--show-toplevel').stdout.trim() || project;
+  const { linkKit } = await import(pathToFileURL(path.join(kit, 'scripts/kit-check.mjs')).href);
+  const problem = linkKit(root, kit);
+  console.log(problem || `.vendor/workflow-kit links to ${kit}`);
+  if (problem) process.exitCode = 1;
+}
+
 function main() {
   const [event] = process.argv.slice(2);
-  const start = event === 'SessionStart' || event === 'SubagentStart';
+  const link = event === 'link';
+  const start = link || event === 'SessionStart' || event === 'SubagentStart';
   const project = path.resolve(process.cwd(), process.env.CLAUDE_PROJECT_DIR || '.');
   const own = ['.vendor/workflow-kit/scripts/kit-hook.mjs', 'scripts/kit-hook.mjs'].map(file => path.join(project, file)).find(existsSync);
-  let file = own;
+  let file = link ? '' : own;
   if (!file) {
     const common = git('-C', project, 'rev-parse', '--path-format=absolute', '--git-common-dir').stdout.trim();
     const kit = sharedKit(common);
@@ -33,8 +44,10 @@ function main() {
     if (file && !existsSync(file) && start) git('clone', '--quiet', kitUrl, kit);
     if (!file || !existsSync(file)) {
       if (start) console.log(JSON.stringify({ systemMessage: 'The shared Workflow Kit checkout is missing and could not be cloned (offline?). Clone https://github.com/snagg-app/workflow-kit.git to a folder named workflow-kit next to the project, or set WORKFLOW_KIT_DIR.' }));
+      if (link) process.exitCode = 1;
       return;
     }
+    if (link) return linkNow(project, kit);
   }
   return import(pathToFileURL(file).href);
 }
