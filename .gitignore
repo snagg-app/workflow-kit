@@ -39,6 +39,7 @@ gha-creds-*.json
 /.scratch/
 # Driver worktrees (git worktree add .worktrees/<name>)
 .worktrees/
+/.claude/worktrees/
 /.vendor/workflow-kit
 /.claude/skills/*
 !/.claude/skills/impeccable/
