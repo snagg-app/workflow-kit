@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { snapshotDirectory } from '../provider-ponytail.mjs';
-import { installersDone, run as exec } from './fixtures.mjs';
+import { installersDone, removeTree, run as exec } from './fixtures.mjs';
 
 const root = process.env.WORKFLOW_KIT_TARGET || fileURLToPath(new URL('../../', import.meta.url));
 const windows = process.platform === 'win32';
@@ -20,7 +20,7 @@ const { ponytail: version } = JSON.parse(readFileSync(new URL('../versions.json'
 test('installed hooks run for every event and agent without executing checkout programs', async t => {
   assert.ok(git, 'Git must be available on an absolute PATH');
   const temp = mkdtempSync(path.join(tmpdir(), 'workflow-kit ponytail '));
-  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  t.after(() => removeTree(temp));
   const checkout = path.join(temp, 'checkout with spaces');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
@@ -101,7 +101,7 @@ public class Shim { public static void Main() { System.IO.File.WriteAllText(Syst
 
 test('adapted hooks preserve explicit host and checkout state and drain stdout on EOF or stuck stdin', async t => {
   const temp = mkdtempSync(path.join(tmpdir(), 'ponytail lifecycle '));
-  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  t.after(() => removeTree(temp));
   const snapshot = path.join(temp, 'snapshot'), checkout = path.join(temp, 'checkout');
   cpSync(path.join(root, '.agents/hooks'), snapshot, { recursive: true });
   mkdirSync(path.join(checkout, '.git'), { recursive: true });
@@ -166,7 +166,7 @@ test('adapted hooks preserve explicit host and checkout state and drain stdout o
 
 test('SessionStart installs a missing snapshot on its own and the next call finds it', async t => {
   const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-ensure-'));
-  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  t.after(() => removeTree(temp));
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
@@ -190,7 +190,7 @@ test('SessionStart installs a missing snapshot on its own and the next call find
 
 test('a removed pinned Node makes SessionStart say the hooks are off, other events stay silent', t => {
   const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-stale-'));
-  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  t.after(() => removeTree(temp));
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
@@ -214,7 +214,7 @@ test('a removed pinned Node makes SessionStart say the hooks are off, other even
 
 test('a project without UI files neither warns about nor downloads Impeccable', async t => {
   const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-backend-'));
-  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  t.after(() => removeTree(temp));
   const project = path.join(temp, 'project'), home = path.join(temp, 'home');
   assert.equal(spawnSync(git, ['init', '--quiet', project]).status, 0);
   for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
@@ -232,7 +232,7 @@ test('a project without UI files neither warns about nor downloads Impeccable', 
 
 test('an installation nobody used for 30 days is removed, the one a hook used stays', async t => {
   const temp = mkdtempSync(path.join(tmpdir(), 'ponytail-prune-'));
-  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  t.after(() => removeTree(temp));
   const checkout = path.join(temp, 'checkout'), home = path.join(temp, 'home'), base = path.join(home, '.ponytail/workflow-kit');
   for (const from of ['.agents/hooks', '.agents/skills/ponytail'])
     cpSync(path.join(root, from), path.join(checkout, from), { recursive: true, dereference: true });
