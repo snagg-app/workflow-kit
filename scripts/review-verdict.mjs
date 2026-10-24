@@ -63,7 +63,7 @@ function headSetAt(pr, log) {
 
 /** Checks the head's jobs and returns the live ones. */
 function judgeChecks(ctx, s) {
-  const { pr, settings, commit, isOptionalCheck } = ctx;
+  const { pr, settings, commit, isOptionalCheck, isIgnoredCheck } = ctx;
   const { lines, waiting, reasons, baseReasons } = s;
   const baseChecks = updateBranchChecks(settings);
   const contexts = commit.statusCheckRollup?.contexts ?? { totalCount: 0, nodes: [] };
@@ -95,7 +95,7 @@ function judgeChecks(ctx, s) {
       continue;
     }
     // A check the project lists in "ignoredChecks" is shown and never decides (#868).
-    if ((settings.ignoredChecks ?? []).includes(label)) {
+    if (isIgnoredCheck(check)) {
       lines.push(`check ${label}: ${pending ? 'pending' : check.conclusion ?? check.state} [ignored: listed in ignoredChecks]`);
       continue;
     }
@@ -210,7 +210,7 @@ function judgeBlockers({ pr, facts, now, contexts, isOptionalCheck }, s) {
 }
 
 /** A skip while Draft says nothing about the Ready head: wait for the run after Ready. */
-function judgeDraftSkips({ pr, now, contexts, isOptionalCheck }, { lines, waiting }) {
+function judgeDraftSkips({ pr, now, contexts, isOptionalCheck, isIgnoredCheck }, { lines, waiting }) {
   // A pull_request run skipped while the PR was still Draft (the usual `!draft` job guard) executed nothing, so it says
   // nothing about the Ready head. Ready normally starts a fresh run; until the workflow has an executed run created after
   // Ready, its path is missing, not green. An executed Draft run does not exempt the workflow (an unguarded job next to a
@@ -232,7 +232,8 @@ function judgeDraftSkips({ pr, now, contexts, isOptionalCheck }, { lines, waitin
   const draftStart = convertEvent || (Number.isFinite(readyEvent) ? Date.parse(pr.createdAt) : -Infinity);
   assert.ok(!Number.isNaN(draftStart), 'The PR creation time is unreadable');
   const readyBoundary = Math.max(readyEvent, draftStart + 10_000);
-  const runs = contexts.nodes.filter(check => orderable(check) && !isOptionalCheck(check));
+  // A check listed in "ignoredChecks" never decides (#868), so its Draft skip waits for nothing either (#887).
+  const runs = contexts.nodes.filter(check => orderable(check) && !isOptionalCheck(check) && !isIgnoredCheck(check));
   const startedAt = check => Date.parse(check.checkSuite?.createdAt);
   const flowOf = check => JSON.stringify([check.checkSuite?.app?.slug, check.checkSuite?.workflowRun?.workflow?.id]);
   // Inside the window only a skip is ambiguous (the Draft guard skips); a run that executed after the Ready event is a Ready run.
@@ -408,6 +409,7 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
   const pushed = headPushed(pr);
   const ctx = { facts, settings, pr, now, graceMinutes, dismissStale, pushed, isOptional, commit: pr.commits.nodes[0].commit,
     isOptionalCheck: check => isOptional(check.checkSuite?.app?.slug ?? check.creator?.login),
+    isIgnoredCheck: check => (settings.ignoredChecks ?? []).includes(check.name ?? check.context),
     after: time => Date.parse(time) >= pushed };
   const s = { lines, waiting: [], reasons: [], baseReasons: new Set(), failed: false }; // reasons: short causes for the FAILED line; the detail lines stay in `lines`
   const stalled = since => now - since > stallMinutes * 60_000; // false for Infinity
