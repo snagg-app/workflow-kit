@@ -21,13 +21,18 @@ import { isMain } from './is-main.mjs';
 
 const norm = path => resolve(path).replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
 
-/** Does a running process (other than this script) have `path` in its command line? `listing` is {ok, out} of the process list.
- * An unreadable list (ok:false) counts as busy: we cannot prove the worktree is idle. */
-export function busyFrom(listing, path) {
+/** Does a running process (other than this script and the shells that started it) have `path` in its command line?
+ * `listing` is {ok, out}: one `pid ppid command line` per line. The starting shell (`bash -c "node … --only <path>"`) carries the path too,
+ * so this script and all its ancestors are skipped. An unreadable list (ok:false) counts as busy: we cannot prove the worktree is idle. */
+export function busyFrom(listing, path, self = process.pid) {
   if (!listing.ok) return true;
   const here = norm(path);
-  return listing.out.split(/\r?\n/).filter(line => !line.startsWith(`${process.pid}\t`) && !line.trim().startsWith(`${process.pid} `))
-    .some(line => line.replaceAll('\\', '/').toLowerCase().includes(here));
+  const rows = listing.out.split(/\r?\n/).map(line => line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/)).filter(Boolean)
+    .map(([, pid, ppid, command]) => ({ pid: Number(pid), ppid: Number(ppid), command }));
+  const parent = new Map(rows.map(row => [row.pid, row.ppid]));
+  const mine = new Set([self]);
+  for (let pid = parent.get(self); pid && !mine.has(pid); pid = parent.get(pid)) mine.add(pid);
+  return rows.some(row => !mine.has(row.pid) && row.command.replaceAll('\\', '/').toLowerCase().includes(here));
 }
 
 /** Number of commits not on any remote, from the rev-list result {ok, out}. A failed or unreadable count is null (unknown), never 0. */
@@ -135,8 +140,8 @@ ${error.message}`);
   const gh = (() => { try { return externalTool('gh', root); } catch { return null; } })();
   const closedHeads = !gh ? new Set() : mergedHeads((await exec(gh, ['pr', 'list', '--state', 'merged', '--limit', '1000', '--json', 'headRefOid,mergedAt'])).out);
   const processes = process.platform === 'win32'
-    ? (await exec({ file: 'powershell.exe', env: process.env }, ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }']))
-    : (await exec({ file: 'ps', env: process.env }, ['-eo', 'pid,args']));
+    ? (await exec({ file: 'powershell.exe', env: process.env }, ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)`t$($_.ParentProcessId)`t$($_.CommandLine)" }']))
+    : (await exec({ file: 'ps', env: process.env }, ['-eo', 'pid=,ppid=,args=']));
 
   await pool(worktrees.filter(w => !w.main && !w.current), async w => {
     const ref = w.branch ? `refs/heads/${w.branch}` : w.head;
