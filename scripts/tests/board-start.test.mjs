@@ -243,7 +243,7 @@ for (const [setup, expected] of [[undefined, ''], ['echo "setup on $BRANCH" > se
 }
 
 // #938: start installs the dependencies itself when the project has a setup, so the "node_modules fehlt, nichts installiert" hint would be wrong there.
-for (const [setup, hinted] of [['mkdir -p node_modules', false], [undefined, true]]) {
+for (const [setup, hinted] of [['echo ran > setup-ran', false], [undefined, true]]) {
   test(`start ${setup ? 'with a setup shows no node_modules hint' : 'without setup keeps the node_modules hint'} (#938)`, t => {
     const { run, writeIssue, file, text } = startFixture(t);
     writeFileSync(file('package.json'), JSON.stringify({ name: 'fixture', dependencies: { left: '1.0.0' } }));
@@ -252,7 +252,7 @@ for (const [setup, hinted] of [['mkdir -p node_modules', false], [undefined, tru
     const result = run('start', '1', '--session', 'S1');
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(/node_modules fehlt/.test(result.stdout + result.stderr), hinted, result.stdout + result.stderr);
-    assert.equal(existsSync(file('node_modules')), Boolean(setup));
+    assert.equal(existsSync(file('setup-ran')), Boolean(setup));
   });
 }
 
