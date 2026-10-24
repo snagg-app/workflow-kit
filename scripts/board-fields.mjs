@@ -205,4 +205,4 @@ function applyFields(issue, plans) {
   return [...notes, ...written];
 }
 
-export { dropFieldsCache, selectField, resolveOption, writeOption, set, planFields, setField, fieldWords };
+export { dropFieldsCache, selectField, resolveOption, writeOption, guardOption, set, planFields, setField, fieldWords };

@@ -23,6 +23,25 @@ test('new permits initial Backlog for a spec but refuses any other initial statu
   assert.equal(run(...args).status, 0, 'creating a spec in Backlog stays supported');
 });
 
+test('new applies the Status guard of field before creating: Ready with an open decision wait is refused (#944)', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const write = (file, data) => writeFileSync(join(checkout, file), typeof data === 'string' ? data : JSON.stringify(data));
+  write('test-milestones.json', [{ number: 4, title: '0.1.1' }]);
+  write('test-labels.json', [{ name: 'enhancement' }]);
+  write('create-response.json', { number: 1, node_id: 'N1', html_url: 'https://github.com/test/example/issues/1' });
+  write('backlink-1.json', { number: 1, milestone: { title: '0.1.1' }, labels: [{ name: 'enhancement' }] });
+  writeIssue(issue('Backlog'));
+  const args = ['new', '--title', 'Titel', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--priority', 'low', '--status', 'Ready'];
+  write('body.md', 'Text\n\nWartet bis: Entscheidung Milan');
+  const refused = run(...args);
+  assert.equal(refused.status, 2, refused.stdout + refused.stderr);
+  assert.match(refused.stdout, /cannot be Ready.*decision/i);
+  assert.equal(existsSync(join(checkout, 'created.json')), false, 'nothing is created');
+  assert.equal(existsSync(join(checkout, 'mutations')), false, 'nothing is written');
+  write('body.md', 'Text');
+  assert.equal(run(...args).status, 0, 'without the wait, Ready is created');
+});
+
 
 test('new checks every required value before creating, reads all values back and starts the issue on request', t => {
   const { checkout, run, writeIssue } = fixture(t);
