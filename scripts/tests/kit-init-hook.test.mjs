@@ -103,6 +103,17 @@ test('the shared kit is found next to the main checkout, also from a worktree', 
   assert.equal(realpathSync.native(join(worktree, '.vendor/workflow-kit')), realpathSync.native(wanted));
 });
 
+// #863: Claude's SubagentStart carries the cwd of the parent, so the subagent's own fresh worktree is found through the worktree list.
+test('a subagent start links the fresh worktrees of the project, and changes nothing else in them', async t => {
+  const f = await shared(t, 'kit-subagent-worktree ');
+  const worktree = join(f.temp, 'agent-1');
+  await f.git(f.project, 'worktree', 'add', '--quiet', '--detach', worktree, 'HEAD');
+  const result = await call('SubagentStart', f.project, { ...f.env, CLAUDE_PROJECT_DIR: f.project }, { cwd: f.project });
+  assert.equal(result.status, 0, result.stderr);
+  for (const dir of [f.project, worktree]) assert.equal(realpathSync.native(join(dir, '.vendor/workflow-kit')), realpathSync.native(f.kit), dir);
+  assert.equal(await f.git(worktree, 'status', '--porcelain'), '', 'the link is ignored');
+});
+
 test('work in the shared kit is never touched, only reported', async t => {
   const f = await shared(t, 'kit-guard ');
   await f.trial();
@@ -288,7 +299,8 @@ test('a missing node_modules is reported with the project setup and nothing is i
 
   const manifest = JSON.stringify({ name: 'x', devDependencies: { a: '1' } }, null, 2);
   await reported(await project(manifest), 'a worktree without node_modules is reported');
-  assert.match(await reported(await project(manifest, 'pnpm run setup:all'), 'the setup field is honored'), /pnpm run setup:all/);
+  assert.match(await reported(await project(manifest, 'pnpm run setup:all'), 'the setup field is honored'), /run `pnpm run setup:all`/);
+  assert.match(await reported(await project(manifest), 'without a setup field the message still names a command'), /run `npm ci`/);
 
   const installed = await project(manifest);
   mkdirSync(join(installed, 'node_modules'));

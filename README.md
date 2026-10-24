@@ -100,7 +100,7 @@ file, means committed outputs were stale.
 Every hook of Claude and Codex is a short call of `.agents/workflow-kit-hook.mjs <Event> --agent <claude|codex>`
 (hook JSON on stdin, answer on stdout), plus the "Node is missing" notice at SessionStart and SubagentStart. That file is a copy of
 `scripts/kit-entry.mjs` that `kit setup` writes: it is the one place that finds the shared kit and clones it when missing
-(SessionStart and SubagentStart only), then hands over to `scripts/kit-hook.mjs`. Hook notices follow `language` of the profile. The module holds all hook logic and reads the Ponytail, Impeccable and
+(SessionStart and SubagentStart only), then hands over to `scripts/kit-hook.mjs`. Hook notices follow `language` of the profile. SessionStart and SubagentStart also link `.vendor/workflow-kit` in every other worktree of the project (a subagent with `isolation: worktree` gets no session hook, and its hook call carries the parent's cwd); `board.mjs start` repairs a missing link itself and says so in one line. No `WorktreeCreate` hook: it replaces the host's worktree creation, which is too much for a link. The module holds all hook logic and reads the Ponytail, Impeccable and
 minimum Node version from `scripts/versions.json`, the only place they are written (the CI Node stays in `.node-version`). The hooks call personal snapshots.
 They install and update themselves: at SessionStart the module returns at once and starts both installers in a
 detached process (one run per machine and function through the provider's own lock, log in

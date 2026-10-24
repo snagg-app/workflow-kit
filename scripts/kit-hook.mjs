@@ -12,7 +12,7 @@ import { hookEvents } from './hooks.mjs';
 import { readVersions } from './versions.mjs';
 import { projectRoot } from './checkout-root.mjs';
 import { asking, gitIn, patient } from './git-tool.mjs';
-import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
+import { kitCheck, kitEnvironment, linkWorktrees, modulesCheck } from './kit-check.mjs';
 import { locate, markUsed } from './provider.mjs';
 import { featureProviders, providerList, providerNamed } from './provider-list.mjs';
 import { projectFeatures, readProfileLenient, textsFor } from './project-profile.mjs';
@@ -125,6 +125,8 @@ export async function runHook({ event, agent, env = process.env, stdin = '', nod
     const updated = new Set();
     for (const dir of new Set([project, typeof input.cwd === 'string' && input.cwd].filter(Boolean)))
       kitCheck(dir, { ...kitEnvironment(env), update: event === 'SessionStart' && input.source !== 'compact', git: hookGit, updated }).messages.forEach(say);
+    // #863: the hook's cwd is the parent's, so a subagent's fresh worktree is found through the project's worktree list.
+    linkWorktrees(project, { ...kitEnvironment(env), git: hookGit }).forEach(say);
     if (event === 'SessionStart') {
       modulesCheck(project, { git: hookGit }).forEach(say);
       if (fresh) spawn(process.execPath, [self, '--install', ...Object.keys(on).filter(name => on[name])], { detached: true, stdio: 'ignore', windowsHide: true, env }).unref();

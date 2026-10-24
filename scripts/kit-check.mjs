@@ -96,6 +96,26 @@ function checkKit(git, dir, update, say, updated, shared) {
   return kit;
 }
 
+/**
+ * #863: Claude's SubagentStart gives the cwd of the parent, not of the worktree a subagent works in (`isolation: worktree`), and a session hook never runs there.
+ * So the hook links every other existing worktree of the project that names the kit, link only (nothing is fast-forwarded in a checkout that belongs to someone else).
+ * Returns the problems that need a human.
+ */
+export function linkWorktrees(dir, { git: run = gitIn(patient, dir), kit: shared } = {}) {
+  const git = asking(run), problems = [];
+  const common = git(dir, 'rev-parse', '--path-format=absolute', '--git-common-dir').out;
+  if (!common) return problems;
+  const kit = shared ?? sharedKit(common);
+  for (const line of git(dir, 'worktree', 'list', '--porcelain').out.split('\n')) {
+    const root = line.startsWith('worktree ') ? line.slice(9) : '';
+    // The kit's own repository runs its own scripts, a project without any kit hook is none of our business.
+    if (!root || !isDirectory(root) || real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || !mentionsKit(root)) continue;
+    const problem = linkKit(root, kit);
+    if (problem) problems.push(problem);
+  }
+  return problems;
+}
+
 /** Commit of the shared kit read from its files (no process); '' when unreadable, so a stamp never matches by accident. */
 function kitHead(kit) {
   try {
@@ -144,5 +164,5 @@ export function modulesCheck(dir, { git: run = gitIn({}, dir) } = {}) {
   const manifest = read('package.json');
   if (![manifest?.dependencies, manifest?.devDependencies].some(list => list && typeof list === 'object' && Object.keys(list).length)) return [];
   const profile = readProfileLenient(root);
-  return [textsFor(profile).modulesMissing((profile.setup ?? '').replace(/[^A-Za-z0-9 /._:=@-]/g, ''))];
+  return [textsFor(profile).modulesMissing((profile.setup || 'npm ci').replace(/[^A-Za-z0-9 /._:=@-]/g, ''))];
 }
