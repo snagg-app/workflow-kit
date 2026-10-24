@@ -6,7 +6,7 @@ import { fixture, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
 
 test('ready --local takes the head of the checkout and still needs the PR to show exactly it', t => {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, reset } = fixture(t);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: checkout, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
   git('init', '-q');
   git('commit', '--allow-empty', '-q', '-m', 'pushed');
@@ -14,7 +14,7 @@ test('ready --local takes the head of the checkout and still needs the PR to sho
   const quick = ['--attempts', '2', '--interval', '0.01'];
   const mutations = () => existsSync(join(checkout, 'mutations')) ? readFileSync(join(checkout, 'mutations'), 'utf8').split('\n').filter(Boolean).length : 0;
   const prepare = changes => {
-    for (const file of ['mutations', 'pr-rest-reads.json', 'ready-noop', 'fail']) rmSync(join(checkout, file), { force: true });
+    reset();
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify({ id: 'PR7', number: 7, state: 'OPEN', isDraft: true, isCrossRepository: false,
       headRefOid: PUSHED, headRepository: { nameWithOwner: 'test/example' }, ...changes }));
   };
@@ -43,15 +43,15 @@ test('ready --local takes the head of the checkout and still needs the PR to sho
 });
 
 test('ready marks a Draft PR ready only for the expected pushed commit and never trusts stale metadata', t => {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, reset, restOverlays } = fixture(t);
   const NEW = 'c0ffee'.repeat(6) + 'abcd', OLD = 'decade'.repeat(6) + 'abcd', OTHER = 'facade'.repeat(6) + 'abcd';
   const quick = ['--attempts', '3', '--interval', '0.01'];
   const mutations = () => existsSync(join(checkout, 'mutations')) ? readFileSync(join(checkout, 'mutations'), 'utf8').split('\n').filter(Boolean).length : 0;
   const prepare = (changes = {}, reads) => {
-    for (const file of ['mutations', 'pr-rest-reads.json', 'ready-noop', 'fail']) rmSync(join(checkout, file), { force: true });
+    reset();
     writeFileSync(join(checkout, 'pr.json'), JSON.stringify({ id: 'PR7', number: 7, state: 'OPEN', isDraft: true, isCrossRepository: false,
       headRefOid: NEW, headRepository: { nameWithOwner: 'test/example' }, ...changes }));
-    if (reads) writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify(reads));
+    if (reads) restOverlays(reads);
   };
   // The verdict and the write count carry the behavior; the diagnostic wording is free to change.
   const refused = (changes, reads, label) => {

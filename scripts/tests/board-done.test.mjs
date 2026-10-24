@@ -17,7 +17,7 @@ test('done refuses a spec before acceptance comments or body changes', t => {
 
 // A checkout with one commit, which the Draft PR 7 shows as its head, and the files the fake gh answers from.
 function delivery(t, fixtureOf) {
-  const { checkout, run, writeIssue, env } = fixtureOf(t);
+  const { checkout, run, writeIssue, env, restOverlays } = fixtureOf(t);
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: checkout, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
   git('init', '-q', '-b', 'work');
   git('config', 'user.name', 't'); // board.mjs commits its merge with the checkout's own identity
@@ -40,7 +40,7 @@ function delivery(t, fixtureOf) {
   writeFileSync(file('backlink-comments-1.json'), JSON.stringify([{ id: 1, body: 'https://github.com/test/example/pull/7', html_url: 'u' }]));
   writeFileSync(file('result.md'), 'Alles geliefert.\n\n### Retro\n\n- Keine Funde\n');
   writeIssue({ ...issue('In progress'), assignees: { nodes: [{ login: 'worker' }] } });
-  return { run, writeIssue, head, file, text, json, git, checkout, env };
+  return { run, writeIssue, restOverlays, head, file, text, json, git, checkout, env };
 }
 
 test('done prepares and hands off the review status without rewriting the review option on resume (#593)', t => {
@@ -469,13 +469,13 @@ test('done closes a PR without a change, puts the result on the issue and moves 
 
 for (const path of ['fix.txt', ' ']) test(`done refuses stale zero-file metadata when immutable Git contains a pushed change (${JSON.stringify(path)})`, t => {
   if (path === ' ' && process.platform === 'win32') return t.skip('Win32 Git rejects whitespace-only paths; Linux CI covers this Git-diff regression');
-  const { run, file, text, json, git } = delivery(t, handoffFixture);
+  const { run, file, text, json, git, restOverlays } = delivery(t, handoffFixture);
   writeFileSync(file(path), 'real fix');
   git('add', path);
   git('commit', '-q', '-m', 'fix');
   git('push', '-q', 'origin', 'work');
   showPr(file, json, { headRefOid: git('rev-parse', 'HEAD'), changedFiles: 0 });
-  writeFileSync(file('pr-rest-reads.json'), JSON.stringify([{ changedFiles: 0 }, { changedFiles: 1 }]));
+  restOverlays([{ changedFiles: 0 }, { changedFiles: 1 }]);
   const result = run('done', '1', 'result.md');
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^FAILED\nblocker:/);
@@ -493,8 +493,8 @@ for (const [name, first, second] of [
   ['unreadable base commit', { baseRefOid: 'b'.repeat(40) }, {}],
   ['head differs from checkout', { headRefOid: 'b'.repeat(40) }, {}],
 ]) test(`done leaves issue and PR untouched for no-change ${name}`, t => {
-  const { run, file, text, json } = delivery(t, handoffFixture);
-  writeFileSync(file('pr-rest-reads.json'), JSON.stringify([{ changedFiles: 0, ...first }, second]));
+  const { run, file, text, json, restOverlays } = delivery(t, handoffFixture);
+  restOverlays([{ changedFiles: 0, ...first }, second]);
   const result = run('done', '1', 'result.md');
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^FAILED\nblocker:/);

@@ -30,7 +30,7 @@ test('board check exits 0 only for startable issues: 1 blocked, 2 unknown (#593)
 
 
 test('an issue held only by open predecessors is STACKABLE on the one open, ready PR that delivers them all, else BLOCKED', t => {
-  const { checkout, run, writeIssue } = fixture(t);
+  const { checkout, run, writeIssue, graphqlReads, reset } = fixture(t);
   const pr = (number, changes) => ({ number, state: 'OPEN', isDraft: false, isCrossRepository: false, repository: { nameWithOwner: 'test/example' }, baseRefName: 'release/0.1.1', headRefName: `claude/${number}-base`, headRefOid: 'ba5e0001', ...changes });
   const open = (number, prs, changes) => predecessor('OPEN', null, prs, { number, repository: { nameWithOwner: 'test/example' }, ...changes });
   const check = (...predecessors) => { writeIssue(issue('Ready', predecessors)); return run('check', '1'); };
@@ -118,10 +118,10 @@ test('an issue held only by open predecessors is STACKABLE on the one open, read
     rejected('no linked open stack', status);
   }
   writeFileSync(join(checkout, 'stacks.json'), JSON.stringify(stack([5, 6, 7])));
-  // The upper head moves after the proof was gathered (4th PR read, inside the guarded write): the proof belongs to the old head.
-  writeFileSync(join(checkout, 'pr-reads.json'), JSON.stringify([{}, {}, {}, { headRefOid: 'abcdef9999' }]));
+  // The upper head moves after the proof was gathered (5th PR read of the series, the lower layers count too, inside the guarded write): the proof belongs to the old head.
+  graphqlReads([...Array(4).fill({}), { headRefOid: 'abcdef9999' }]);
   rejected('a head that moved during handoff');
-  rmSync(join(checkout, 'pr-reads.json'));
+  reset();
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr(upper)));
   const handed = run('handoff', '1', '7');
   assert.equal(handed.status, 0, handed.stdout + handed.stderr);

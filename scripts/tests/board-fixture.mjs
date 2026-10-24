@@ -15,6 +15,10 @@ export const test = (name, body) => nodeTest(name, t => { console.error(`start: 
 export const handoffComment = changes => ({ id: 900, user: { login: 'worker', type: 'User' }, body: '## Übergabe\n\nHead: abcdef1\n\n### Retro\n\n- Keine Funde',
   html_url: 'h', created_at: '2999-01-01T00:00:00Z', updated_at: '2999-01-01T00:00:00Z', ...changes });
 
+// The files that steer fake-gh.mjs or record what it saw, apart from the PR snapshot itself; reset() removes them all, so a new one is listed here only.
+const CONTROL_FILES = ['calls', 'merges', 'mutations', 'pr-reads.json', 'pr-rest-reads.json', 'updated-pr.json', 'compare.json', 'dependents.json', 'update-fails',
+  'delete-fails', 'delete-gone', 'auto-delete', 'merge-403', 'merge-async-late', 'merge-async-fails', 'async-merges', 'ready-noop', 'fail'];
+
 /** Isolated checkout with paginated GitHub responses and a record of every mutation. */
 export function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'workflow-board-'));
@@ -40,6 +44,12 @@ export function fixture(t) {
     },
     // What board.mjs printed in the first `ms` milliseconds, for a command that waits on purpose.
     runBriefly: (ms, ...args) => runBoard({ cwd: checkout, env: { ...process.env, PATH: bin, ...env }, args, timeout: ms }).stdout,
+    // The next GraphQL reads of the PR: each read applies the next overlay, the last one stays (a head that catches up after a push).
+    graphqlReads: overlays => writeFileSync(join(checkout, 'pr-reads.json'), JSON.stringify(overlays)),
+    // The same for the REST read of the PR (merge state, changed files, update time), a separate series.
+    restOverlays: overlays => writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify(overlays)),
+    // Back to the start: no series, no recorded call or mutation, no switch of the fake gh.
+    reset: () => { for (const file of CONTROL_FILES) rmSync(join(checkout, file), { force: true }); },
     writeIssue: issue => writeFileSync(join(checkout, 'issue.json'), JSON.stringify(issue)),
     // The GraphQL queries the fake gh received since the last call of this, oldest first (GitHub charges a query by what it asks for).
     queries: () => {
@@ -98,7 +108,7 @@ export const handoffPr = changes => ({
 
 /** What the reviews tests share: a checkout, PR snapshots, Codex traces and `look` (write the snapshot, run `reviews`). */
 export function reviewsFixture(t) {
-  const { checkout, run, runBriefly, queries } = fixture(t);
+  const { checkout, run, runBriefly, queries, graphqlReads, restOverlays, reset } = fixture(t);
   const minutesAgo = minutes => new Date(Date.now() - minutes * 60_000).toISOString();
   const codexUser = { login: 'chatgpt-codex-connector[bot]', type: 'Bot' };
   const check = (status, conclusion = status === 'COMPLETED' ? 'SUCCESS' : null) => ({ __typename: 'CheckRun', name: 'CI', status, conclusion });
@@ -142,5 +152,5 @@ export function reviewsFixture(t) {
   };
   const readyHead = (contexts, extra) => ({ ...pr({ contexts, pushed: 10 }), isDraft: false, createdAt: minutesAgo(30), readyEvents: { nodes: [{ createdAt: minutesAgo(5) }] }, ...extra });
   const oldTraces = { comments: [codex('Completed', 0)] };
-  return { checkout, run, runBriefly, queries, minutesAgo, job, draftRun, readyHead, oldTraces, codexUser, check, suite, pr, codex, reaction, look, reviews };
+  return { checkout, run, runBriefly, queries, graphqlReads, restOverlays, reset, minutesAgo, job, draftRun, readyHead, oldTraces, codexUser, check, suite, pr, codex, reaction, look, reviews };
 }

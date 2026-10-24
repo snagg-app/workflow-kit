@@ -308,12 +308,12 @@ test('handoff dismisses a stale change request of an optional reviewer, but no o
 
 
 test('handoff reads an undetermined merge state again before it gives up', t => {
-  const { checkout, run, writeIssue, queries } = handoffFixture(t);
+  const { checkout, run, writeIssue, queries, restOverlays } = handoffFixture(t);
   writeIssue({ ...issue('Automated review'), assignees: { nodes: [{ login: 'worker' }] } });
   writeFileSync(join(checkout, 'handoff-fixture'), '');
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr({ mergeStateStatus: 'UNKNOWN' })));
   // The first read says UNKNOWN, the retry (REST, #882: no GraphQL query) says CLEAN.
-  writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify([{ mergeStateStatus: 'CLEAN' }]));
+  restOverlays([{ mergeStateStatus: 'CLEAN' }]);
   const result = run('handoff', '1', '7', '--interval', '0');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /HANDOFF #1 PR #7/);
@@ -323,10 +323,10 @@ test('handoff reads an undetermined merge state again before it gives up', t => 
 
 
 test('handoff lists merge conflicts that GitHub reports only after an undetermined state', t => {
-  const { checkout, run, writeIssue } = handoffFixture(t);
+  const { checkout, run, writeIssue, restOverlays } = handoffFixture(t);
   writeIssue({ ...issue('Automated review'), assignees: { nodes: [{ login: 'worker' }] } });
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr({ mergeStateStatus: 'UNKNOWN' })));
-  writeFileSync(join(checkout, 'pr-rest-reads.json'), JSON.stringify([{ mergeStateStatus: 'DIRTY' }]));
+  restOverlays([{ mergeStateStatus: 'DIRTY' }]);
   const result = run('handoff', '1', '7', '--interval', '0');
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /blocker: merge conflicts/);
