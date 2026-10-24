@@ -49,7 +49,7 @@
       "assignees(first:10){nodes{login}} comments(last:10){nodes{createdAt url body}} labels(first:20){totalCount nodes{name}}",
       "blockedBy(first:100){totalCount nodes{id number state stateReason repository{nameWithOwner}}}",
       "issueFieldValues(first:100){nodes{...on IssueFieldSingleSelectValue{name field{...on IssueFieldSingleSelect{name}}}}}",
-      "closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{id number url state body merged mergedAt updatedAt mergeStateStatus baseRefName headRefName repository{nameWithOwner}}}",
+      "closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{id number url state body merged mergedAt updatedAt mergeStateStatus baseRefName headRefName headRefOid repository{nameWithOwner}}}",
       "projectItems(first:100){nodes{id project{id} updatedAt status:fieldValueByName(name:\"Status\"){...on ProjectV2ItemFieldSingleSelectValue{name}}",
       "priority:fieldValueByName(name:\"Priority\"){...on ProjectV2ItemFieldSingleSelectValue{name}}",
       "base:fieldValueByName(name:\"Zielrelease\"){...on ProjectV2ItemFieldSingleSelectValue{name} ...on ProjectV2ItemFieldTextValue{text}}}}}}}}"

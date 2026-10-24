@@ -248,8 +248,8 @@ async function merge() {
     if (layer !== number) {
       const lower = readMerged(layer, true);
       notes.push(`${lower.state === 'MERGED' ? 'MERGED' : `NOT MERGED (${lower.state})`} #${layer} head ${pr.headRefOid} merge commit ${lower.mergeCommit?.oid}`);
-      if (lower.state !== 'MERGED') unmerged = true;
-      else dropBranch(pr);
+      if (lower.state !== 'MERGED') { unmerged = true; continue; } // #1001: the issues of a layer that is not merged stay open
+      dropBranch(pr);
     }
     // Whatever the trunk is: GitHub or the project's workflow closes the issues of a PR merged into the trunk, but not those of the upper layers (their base was a layer branch, #418).
     // A layer's issue that is still open after a short re-read (#397) is closed here, with a pointer to the merged PR.

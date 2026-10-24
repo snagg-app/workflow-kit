@@ -481,6 +481,7 @@ test('merge --stack gates every layer, merges only the top through merge-async a
   assert.equal(stayed.status, 2, stayed.stdout + stayed.stderr);
   assert.match(stayed.stdout, /^NOT MERGED \(OPEN\) #5 /m);
   assert.deepEqual(calls(), ['merge-async', 'delete claude/7-topic']);
+  assert.doesNotMatch(stayed.stdout, /issue #1 \(PR #5\)/, 'the issue of an unmerged layer is not handled at all (#1001)');
 
   // On any trunk (a release branch too, #418) an issue that stays open is closed as completed (once, for the issue both layers deliver); one GitHub closed itself is left alone (#397).
   for (const [trunk, label, state, expected] of [['main', 'open', 'open', ['close 1 state_reason=completed']], ['main', 'closed', 'closed', []], ['release/0.1.1', 'open', 'open', ['close 1 state_reason=completed']]]) {

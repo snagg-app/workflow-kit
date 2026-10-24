@@ -25,7 +25,7 @@ function sweep() {
     issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{id number
     projectItems(first:100){nodes{id project{id} status:fieldValueByName(name:"Status"){...on ProjectV2ItemFieldSingleSelectValue{name}}}}
     labels(first:20){totalCount nodes{name}}
-    closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{number url state merged mergedAt baseRefName mergeStateStatus headRefName repository{nameWithOwner}}}}}}}`,
+    closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{number url state merged mergedAt baseRefName mergeStateStatus headRefOid headRefName repository{nameWithOwner}}}}}}}`,
     { q: `repo:${project.repository} is:issue is:open`, ...(after && { after }) });
     for (const issue of search.nodes) try {
       if (isSpec(issue)) continue;
@@ -60,8 +60,8 @@ function sweep() {
       if (!pr) continue;
       plan ??= resolveOption('Status', statuses.automatedReview);
       // The comment first: a failed comment must not leave an issue out of Human review that nobody was told about.
-      // A status write that failed in an earlier run left the comment behind: write it once, like the delivered comment.
-      const body = texts.conflict(pr.url, statuses);
+      // A status write that failed in an earlier run left the comment behind: write it once per PR head, like the delivered comment (#1001: a later conflict has another head and is told again).
+      const body = texts.conflict(pr.url, statuses, pr.headRefOid?.slice(0, 7));
       if (!restAll(`repos/${project.repository}/issues/${issue.number}/comments`).some(comment => comment.body === body))
         graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id, body });
       writeOption(issue, plan);
