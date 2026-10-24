@@ -31,15 +31,18 @@ test('a kit lock released during the wait does not stop start, the hook stays si
   // Another run holds the kit lock (a fresh lock directory without a pid: alive by age, not abandoned).
   const lock = join(kit, '.git/kit-update.lock');
   mkdirSync(lock);
-  // A separate process releases the lock after 800 ms, while this process waits synchronously.
+  // A separate process releases the lock once this test writes the marker, i.e. after the hook check below.
+  // No timer: a wall-clock delay raced the hook check under load (the git calls of kitCheck can take seconds).
+  const marker = join(temp, 'hook-done');
   const releaserFile = join(temp, 'release-lock.mjs');
-  writeFileSync(releaserFile, "import { rmSync } from 'node:fs';\nsetTimeout(() => rmSync(process.argv[2], { recursive: true, force: true }), 800);\n");
-  const releaser = spawn(process.execPath, [releaserFile, lock], { detached: true, stdio: 'ignore' });
+  writeFileSync(releaserFile, "import { existsSync, rmSync } from 'node:fs';\nconst [lock, marker] = process.argv.slice(2);\nconst deadline = Date.now() + 60_000;\nconst timer = setInterval(() => { if (existsSync(marker) || Date.now() > deadline) { clearInterval(timer); rmSync(lock, { recursive: true, force: true }); } }, 10);\n");
+  const releaser = spawn(process.execPath, [releaserFile, lock, marker], { detached: true, stdio: 'ignore' });
   releaser.unref();
 
   const hook = kitCheck(project, { kit, update: true, fresh: 0 });
   assert.equal(hook.stuck, true, 'the hook does not wait: the held lock is reported as stuck at once');
   assert.deepEqual(hook.messages, []);
+  writeFileSync(marker, '');
 
   const start = kitCheck(project, { kit, update: true, force: true, fresh: 0 });
   assert.equal(start.stuck, false, 'start waits for the released lock and goes on');
