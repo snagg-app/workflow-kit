@@ -677,10 +677,10 @@ test('check of a new issue is BLOCKED with "finish #N first" by feedback on a ha
 test('check lets a new session take over a PR without activity for staleHours', t => {
   const { run, writeIssue } = fixture(t);
   const hoursAgo = hours => new Date(Date.now() - hours * 3_600_000).toISOString();
-  const work = (issueHours, prHours, status = 'In progress', mergeStateStatus = 'CLEAN') => {
+  const work = (issueHours, prHours, status = 'In progress', mergeStateStatus = 'CLEAN', branch = 'claude/1-work') => {
     const base = issue(status);
     writeIssue({ ...base, updatedAt: hoursAgo(issueHours), projectItems: { nodes: [{ ...base.projectItems.nodes[0], updatedAt: hoursAgo(issueHours) }] },
-      closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'OPEN', body: 'Agent: claude, Session: OLD', mergeStateStatus, updatedAt: hoursAgo(prHours), repository: { nameWithOwner: 'test/example' }, headRefName: 'claude/1-work' }] } });
+      closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'OPEN', body: 'Agent: claude, Session: OLD', mergeStateStatus, updatedAt: hoursAgo(prHours), repository: { nameWithOwner: 'test/example' }, headRefName: branch }] } });
   };
 
   work(5, 5);
@@ -689,6 +689,8 @@ test('check lets a new session take over a PR without activity for staleHours', 
   const taken = run('check', '1', '--session', 'NEW');
   assert.equal(taken.status, 0, taken.stdout);
   assert.match(taken.stdout, /^note: stale open PR #7 \(branch claude\/1-work, Agent: claude, Session: OLD\): no activity for 7h 0m; start takes it over$/m);
+  work(7, 7, 'In progress', 'CLEAN', 'claude/1-$&-x');
+  assert.match(run('check', '1', '--session', 'NEW').stdout, /\(branch claude\/1-\$&-x, Agent/, 'a branch name is printed as it is, not as a replacement pattern');
   assert.equal(run('check', '1').status, 1, 'without a session nothing is taken over');
   work(7, 1);
   assert.equal(run('check', '1', '--session', 'NEW').status, 1, 'a push to the PR is activity');
