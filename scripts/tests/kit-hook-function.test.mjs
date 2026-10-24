@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { runHook } from '../kit-hook.mjs';
-import { nodeTooOld } from '../node-guard.mjs';
-import { readVersions } from '../versions.mjs';
+import { nodeTooOld, readVersions } from '../versions.mjs';
 
 test('runHook: a bad call returns exit code 2 and a usage line instead of ending the process', async () => {
   const result = await runHook({ event: 'Nope', agent: 'claude' });
