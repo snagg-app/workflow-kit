@@ -30,6 +30,14 @@ test('keepCommitted runs the work outside a Git repository (#959)', async t => {
   assert.equal(await keepCommitted(project, () => 'ran', { log: () => {} }), 'ran');
 });
 
+test('keepCommitted reads the Git error independent of the user language (#959)', async t => {
+  const project = temporary(t, 'setup robustness lang ');
+  const saved = { LANG: process.env.LANG, LC_ALL: process.env.LC_ALL, LANGUAGE: process.env.LANGUAGE };
+  Object.assign(process.env, { LANG: 'de_DE.UTF-8', LC_ALL: 'de_DE.UTF-8', LANGUAGE: 'de' });
+  t.after(() => { for (const [key, value] of Object.entries(saved)) if (value === undefined) delete process.env[key]; else process.env[key] = value; });
+  assert.equal(await keepCommitted(project, () => 'ran', { log: () => {} }), 'ran');
+});
+
 test('JSON files and the profile of a project may start with a BOM (#959)', t => {
   const project = temporary(t, 'setup robustness bom ');
   execFileSync('git', ['init', '--quiet', project]);
