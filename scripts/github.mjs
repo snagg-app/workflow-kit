@@ -17,6 +17,9 @@ export class QuotaPause extends Error {
   constructor(resetAt) { super('quota pause'); this.resetAt = resetAt; }
 }
 
+/** The longest one `gh` call may take (#965); a project copy or a long paginated read stays far below it. */
+const GH_TIMEOUT_MS = 120_000;
+
 let adapter; // (args, options) => stdout text, like execFileSync of `gh`; unset means the real process
 export const useGhAdapter = fake => { adapter = fake; };
 
@@ -27,12 +30,20 @@ export const useGhAdapter = fake => { adapter = fake; };
  * the account's GraphQL quota (5000 points an hour) is shared by every agent on it. Every response carries what is left and when it
  * resets in its headers (`gh api -i`, also on a refusal), so no extra request asks for it; a query reads its own cost.
  */
-export function createGithub({ tool, reserve, pauses = false, projectDirectory, sleep, env = process.env, say = console.error }) {
+export function createGithub({ tool, reserve, pauses = false, projectDirectory, sleep, env = process.env, say = console.error, timeoutMs = GH_TIMEOUT_MS }) {
   const github = { quota: undefined, spent: 0, calls: 0, deadline: Infinity }; // the latest quota, this run's reported cost and request count
 
   /** One `gh` call; options as for execFileSync (`input`, `stdio`). Private: the rest of the kit uses the named operations below. */
-  const run = (args, options = {}) => adapter ? adapter(args, options)
-    : execFileSync(tool.file, args, { encoding: 'utf8', env: tool.env, maxBuffer: 16 << 20, ...options });
+  const run = (args, options = {}) => {
+    if (adapter) return adapter(args, options);
+    try {
+      return execFileSync(tool.file, args, { encoding: 'utf8', env: tool.env, maxBuffer: 16 << 20, timeout: timeoutMs, ...options });
+    } catch (error) {
+      // A hanging call must end here, not at the driver's tool limit (maybe in the middle of a merge). Only the first two words are named: no secrets.
+      if (error.code !== 'ETIMEDOUT') throw error;
+      throw Object.assign(new Error(`gh ${args.slice(0, 2).join(' ')} did not answer within ${timeoutMs / 1000} s; run the command again`), { code: 'ETIMEDOUT' });
+    }
+  };
 
   /** Say so in one line (stderr keeps stdout for the verdict) and sleep until the reset. */
   github.sleepUntilReset = resetAt => {
