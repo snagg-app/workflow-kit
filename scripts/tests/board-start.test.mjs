@@ -148,6 +148,34 @@ test('two sessions start at once: the claim comment written first wins, the othe
   assert.equal(text('comment-deletes'), '2\n', 'only the own comment is withdrawn');
 });
 
+test('two sessions take over the same PR at once: the older claim wins, the other writes no PR body (#979)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
+  const hoursAgo = new Date(Date.now() - 9 * 3_600_000).toISOString();
+  const body = 'Closes #1\nAgent: claude, Session: OLD\nMehr';
+  writeFileSync(file('pr.json'), JSON.stringify({ ...JSON.parse(text('pr.json')), body }));
+  writeIssue({ ...issue('In progress'), updatedAt: hoursAgo, closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 7, state: 'OPEN', body, updatedAt: hoursAgo, headRefName: 'claude/1-fixture', repository: { nameWithOwner: 'test/example' } }] } });
+  writeFileSync(file('rival-comment'), 'Beansprucht.\nAgent: claude, Session: S3\nBasis: main\n');
+  const result = run('start', '1', '--session', 'S2');
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.match(result.stdout, /session S3 claimed #1 first/);
+  assert.equal(JSON.parse(text('pr.json')).body, body, 'the PR body is untouched');
+});
+
+test('start that fails on the branch switch leaves the issue unassigned and not In progress (#979)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
+  git(checkout, 'worktree', 'add', '-q', '--track', '-b', 'claude/1-fixture', join(dirname(checkout), 'predecessor'), 'origin/claude/1-fixture');
+  writeIssue({ ...issue('Ready'), closedByPullRequestsReferences: { totalCount: 1, nodes: [{
+    number: 7, state: 'OPEN', body: 'Closes #1\nAgent: claude, Session: S1\n',
+    headRefName: 'claude/1-fixture', repository: { nameWithOwner: 'test/example' },
+  }] } });
+  const result = run('start', '1', '--session', 'S1');
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.equal(existsSync(file('stored')), false, 'no status write');
+  assert.deepEqual(JSON.parse(text('issue.json')).assignees.nodes, []);
+});
+
 test('done takes the session of start, not the variable a subagent inherits (#973)', t => {
   const { checkout, run, writeIssue, git, file, text, env } = startFixture(t);
   writeIssue(issue('Ready'));
