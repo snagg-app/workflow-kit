@@ -112,6 +112,9 @@ function start() {
   // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
   const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
+  // #943: the comment ids up to the free check; a claim above this bound was written after it, before the slow steps below.
+  const comments = `repos/${issueProject.repository}/issues/${number}/comments`;
+  const seen = Math.max(0, ...restAll(comments).map(comment => comment.id));
   // #657: an empty base field must not fall back to the default branch silently (a tooling issue says `main` in the field).
   const unset = baseOf(issue);
   if (unset.setting && !unset.value && !stacked && !openPr(issue)) assert.fail(`the Project field ${unset.setting.field} of #${number} is empty; set it (main for tooling issues) and start again, nothing was written`);
@@ -164,8 +167,6 @@ function start() {
       }
     }
     if (!isOwn(fresh, session)) {
-      const comments = `repos/${issueProject.repository}/issues/${number}/comments`;
-      const seen = Math.max(0, ...restAll(comments).map(comment => comment.id));
       github.write('POST', comments, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
       // #943: of the claims written since the read above, the oldest wins; a loser withdraws its own comment, so the winner's claim stays the newest.
       const written = restAll(comments).filter(comment => comment.id > seen && hasClaim(comment.body));
