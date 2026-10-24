@@ -37,6 +37,9 @@ function openFirstPr(issue) {
   const claim = commentClaims(issue).at(-1);
   // A merged PR (squash: its commits are not in the base) means the work is delivered: the FILE-only path reports it.
   if (!claim || issue.closedByPullRequestsReferences?.nodes.some(pr => pr?.state === 'MERGED')) return;
+  // #943: the newest claim is another session's (it took over meanwhile): its claim line must not head this session's PR.
+  const own = sessionOption();
+  assert.ok(!own || claim.session === own, `the newest claim of #${number} is the claim of session ${claim.session}, not of this session (${own}); no PR was opened: start again with --takeover or leave the issue to them`);
   git('fetch', 'origin');
   const claimed = new RegExp(`^(?:${textInEveryLanguage('base').join('|')}):[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(claim.text)?.[1];
   // #855: the field may have moved since the claim (Zielrelease changed, branch rebuilt). The base the branch really stands on (smallest distance to it) wins; a tie keeps the claim.
@@ -109,6 +112,9 @@ function start() {
   // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
   const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
+  // #943: the comment ids up to the free check; a claim above this bound was written after it, before the slow steps below.
+  const comments = `repos/${issueProject.repository}/issues/${number}/comments`;
+  const seen = Math.max(0, ...restAll(comments).map(comment => comment.id));
   // #657: an empty base field must not fall back to the default branch silently (a tooling issue says `main` in the field).
   const unset = baseOf(issue);
   if (unset.setting && !unset.value && !stacked && !openPr(issue)) assert.fail(`the Project field ${unset.setting.field} of #${number} is empty; set it (main for tooling issues) and start again, nothing was written`);
@@ -157,13 +163,20 @@ function start() {
         const again = kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt, force: true });
         again.messages.forEach(progress);
         linkNote();
-        assert.ok(!again.stuck, `the kit link of the fresh worktree failed (${again.messages.at(-1) ?? 'unknown'}); claim and status stay: fix it and run start again`);
+        assert.ok(!again.stuck, `the kit link of the fresh worktree failed (${again.messages.at(-1) ?? 'unknown'}); assignment and status stay, the claim comment is not written yet: fix it and run start again`);
       }
     }
     if (!isOwn(fresh, session)) {
-      github.write('POST', `repos/${issueProject.repository}/issues/${number}/comments`, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
-      const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).findLast(comment => hasClaim(comment.body));
-      assert.equal(claimIn(posted?.body)?.session, session, 'Claim comment read-back differs');
+      github.write('POST', comments, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
+      // #943: of the claims written since the read above, the oldest wins; a loser withdraws its own comment, so the winner's claim stays the newest.
+      const written = restAll(comments).filter(comment => comment.id > seen && hasClaim(comment.body));
+      const winner = claimIn(written[0]?.body);
+      if (winner && winner.session !== session) {
+        const own = written.find(comment => claimIn(comment.body)?.session === session);
+        if (own) github.write('DELETE', `repos/${issueProject.repository}/issues/comments/${own.id}`);
+        assert.fail(`session ${winner.session} claimed #${number} first; nothing more was written, stop (claim comment withdrawn)`);
+      }
+      assert.equal(winner?.session, session, 'Claim comment read-back differs');
     }
   }
   const final = readIssue();
