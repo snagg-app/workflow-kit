@@ -111,7 +111,7 @@ work between them:
    nothing, except a specifically authorized, documented exception; STACKABLE (only an open
    predecessor PR holds the issue) continues as a [stacked PR](docs/CONTRIBUTING.md#stacked-pull-requests).
    Then it assigns you, sets In progress, posts the claim comment (`Agent: NAME, Session: ID`
-   and the base), brings the kit to its pin and reads every step back. An empty base field stops `start` before any write. No PR yet:
+   and the base), brings the kit to `origin/main` and reads every step back. An empty base field stops `start` before any write. No PR yet:
    `start` switches to a new branch from `origin/<base>` (never push to the base; `done` refuses a checkout on or tracking `main`/`release/**`); the first `done` pushes it and opens the Draft PR that
    closes the issue (its body carries the claim line: keep it when you rewrite the body). A claim of
    another session (comment or open PR) blocks unless it is stale or a handover/`--takeover` rewrites it. Abandoned work (no push, comment or status

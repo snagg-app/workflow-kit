@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { execFileSync } from 'node:child_process';
 import { answerFrom, unknownFields } from './gh-shapes.mjs';
 
 // The fake `gh` of the board tests: what `gh api …` and `gh pr merge …` answer, read from files in the working directory
@@ -584,17 +583,6 @@ function pr(argv, input, stdout, stderr, exit) {
   if (!fs.existsSync('merge-noop')) fs.writeFileSync('pr.json', JSON.stringify({ ...JSON.parse(fs.readFileSync('pr.json')), state: 'MERGED', mergeCommit: { oid: fs.existsSync('merge-oid') ? fs.readFileSync('merge-oid', 'utf8') : 'f'.repeat(40) } }));
 }
 
-/** gh issue develop …: the branch exists afterwards (branches.json), the call is kept in develops. */
-function issue(argv) {
-  fs.appendFileSync('develops', argv.slice(2).join(' ') + '\n');
-  if (process.env.BOARD_FIXTURE_DEVELOP_GIT === '1') {
-    const name = argv[argv.indexOf('--name') + 1], base = argv[argv.indexOf('--base') + 1];
-    execFileSync('git', ['push', 'origin', `${base}:refs/heads/${name}`], { encoding: 'utf8' });
-  }
-  const known = fs.existsSync('branches.json') ? JSON.parse(fs.readFileSync('branches.json')) : [];
-  fs.writeFileSync('branches.json', JSON.stringify([...known, argv[argv.indexOf('--name') + 1]]));
-}
-
 /**
  * gh auth|repo|project|label …: what the board setup (github-board.mjs) asks. Every call is kept in setup-calls; a copied board is number 9.
  * The board has the six statuses and a Priority of four choices.
@@ -616,7 +604,7 @@ function setup(argv, input, stdout, stderr, exit) {
 
 /** Runs gh with ARGS (the arguments after "gh") and returns its stdout, or throws like execFileSync on a non-zero exit. */
 export function fakeGh(args, input = '') {
-  const script = { api, pr, issue, auth: setup, repo: setup, project: setup, label: setup }[args[0]];
+  const script = { api, pr, auth: setup, repo: setup, project: setup, label: setup }[args[0]];
   if (!script) throw new Error(`The fake gh knows no command "${args[0]}"`);
   const out = [], err = [];
   try {
