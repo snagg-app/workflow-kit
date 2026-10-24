@@ -3,7 +3,7 @@
 //         Der erste Befehl im frischen Worktree (auch ohne Hooks): `node .agents/workflow-kit-hook.mjs link` verknüpft `.vendor/workflow-kit` (#896).
 // Nutzen: Fehlt das Kit, fehlt auch kit-hook.mjs; dieser Einstieg braucht nur Node und klont dann selbst, statt dass drei Shells es nachbauen.
 import { spawnSync } from 'node:child_process';
-import { existsSync, realpathSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, realpathSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -31,7 +31,16 @@ export function cloneKit(kit, url = kitUrl) {
   }
   try {
     if (existsSync(path.join(kit, 'scripts/kit-hook.mjs'))) throw new Error('kit already present');
-    rmSync(kit, { recursive: true, force: true }); // half folder left by an older aborted clone
+    if (existsSync(kit)) {
+      // Replace only what is recognizably an aborted clone: empty, or just a `.git` without a commit. Anything else may be someone's work.
+      const names = readdirSync(kit);
+      const aborted = names.every(name => name === '.git') && (!names.length || git('-C', kit, 'rev-parse', '--verify', 'HEAD').status !== 0);
+      if (!aborted) {
+        rmSync(temp, { recursive: true, force: true });
+        return `${kit} exists but is not a kit checkout and does not look like an aborted clone; check it by hand and remove it if it is not needed.`;
+      }
+      rmSync(kit, { recursive: true, force: true });
+    }
     renameSync(temp, kit);
   } catch (error) {
     rmSync(temp, { recursive: true, force: true });

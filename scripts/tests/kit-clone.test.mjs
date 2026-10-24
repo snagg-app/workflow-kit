@@ -28,6 +28,16 @@ test('a half folder from an aborted clone does not block the next start (#974)',
   assert.deepEqual(readdirSync(root).sort(), ['origin', 'workflow-kit']);
 });
 
+test('a folder with foreign files is never deleted; the message names it (#974)', t => {
+  const { root, origin, kit } = fixture(t);
+  mkdirSync(kit);
+  writeFileSync(join(kit, 'mine.txt'), 'work');
+  const error = cloneKit(kit, origin);
+  assert.ok(error.includes(kit), error);
+  assert.ok(existsSync(join(kit, 'mine.txt')));
+  assert.deepEqual(readdirSync(root).sort(), ['origin', 'workflow-kit']);
+});
+
 test('a failed clone leaves no folder and reports the real git error (#974)', t => {
   const { root, kit } = fixture(t);
   const error = cloneKit(kit, join(root, 'missing'));
