@@ -71,6 +71,7 @@
        "mergeStateStatus": "CLEAN",
        "baseRefName": "x",
        "headRefName": "x",
+       "headRefOid": "x",
        "repository": {
         "nameWithOwner": "x"
        }

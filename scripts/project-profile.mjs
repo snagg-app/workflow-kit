@@ -82,7 +82,7 @@ const texts = {
     kitLinkFailed: (root, kit, why) => `${root}: could not link .vendor/workflow-kit to ${kit} (${why}).`,
     kitNoGit: dir => `${dir}: Workflow Kit not checked: git did not find the project repository (is git on PATH?).`,
     modulesMissing: setup => `node_modules is missing in this worktree although package.json lists dependencies, so Node may resolve modules from a parent checkout. Nothing was installed. Fix: run \`${setup}\` in this worktree.`,
-    conflict: (url, statuses) => `PR ${url} conflicts with its base, but an issue in ${statuses.humanReview} must be mergeable. The issue goes back to ${statuses.automatedReview}. Resolve the conflict, then hand off again (\`board.mjs done\`).`,
+    conflict: (url, statuses, head) => `PR ${url} (head ${head}) conflicts with its base, but an issue in ${statuses.humanReview} must be mergeable. The issue goes back to ${statuses.automatedReview}. Resolve the conflict, then hand off again (\`board.mjs done\`).`,
   },
   de: {
     handoff: 'Übergabe',
@@ -110,7 +110,7 @@ const texts = {
     kitLinkFailed: (root, kit, why) => `${root}: .vendor/workflow-kit ließ sich nicht mit ${kit} verknüpfen (${why}).`,
     kitNoGit: dir => `${dir}: Workflow Kit nicht geprüft: git hat das Projekt-Repository nicht gefunden (ist git im PATH?).`,
     modulesMissing: setup => `node_modules fehlt in diesem Worktree, obwohl package.json Abhängigkeiten nennt; Node findet Module womöglich im übergeordneten Checkout. Es wurde nichts installiert. Beheben: in diesem Worktree \`${setup}\` ausführen.`,
-    conflict: (url, statuses) => `Der PR ${url} hat Konflikte mit seiner Basis, ein Issue in ${statuses.humanReview} muss aber mergebar sein. Das Issue geht zurück auf ${statuses.automatedReview}. Konflikt lösen, dann neu übergeben (\`board.mjs done\`).`,
+    conflict: (url, statuses, head) => `Der PR ${url} (Stand ${head}) hat Konflikte mit seiner Basis, ein Issue in ${statuses.humanReview} muss aber mergebar sein. Das Issue geht zurück auf ${statuses.automatedReview}. Konflikt lösen, dann neu übergeben (\`board.mjs done\`).`,
   },
 };
 
