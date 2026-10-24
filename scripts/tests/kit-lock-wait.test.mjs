@@ -27,7 +27,9 @@ test('a kit lock released during the wait does not stop start, the hook stays si
   const lock = join(kit, '.git/kit-update.lock');
   mkdirSync(lock);
   // A separate process releases the lock after 800 ms, while this process waits synchronously.
-  const releaser = spawn(process.execPath, ['-e', `setTimeout(() => require('node:fs').rmSync(${JSON.stringify(lock)}, { recursive: true, force: true }), 800)`], { detached: true, stdio: 'ignore' });
+  const releaserFile = join(temp, 'release-lock.mjs');
+  writeFileSync(releaserFile, "import { rmSync } from 'node:fs';\nsetTimeout(() => rmSync(process.argv[2], { recursive: true, force: true }), 800);\n");
+  const releaser = spawn(process.execPath, [releaserFile, lock], { detached: true, stdio: 'ignore' });
   releaser.unref();
 
   const hook = kitCheck(project, { kit, update: true, fresh: 0 });
