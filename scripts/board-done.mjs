@@ -128,6 +128,8 @@ async function done() {
     const pr = { branch: pull.head.ref, head: pull.head.sha, number: prNumber, repository: project.repository, sameRepo: pull.head.repo?.full_name?.toLowerCase() === project.repository.toLowerCase() };
     const wrongBranch = pushPlan({ stand: checkout.stand(), number, pr }).refuse;
     if (wrongBranch) return failed(wrongBranch);
+    // An open merge (MERGE_HEAD) is the user's resolved work: neither a base merge nor an abort may touch it.
+    if (existsSync(resolve(projectDirectory, git('rev-parse', '--git-path', 'MERGE_HEAD')))) return failed('a merge is open and not committed; commit the resolved merge, then run done again');
     try { git('fetch', 'origin'); } catch (error) { return failed(`cannot fetch the base ${base}: ${failure(error)}`); }
     let mergeNeeded = true, mergeTarget = base;
     if (gate.doneBaseMerge === 'overlap') try {
