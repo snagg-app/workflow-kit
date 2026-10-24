@@ -96,7 +96,7 @@ export async function updateImpeccable(kit, { release, checksum } = {}) {
   for (const [name, value] of changes)
     if (previous.get(name) !== value) writeFileSync(join(kit, name), value);
   for (const command of ['init-project.mjs', 'setup-skills.mjs'])
-    execFileSync(process.execPath, [join(kit, 'scripts', command), ...command === 'init-project.mjs' ? ['--existing'] : []],
+    execFileSync(process.execPath, [join(kit, 'scripts', command), ...command === 'init-project.mjs' ? ['--existing'] : ['--refresh']],
       { cwd: kit, stdio: 'inherit' });
   console.log(`Complete Impeccable update: ${tag}, engine ${version}; review and commit the generated diff.`);
 }

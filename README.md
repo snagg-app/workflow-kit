@@ -58,9 +58,11 @@ provider directory stays visible with `!/.claude/skills/my-skill/` in `.ignore`.
 the generators (`git diff --exit-code`) fails on an uncommitted `.ignore`.
 
 There is no kit update step in a project: the next session start pulls the shared checkout, so
-every branch and worktree has the newest kit without a merge. After a kit update, run
-`kit setup` again and commit what it changes; a run that changes nothing proves nothing
-about the new kit.
+every branch and worktree has the newest kit without a merge. A plain `kit setup` never changes a
+Git-tracked file under `.agents`, `.claude/skills`, `.claude/agents` or `.codex/agents`: the committed copies are the
+project's snapshot, so starting an agent leaves `git status` clean (#877). After a kit update, refresh the snapshot on purpose:
+run `kit setup --refresh` (or `setup-skills.mjs --refresh`) and commit what it changes; a run without `--refresh`
+proves nothing about the new kit.
 
 The kit has hook adapters only for Codex and Claude Code. Any other agent works at level 0
 (`AGENTS.md`, skills, `board.mjs`, `kit.mjs check`; see [Hooks](AGENT_RULES.md#hooks)); an
@@ -76,7 +78,7 @@ commands by name. Generated discovery files are ordinary committed files in
 content and old links move to `.workflow-kit/replaced/`. Foreign hooks and settings stay.
 
 A fresh clone/worktree discovers the committed files without generation or dependency
-installation; Claude Code additionally needs the skill links from `setup-skills`. Generate only during kit installation/update. An update PR reruns both generators above and commits their intended outputs. Changed
+installation; Claude Code additionally needs the skill links from `setup-skills`. Generate only during kit installation/update. An update PR reruns both generators above with `--refresh` and commits their intended outputs. Changed
 hook snapshots also need the [installers](#hooks).
 
 ### Commit generated files
@@ -278,7 +280,7 @@ is refused by Docker and stays.
 ```sh
 git submodule update --init --recursive    # the tests clone the pinned submodules
 node scripts/init-project.mjs --existing
-node scripts/setup-skills.mjs
+node scripts/setup-skills.mjs --refresh
 git status --short    # review intended outputs; preserve unrelated work
 node --test scripts/tests/<affected>.test.mjs    # add --test-name-pattern for one test
 node scripts/affected-tests.mjs    # test files for the changed files (--run runs them); new scripts need a row in its table
