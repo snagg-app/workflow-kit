@@ -11,6 +11,14 @@ const abandoned = (lock, stale) => {
   try { return Date.now() - statSync(lock).mtimeMs > stale; } catch { return true; }
 };
 
+/** Who holds the lock, for a message: the PID in it ('unknown' without one) and its age in seconds. */
+export function holder(lock) {
+  let pid = 'unknown', age = 0;
+  try { pid = readFileSync(join(lock, 'pid'), 'utf8').trim() || pid; } catch { /* no pid written (yet) */ }
+  try { age = Math.round((Date.now() - statSync(lock).mtimeMs) / 1000); } catch { /* released meanwhile */ }
+  return { pid, age };
+}
+
 /** Takes the lock directory if it is free or its holder is gone; false while a live holder has it. */
 function acquire(lock, stale) {
   for (let attempt = 0; attempt < 2; attempt++) {

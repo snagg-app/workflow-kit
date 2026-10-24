@@ -80,13 +80,13 @@ function start() {
   // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
   // #813: a driver in a fresh worktree gets no SessionStart hook, so start itself brings the shared kit to origin/main (fast-forward) and stops when it cannot.
   const linked = join(projectDirectory, '.vendor/workflow-kit'), hadLink = existsSync(linked);
-  const { messages: kitHints, stuck } = kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt, update: true, force: true });
+  const { messages: kitHints, stuck, retry } = kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt, update: true, force: true });
   // #863: a fresh worktree (a subagent's) has no link yet; the check made it, and one line says so.
   let told = hadLink;
   const linkNote = () => { if (!told && existsSync(linked) && (told = true)) progress(`linked .vendor/workflow-kit to ${realpathSync(linked)} (it was missing in this worktree)`); };
   linkNote();
   [...kitHints, ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
-  assert.ok(!stuck, `the shared kit could not be brought to origin/main (${kitHints.at(-1) ?? 'another update holds the kit lock'}); nothing was written, fix the kit checkout and run start again`);
+  assert.ok(!stuck, `the shared kit could not be brought to origin/main (${kitHints.at(-1) ?? 'another update holds the kit lock'}); nothing was written, ${retry ? 'run start again: waiting helps' : 'a human has to fix the kit checkout first (retrying alone does not help)'}`);
   // One checkout-wide setting each, so a commit in a submodule never rides along with a project push and a branch switch follows the submodule pins.
   if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);
   const issue = readIssue();
