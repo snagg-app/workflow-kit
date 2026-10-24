@@ -193,3 +193,11 @@ test('next lists feedback after the handoff: a comment, a push-back, a mention; 
     repository: { nameWithOwner: 'test/example' }, comments: { nodes: [handoff, note(2, 'late')] } }] } }]);
   assert.equal(section(), '', 'the issue of another session is not mine');
 });
+
+test('next reads as many comments per issue as check, so a claim pushed back by newer comments still blocks (#995)', t => {
+  const { checkout, run, queries } = fixture(t);
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([{ ...issue('Ready'), number: 3, issueFieldValues: { nodes: [] } }]));
+  assert.equal(run('next').status, 0);
+  assert.ok(queries().some(query => query.includes('search(') && query.includes('comments(last:50)')), 'the search asks for the last 50 comments');
+  assert.ok(!queries().some(query => query.includes('search(') && query.includes('comments(last:10)')), 'no narrower window than check');
+});
