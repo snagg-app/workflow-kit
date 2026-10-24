@@ -109,26 +109,32 @@ function start() {
   if (!mayStart(judged)) return judged;
   step(judged);
   const stacked = state.stackedOn, login = issue.viewer.login;
+  // #943/#979: the comment ids up to now, read BEFORE the free check; a claim above this bound was written after it (a claim between bound and check would count as old and be missed).
+  const comments = `repos/${issueProject.repository}/issues/${number}/comments`;
+  const seen = Math.max(0, ...restAll(comments).map(comment => comment.id));
   // The check took seconds: whoever claimed the issue meanwhile wins, nothing is written yet (#572).
   const fresh = readIssue(), raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
-  // #943: the comment ids up to the free check; a claim above this bound was written after it, before the slow steps below.
-  const comments = `repos/${issueProject.repository}/issues/${number}/comments`;
-  const seen = Math.max(0, ...restAll(comments).map(comment => comment.id));
   // #657: an empty base field must not fall back to the default branch silently (a tooling issue says `main` in the field).
   const unset = baseOf(issue);
   if (unset.setting && !unset.value && !stacked && !openPr(issue)) assert.fail(`the Project field ${unset.setting.field} of #${number} is empty; set it (main for tooling issues) and start again, nothing was written`);
-  if (!fresh.assignees.nodes.some(user => sameLogin(user.login, login))) {
-    github.write('POST', `repos/${issueProject.repository}/issues/${number}/assignees`, { fields: { 'assignees[]': login } });
-    fresh.assignees.nodes.push({ login });
-  }
-  // The read seconds ago is the one `set` would take now; the read-back at the end of start still reads the issue again.
-  set('Status', statuses.inProgress, () => fresh);
   const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
     : baseOf(issue).branch || defaultBranchName();
   const line = claimLine(session, agent);
   const current = openPr(issue);
   let branch = git('branch', '--show-current'), handedBranch;
+  const claim = () => {
+    github.write('POST', comments, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
+    // #943: of the claims written since the read above, the oldest wins; a loser withdraws its own comment, so the winner's claim stays the newest.
+    const written = restAll(comments).filter(comment => comment.id > seen && hasClaim(comment.body));
+    const winner = claimIn(written[0]?.body);
+    if (winner && winner.session !== session) {
+      const own = written.find(comment => claimIn(comment.body)?.session === session);
+      if (own) github.write('DELETE', `repos/${issueProject.repository}/issues/comments/${own.id}`);
+      assert.fail(`session ${winner.session} claimed #${number} first; nothing more was written, stop (claim comment withdrawn)`);
+    }
+    assert.equal(winner?.session, session, 'Claim comment read-back differs');
+  };
   const continueOn = name => {
     if (git('branch', '--show-current') === name) return;
     const local = checkout.hasLocalBranch(name);
@@ -143,7 +149,9 @@ function start() {
     git('fetch', 'origin');
     branch = current.headRefName;
     continueOn(branch);
-    if (!ownPr(issue, session)) {
+    // #979: two sessions taking over one PR both patch its body and each reads back only its own line; the claim comment decides (oldest wins), the body follows.
+    if (!ownPr(fresh, session)) {
+      claim();
       const path = `repos/${project.repository}/pulls/${current.number}`, body = rest(path).body ?? '';
       github.write('PATCH', path, { body: withClaim(body, line) });
       assert.equal(claimOf(rest(path))?.session, session, 'Claim in the PR body read-back differs');
@@ -163,22 +171,18 @@ function start() {
         const again = kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt, force: true });
         again.messages.forEach(progress);
         linkNote();
-        assert.ok(!again.stuck, `the kit link of the fresh worktree failed (${again.messages.at(-1) ?? 'unknown'}); assignment and status stay, the claim comment is not written yet: fix it and run start again`);
+        assert.ok(!again.stuck, `the kit link of the fresh worktree failed (${again.messages.at(-1) ?? 'unknown'}); nothing was written yet: fix it and run start again`);
       }
     }
-    if (!isOwn(fresh, session)) {
-      github.write('POST', comments, { body: `${texts.claimed}\n${line}\n${texts.base}: ${base}\n` });
-      // #943: of the claims written since the read above, the oldest wins; a loser withdraws its own comment, so the winner's claim stays the newest.
-      const written = restAll(comments).filter(comment => comment.id > seen && hasClaim(comment.body));
-      const winner = claimIn(written[0]?.body);
-      if (winner && winner.session !== session) {
-        const own = written.find(comment => claimIn(comment.body)?.session === session);
-        if (own) github.write('DELETE', `repos/${issueProject.repository}/issues/comments/${own.id}`);
-        assert.fail(`session ${winner.session} claimed #${number} first; nothing more was written, stop (claim comment withdrawn)`);
-      }
-      assert.equal(winner?.session, session, 'Claim comment read-back differs');
-    }
+    if (!isOwn(fresh, session)) claim();
   }
+  // #979: assignment and status come last, after branch and claim: a start that stops earlier leaves the issue as free or as claimed as before.
+  if (!fresh.assignees.nodes.some(user => sameLogin(user.login, login))) {
+    github.write('POST', `repos/${issueProject.repository}/issues/${number}/assignees`, { fields: { 'assignees[]': login } });
+    fresh.assignees.nodes.push({ login });
+  }
+  // The read seconds ago is the one `set` would take now; the read-back at the end of start still reads the issue again.
+  set('Status', statuses.inProgress, () => fresh);
   const final = readIssue();
   assert.equal(projectItem(final)?.status?.name, statuses.inProgress, `${statuses.inProgress} status read-back differs`);
   assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');
