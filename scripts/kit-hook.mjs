@@ -7,7 +7,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync,
 import { homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { agents, agentNames, projectDirOf } from './agents.mjs';
+import { agents, agentNames, entryFile, projectDirOf } from './agents.mjs';
 import { hookEvents } from './hooks.mjs';
 import { readVersions } from './versions.mjs';
 import { projectRoot } from './checkout-root.mjs';
@@ -149,7 +149,8 @@ async function readInput() {
 }
 
 // Script part: the only place that reads stdin, prints and ends the process.
-if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(self)) {
+// Also run when the project's entry file (kit-entry.mjs copy) imported this module (#895).
+if (process.argv[1] && (realpathSync.native(process.argv[1]) === realpathSync.native(self) || process.argv[1].replaceAll('\\', '/').endsWith(`/${entryFile}`))) {
   const [event, ...rest] = process.argv.slice(2);
   if (event === '--install') { if (rest.length) install(rest); process.exit(0); }
   const agent = rest[rest.indexOf('--agent') + 1];
