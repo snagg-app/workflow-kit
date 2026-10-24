@@ -38,6 +38,17 @@ test('a folder with foreign files is never deleted; the message names it (#974)'
   assert.deepEqual(readdirSync(root).sort(), ['origin', 'workflow-kit']);
 });
 
+test('without git the start hook names the missing kit instead of crashing (#986)', t => {
+  const { root } = fixture(t);
+  const empty = join(root, 'empty');
+  mkdirSync(empty);
+  const entry = join(import.meta.dirname, '..', 'kit-entry.mjs');
+  const env = { PATH: empty, CLAUDE_PROJECT_DIR: root };
+  const run = spawnSync(process.execPath, [entry, 'SessionStart'], { cwd: root, encoding: 'utf8', env });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /shared Workflow Kit checkout is missing/);
+});
+
 test('a failed clone leaves no folder and reports the real git error (#974)', t => {
   const { root, kit } = fixture(t);
   const error = cloneKit(kit, join(root, 'missing'));

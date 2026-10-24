@@ -97,7 +97,7 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
         }
         // The refusal names its own reset; without headers, a minute from now.
         const resetAt = retryAt(text, sleeps, () => quotaOf(headers)?.resetAt ?? new Date(Date.now() + 60_000).toISOString(), Date.now(), headers);
-        assert.ok(reserve !== undefined && sleeps < 3, `The GitHub GraphQL quota is used up until ${untilText(resetAt)}; run the command again after that`);
+        assert.ok(reserve !== undefined && sleeps < 3, Object.assign(new Error(`The GitHub GraphQL quota is used up until ${untilText(resetAt)}; run the command again after that`), { quotaUsedUp: true }));
         github.sleepUntilReset(resetAt);
       }
     }

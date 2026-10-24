@@ -79,6 +79,7 @@ test('sweep sends a Human-review issue with a conflicting PR back to Automated r
   assert.equal(kept.status, 0, kept.stdout + kept.stderr);
   assert.match(kept.stdout, /^#5 stays open: reopened 2026-10-09T10:05:00Z after PR #70 was merged$/m);
   assert.equal(existsSync(join(checkout, 'mutations')), false, 'a reopened issue is not written');
+  assert.match(kept.stdout, /^clean$/m, 'a reopened issue changes nothing, so the sweep is clean (#986)');
   reopen('2026-10-09T09:00:00Z');
   assert.match(run('sweep').stdout, /^#5 closed: delivered with PR #70/m);
   // A later release PR after the reopen delivers again (#1967).
@@ -118,6 +119,37 @@ test('sweep skips an issue it cannot judge, handles the rest and ends red (#949)
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /#1 skipped: .*linked PRs/);
   assert.match(result.stdout, /^#2 closed: delivered with PR #70/m);
+});
+
+test('sweep writes the conflict comment once when the status write failed before (#986)', t => {
+  const { checkout, run } = fixture(t);
+  writeFileSync(join(checkout, 'status-options.json'), JSON.stringify(['Human review', 'Automated review']));
+  const url = 'https://github.com/test/example/pull/70';
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([{ ...issue('Human review'), number: 5, id: 'I5',
+    projectItems: { nodes: [{ id: 'PI5', project: { id: 'P1' }, status: { name: 'Human review' } }] },
+    closedByPullRequestsReferences: { totalCount: 1, nodes: [{ number: 70, url, state: 'OPEN', merged: false, baseRefName: 'main', mergeStateStatus: 'DIRTY', repository: { nameWithOwner: 'test/example' } }] } }]));
+  writeFileSync(join(checkout, 'backlink-comments-5.json'), '[]');
+  writeFileSync(join(checkout, 'status-fails'), '');
+  assert.equal(run('sweep').status, 1, 'a failed status write ends red');
+  const comments = () => (readFileSync(join(checkout, 'mutations'), 'utf8').match(/addComment/g) ?? []).length;
+  assert.equal(comments(), 1);
+  const body = `Der PR ${url} hat Konflikte mit seiner Basis, ein Issue in Human review muss aber mergebar sein. Das Issue geht zurück auf Automated review. Konflikt lösen, dann neu übergeben (\`board.mjs done\`).`;
+  writeFileSync(join(checkout, 'backlink-comments-5.json'), JSON.stringify([{ id: 1, user: { login: 'worker' }, created_at: '2026-10-09T11:00:00Z', body }]));
+  assert.equal(run('sweep').status, 1);
+  assert.equal(comments(), 1, 'no second conflict comment');
+});
+
+test('sweep stops at the first used-up quota instead of failing every issue (#986)', t => {
+  const { checkout, run } = fixture(t);
+  const delivered = number => ({ ...issue('Done'), number, id: `I${number}`, closedByPullRequestsReferences: { totalCount: 1,
+    nodes: [{ number: 70, url: 'u', state: 'MERGED', merged: true, mergedAt: '2026-10-09T10:00:00Z', baseRefName: 'release/1.0', repository: { nameWithOwner: 'test/example' } }] } });
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([delivered(5), delivered(6), delivered(7)]));
+  for (const number of [5, 6, 7]) writeFileSync(join(checkout, `backlink-comments-${number}.json`), '[]');
+  writeFileSync(join(checkout, 'mutation-limited'), '');
+  const result = run('sweep');
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /quota is used up/);
+  assert.equal(readFileSync(join(checkout, 'limited-hits'), 'utf8').trim().split('\n').length, 1, 'only the first issue met the quota');
 });
 
 test('sweep writes the delivered comment once when closing failed before (#949)', t => {
