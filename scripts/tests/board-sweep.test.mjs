@@ -60,6 +60,7 @@ test('sweep sends a Human-review issue with a conflicting PR back to Automated r
     row(3, 'Done', [merged({ baseRefName: 'main' })]), row(4, 'Done', [merged({ repository: { nameWithOwner: 'someone/else' } })])]);
   rmSync(join(checkout, 'mutation-targets'), { force: true });
   rmSync(join(checkout, 'mutations'), { force: true });
+  writeFileSync(join(checkout, 'backlink-comments-5.json'), '[]');
   writeFileSync(join(checkout, 'search.json'), JSON.stringify([row(5, 'Human review', [merged()]), row(6, 'Done', [pr('CLEAN')])]));
   const closed = run('sweep');
   assert.equal(closed.status, 0, closed.stdout + closed.stderr);
@@ -103,4 +104,36 @@ test('sweep sends a Human-review issue with a conflicting PR back to Automated r
   rmSync(join(checkout, 'truncate'));
 
   assert.equal(run('sweep', 'extra').status, 2, 'A word after sweep is refused before any write');
+});
+
+test('sweep skips an issue it cannot judge, handles the rest and ends red (#949)', t => {
+  const { checkout, run } = fixture(t);
+  const pr = changes => ({ number: 70, url: 'https://github.com/test/example/pull/70', state: 'MERGED', merged: true, mergedAt: '2026-10-09T10:00:00Z', baseRefName: 'release/1.0', mergeStateStatus: 'UNKNOWN', repository: { nameWithOwner: 'test/example' }, ...changes });
+  const row = (number, status, prs, totalCount = prs.length) => ({ ...issue(status), number, id: `I${number}`,
+    projectItems: { nodes: [{ id: `PI${number}`, project: { id: 'P1' }, status: { name: status } }] }, closedByPullRequestsReferences: { totalCount, nodes: prs } });
+  // Issue 1 has more linked PRs than sweep reads; issue 2 behind it is still closed.
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([row(1, 'Human review', [pr({ merged: false, state: 'CLOSED' })], 11), row(2, 'Done', [pr()])]));
+  writeFileSync(join(checkout, 'backlink-comments-2.json'), '[]');
+  const result = run('sweep');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /#1 skipped: .*linked PRs/);
+  assert.match(result.stdout, /^#2 closed: delivered with PR #70/m);
+});
+
+test('sweep writes the delivered comment once when closing failed before (#949)', t => {
+  const { checkout, run } = fixture(t);
+  const delivered = { number: 70, url: 'u', state: 'MERGED', merged: true, mergedAt: '2026-10-09T10:00:00Z', baseRefName: 'release/1.0', repository: { nameWithOwner: 'test/example' } };
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([{ ...issue('Done'), number: 5, id: 'I5', closedByPullRequestsReferences: { totalCount: 1, nodes: [delivered] } }]));
+  writeFileSync(join(checkout, 'backlink-comments-5.json'), '[]');
+  writeFileSync(join(checkout, 'close-fails'), '');
+  assert.equal(run('sweep').status, 1, 'a failed close ends red');
+  const comments = () => (readFileSync(join(checkout, 'mutations'), 'utf8').match(/addComment/g) ?? []).length;
+  assert.equal(comments(), 1);
+  // The earlier run's comment is on the issue now; the next run must not write it again.
+  writeFileSync(join(checkout, 'backlink-comments-5.json'), JSON.stringify([{ id: 1, user: { login: 'worker' }, created_at: '2026-10-09T11:00:00Z', body: 'Geliefert mit #70 in `release/1.0`. Der Release-PR nach `main` veröffentlicht die Version.' }]));
+  assert.equal(run('sweep').status, 1);
+  assert.equal(comments(), 1, 'no second delivered comment');
+  rmSync(join(checkout, 'close-fails'));
+  assert.equal(run('sweep').status, 0);
+  assert.equal(comments(), 1);
 });

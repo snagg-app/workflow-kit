@@ -354,7 +354,7 @@ function api(argv, input, stdout, stderr, exit) {
   let data;
   if (query.startsWith('mutation')) {
     // mutation-fails: GitHub refuses every write.
-    if (fs.existsSync('mutation-fails')) exit(1);
+    if (fs.existsSync('mutation-fails') || (fs.existsSync('close-fails') && query.includes('closeIssue'))) exit(1);
     fs.appendFileSync('mutations', query + '\n');
     // The item or issue each mutation wrote to, one line per mutation.
     fs.appendFileSync('mutation-targets', argv.filter(arg => /^(item|issue)=/.test(arg)).join(' ') + '\n');
