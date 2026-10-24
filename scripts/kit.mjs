@@ -33,7 +33,7 @@ export function checkKit(root) {
  * - exitCode: 1 after an error (the first failing local step ends the run), else 0.
  * `onStep` gets each step as soon as it is done, so a caller can show progress during long steps.
  */
-export async function kitSetup(root, { onStep = () => {} } = {}) {
+export async function kitSetup(root, { onStep = () => {}, refresh = false } = {}) {
   const profile = join(root, '.github/workflow-project.json');
   // `kit setup` reads the profile once and hands it to the steps; a broken one fails the first step that needs it, as before.
   let read;
@@ -63,7 +63,7 @@ export async function kitSetup(root, { onStep = () => {} } = {}) {
     if (!existsSync(profile)) writeProjectFile(root, '.github/workflow-project.json', '{\n  "language": "en"\n}\n');
     return ok();
   });
-  step(`skills for ${agentLabels()}`, true, async log => { await setupSkills({ log, profile: current() }); return ok(); });
+  step(`skills for ${agentLabels()}`, true, async log => { await setupSkills({ log, profile: current(), refresh }); return ok(); });
   step('git hooks (.githooks)', true, log => { installGitHooks({ root, log }); return ok(); });
   // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
   for (const provider of featureProviders().filter(provider => provider.install))
@@ -103,8 +103,9 @@ export async function kitSetup(root, { onStep = () => {} } = {}) {
 
 if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.native(fileURLToPath(import.meta.url))) {
   enterCwd();
-  if (!['setup', 'check'].includes(process.argv[2]) || process.argv.length > 3) {
-    console.error('Usage: node <kit>/scripts/kit.mjs [--cwd PROJECT_DIR] setup|check');
+  const refresh = process.argv[2] === 'setup' && process.argv[3] === '--refresh';
+  if (!['setup', 'check'].includes(process.argv[2]) || process.argv.length > (refresh ? 4 : 3)) {
+    console.error('Usage: node <kit>/scripts/kit.mjs [--cwd PROJECT_DIR] setup [--refresh] | check');
     process.exit(2);
   }
   const root = projectRoot();
@@ -114,6 +115,7 @@ if (process.argv[1] && realpathSync.native(process.argv[1]) === realpathSync.nat
     process.exit(exitCode);
   }
   const { plugin, humans, exitCode } = await kitSetup(root, {
+    refresh,
     onStep({ title, state, note, hint, lines }) {
       const line = state === 'ok' ? `ok    ${title}${note ? ': ' + note : ''}` : `${state === 'error' ? 'FAIL' : 'open'}  ${title}: ${hint}`;
       console.log(line);

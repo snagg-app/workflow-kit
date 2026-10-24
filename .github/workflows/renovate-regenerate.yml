@@ -96,7 +96,7 @@ jobs:
           if grep -qx '.vendor/ponytail' <<<"$changed"; then node scripts/provider.mjs ponytail update; fi
           if grep -qx '.vendor/impeccable' <<<"$changed"; then node scripts/provider.mjs impeccable update; fi
           node scripts/init-project.mjs --existing
-          node scripts/setup-skills.mjs
+          node scripts/setup-skills.mjs --refresh
       - name: Commit and push
         if: env.SKIP != 'true'
         env:
