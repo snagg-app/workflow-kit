@@ -228,4 +228,21 @@ test('a rerun replaces the hook copy, including a post-checkout of the project',
   assert.deepEqual(readdirSync(f.hooks), ['post-checkout']);
   assert.equal(readFileSync(copy('post-checkout'), 'utf8'), '#!/bin/sh\necho mine\n');
 });
+
+test('a rerun never leaves a moment without the installed hooks, and no staging folder stays (#975)', async t => {
+  const f = await fixture(t);
+  await f.run();
+  for (let i = 0; i < 300; i++) writeFileSync(join(f.repo, `.githooks/extra-${i}`), `#!/bin/sh\necho ${i}\n`);
+  writeFileSync(join(f.repo, '.githooks/pre-push'), '#!/bin/sh\necho changed\n');
+  let done = false, gaps = 0;
+  const running = f.run().finally(() => { done = true; });
+  while (!done) {
+    if (!existsSync(join(f.hooks, 'pre-push'))) gaps++;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+  await running;
+  assert.equal(gaps, 0);
+  assert.equal(readFileSync(join(f.hooks, 'pre-push'), 'utf8'), '#!/bin/sh\necho changed\n');
+  assert.deepEqual(readdirSync(join(f.hooks, '..')).filter(name => name.startsWith('workflow-kit-hooks')), ['workflow-kit-hooks']);
+});
 });
