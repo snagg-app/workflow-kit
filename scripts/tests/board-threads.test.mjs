@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, handoffPr, test } from './board-fixture.mjs';
 
@@ -37,6 +37,17 @@ test('threads --resolve closes exactly the named threads, with an optional reply
   assert.deepEqual(stored()[0].replies, ['Fixed in the next commit']);
   const mutations = readFileSync(join(checkout, 'mutations'), 'utf8');
   assert.ok(mutations.indexOf('addPullRequestReviewThreadReply') < mutations.indexOf('resolveReviewThread'), 'The reply comes before the closing');
+});
+
+test('threads --resolve --reply after a failed closing does not post the same reply twice', t => {
+  const { run, stored, checkout } = setup(t, [thread(101)]);
+  writeFileSync(join(checkout, 'resolve-noop'), '');
+  assert.notEqual(run('threads', '7', '--resolve', '101', '--reply', 'Fixed').status, 0, 'Precondition: the closing failed');
+  rmSync(join(checkout, 'resolve-noop'));
+  const again = run('threads', '7', '--resolve', '101', '--reply', 'Fixed');
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  assert.deepEqual(stored()[0].replies, ['Fixed'], 'The answer stands once');
+  assert.equal(stored()[0].isResolved, true);
 });
 
 test('threads --resolve refuses an unknown number and a thread of another PR before writing anything', t => {

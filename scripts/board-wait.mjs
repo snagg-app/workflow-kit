@@ -4,7 +4,7 @@ import { QuotaPause, StillWaiting } from './github.mjs';
 import { sleepers, untilText } from './quota.mjs';
 import { shared } from './board-args.mjs';
 import { isResult, result } from './board-result.mjs';
-import { args, command, github, graphql, number, numberOption, progress, project, rest, stallOption, startedAt } from './board-context.mjs';
+import { args, command, env, github, graphql, number, numberOption, progress, project, rest, stallOption, startedAt } from './board-context.mjs';
 import { quotaLine } from './board-common.mjs';
 import { isOptional, readPr, reviews, unresolvedThreads, useBaseSettings } from './board-reviews.mjs';
 
@@ -14,7 +14,7 @@ export const specs = [
     summary: 'Waits until CI and every reviewer of the PR head have finished. Exit 0 done, 1 red CI, 3 waiting, 4 call again, 2 error; prints blockers and Sonar issues.',
     flags: { '--merged': { help: 'Wait for the human merge instead (REST only).' }, '--stall': shared.stall, '--grace': shared.grace,
       '--head': { value: 'SHA', kind: 'sha', help: 'The id you just pushed: keep waiting while the PR still shows another head.' }, '--max-minutes': shared.maxMinutes,
-      '--interval': { value: 'SECONDS', kind: 'seconds300', help: 'A fixed pause between looks, 0 to 300 (default: 60 growing to 300).' } },
+      '--interval': { value: 'SECONDS', kind: 'seconds300', help: 'A fixed pause between looks, 0 to 300, raised to 10 (default: 60 growing to 300).' } },
     check: args => args.flag('--merged') && args.flag('--head') ? '--head does not combine with --merged' : undefined },
   { name: 'quota-wait', run: 'quotaWait', doc: 'docs/board/quota-wait.md', flags: { '--max-minutes': shared.maxMinutes },
     summary: 'Waits for the shared GraphQL quota. Returns once it has 300 points again, sleeping until the reset (exit 4 if that is after --max-minutes).' },
@@ -123,7 +123,7 @@ async function poll(look) {
       }
       if (Date.now() >= github.deadline) return stillWaiting(result.pausedUntil);
       // Little quota lengthens the pause, but not while REST is read in place of GraphQL.
-      const pause = ['wait', 'merge'].includes(command) && args.flag('--interval') ? numberOption('--interval', 0) : github.pause(quiet++, result.pausedUntil);
+      const pause = ['wait', 'merge'].includes(command) && args.flag('--interval') ? Math.max(numberOption('--interval', 0), Number(env.BOARD_MIN_INTERVAL ?? 10)) : github.pause(quiet++, result.pausedUntil);
       await new Promise(resolve => setTimeout(resolve, Math.min(1000 * pause, github.deadline - Date.now())));
     }
   } catch (error) {

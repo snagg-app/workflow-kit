@@ -23,7 +23,7 @@ It also reports a moved base: `base moved: N commits since merge-base (BASE)` wh
 or `no file is changed on both sides`. Both lines are information only: no exit code changes, an unreadable push log or comparison prints a note,
 and nothing is merged or rebased for you.
 `wait` repeats the look (first after 60 s, then at longer intervals up to 5 minutes, again from 60 s
-when what it awaits changes; twice as long below 1000 quota points; `--interval SECONDS` sets a fixed pause instead), prints `WAITING` lines on change and
+when what it awaits changes; twice as long below 1000 quota points; `--interval SECONDS` sets a fixed pause instead, at least 10 s), prints `WAITING` lines on change and
 reads GraphQL only when REST shows a change since the last full read (head, update time, merge state, check runs, check suites,
 commit statuses), at least every 5 minutes, and confirms every end with a full read; the other rounds cost no GraphQL points.
 `wait PR --merged` reads REST only. It ends with `DONE`, `FAILED` (as soon as a check fails or a non-draft PR has merge conflicts, `blocker: merge conflicts`) or `ERROR`. Both end

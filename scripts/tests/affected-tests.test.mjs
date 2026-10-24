@@ -29,6 +29,12 @@ test('a hook change selects the hook tests and nothing slower than needed', () =
   assert.deepEqual(names(affectedTests(['scripts/install-git-hooks.mjs'])), ['git-hooks.test.mjs', 'kit-init-hook.test.mjs', 'text-files.test.mjs']);
 });
 
+test('the Git tool, is-main and the Git hooks select the tests that import them', () => {
+  assert.ok(names(affectedTests(['scripts/git-tool.mjs'])).includes('board-check.test.mjs'));
+  assert.ok(names(affectedTests(['scripts/is-main.mjs'])).includes('board-check.test.mjs'));
+  assert.ok(names(affectedTests(['.githooks/pre-push'])).includes('git-hooks.test.mjs'));
+});
+
 test('a changed test runs itself; an unmapped script is reported instead of skipped', () => {
   const result = affectedTests(['scripts/tests/setup.test.mjs', 'scripts/not-yet-mapped.mjs']);
   assert.ok(names(result).includes('setup.test.mjs'));
