@@ -14,9 +14,8 @@ import { fileURLToPath } from 'node:url';
 import { ancestors, enterCwd, hasGit, projectRoot } from './checkout-root.mjs';
 import { gitIn } from './git-tool.mjs';
 import { withLock } from './lock.mjs';
-import { isKept } from './keep-committed.mjs';
 import { linkSkills, materialize } from './provider-links.mjs';
-import { checkDirectory, localDirectory, moveAside, rename } from './write-guard.mjs';
+import { checkDirectory, isKept, localDirectory, moveAside, rename } from './write-guard.mjs';
 import { providerList, providerNamed } from './provider-list.mjs';
 import { readVersions } from './versions.mjs';
 

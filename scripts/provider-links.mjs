@@ -4,8 +4,7 @@ import { cpSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, sym
 import { dirname, join } from 'node:path';
 import { agents, sharedSkills } from './agents.mjs';
 import { ownSkills } from './provider-list.mjs';
-import { isKept } from './keep-committed.mjs';
-import { checkDirectory, localDirectory, moveAside } from './write-guard.mjs';
+import { checkDirectory, isKept, localDirectory, moveAside } from './write-guard.mjs';
 
 const present = path => lstatSync(path, { throwIfNoEntry: false });
 
