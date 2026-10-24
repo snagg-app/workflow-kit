@@ -388,12 +388,15 @@ function reportReview({ pr, facts, after, isOptional, dismissStale }, { lines })
   for (const review of pr.latestOpinionatedReviews.nodes.filter(review => review.state === 'CHANGES_REQUESTED')) {
     // GitHub's ruleset blocks the merge on a standing change request, so an optional reviewer's answered one (all threads resolved)
     // is dismissed on handoff only (the caller writes it); it is never re-requested. The review id comes from the REST list read above.
-    const latest = dismissStale && !threads.length && isOptional(review.author?.login)
+    // Without dismissStale (wait, so done's wait before the handoff, #1002) it is only a note: a blocker line there would stop done
+    // before the handoff that dismisses it.
+    const latest = !threads.length && isOptional(review.author?.login)
       && reviewList.findLast(item => login(item.user) === login(review.author) && ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(item.state));
-    if (latest?.state === 'CHANGES_REQUESTED') {
+    if (latest?.state === 'CHANGES_REQUESTED' && dismissStale) {
       dismissals.push({ id: latest.id, message: `All review threads are resolved on head ${short}; the change request is stale.` });
       lines.push(`dismissed stale change request by ${login(review.author)}: all threads are resolved`);
-    } else lines.push(`blocker: changes requested by ${login(review.author)}`);
+    } else if (latest?.state === 'CHANGES_REQUESTED') lines.push(`stale change request by ${login(review.author)}: all threads are resolved, dismissed on handoff`);
+    else lines.push(`blocker: changes requested by ${login(review.author)}`);
   }
   return { threads, dismissals };
 }

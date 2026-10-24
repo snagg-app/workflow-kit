@@ -87,6 +87,13 @@ test('a change request is dismissed only on handoff, once all threads are resolv
     reviewList: [{ id: 9, user: { login: 'coderabbitai[bot]' }, state: 'CHANGES_REQUESTED', commit_id: 'old' }] });
   const settings = { optionalReviewers: ['coderabbitai'] };
   assert.equal(judge(stale([]), settings).dismissals.length, 0);
+  // #1002: the wait before the handoff (done) must not read the answered request as a blocker, or handoff never gets to dismiss it.
+  const waiting = judge(stale([]), settings).lines;
+  assert.ok(!waiting.some(line => line.startsWith('blocker:')), waiting.join('\n'));
+  assert.ok(waiting.includes('stale change request by coderabbitai: all threads are resolved, dismissed on handoff'));
+  // A person's request, an unanswered one and a non-optional bot's keep blocking.
+  assert.ok(judge(stale(['t']), settings).lines.includes('blocker: changes requested by coderabbitai'));
+  assert.ok(judge(stale([])).lines.includes('blocker: changes requested by coderabbitai'));
   assert.deepEqual(judge(stale([]), settings, { dismissStale: true }).dismissals.map(({ id }) => id), [9]);
   assert.equal(judge(stale(['t']), settings, { dismissStale: true }).dismissals.length, 0);
 });
