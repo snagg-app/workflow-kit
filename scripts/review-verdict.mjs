@@ -189,13 +189,14 @@ function judgeBlockers({ pr, facts, now, contexts, isOptionalCheck }, s) {
     lines.push(`blocker: PR is still Draft; run board.mjs done ISSUE`);
   }
   // GitHub sometimes starts no pull_request run for a push and keeps the merge state UNKNOWN, so the wait never ends (#412). In a native stack
-  // a conflict in a lower layer causes it. After 10 minutes without a pull_request or workflow_dispatch run on the head that is a blocker with its cause.
+  // a conflict in a lower layer causes it. A mergeable (CLEAN) PR can get no check at all (path filter, no workflow, #947): the same wait.
+  // After 10 minutes without a pull_request or workflow_dispatch run on the head that is a blocker with its cause.
   // Nothing is dispatched: that costs Actions minutes, a person decides.
-  if (!pr.isDraft && pr.mergeStateStatus === 'UNKNOWN' && contexts.nodes.every(isOptionalCheck) && now - headSetAt(pr, pushes()) > 10 * 60_000) {
+  if (!pr.isDraft && ['UNKNOWN', 'CLEAN'].includes(pr.mergeStateStatus) && contexts.nodes.every(isOptionalCheck) && now - headSetAt(pr, pushes()) > 10 * 60_000) {
     if (!facts.headRuns.some(run => ['pull_request', 'workflow_dispatch'].includes(run.event))) {
       s.failed = true;
       reasons.push('no CI run on the head');
-      lines.push(`blocker: no pull_request run on the head 10 minutes after the push and the merge state is UNKNOWN; ${facts.stackOrderText
+      lines.push(`blocker: no pull_request run on the head 10 minutes after the push and the merge state is ${pr.mergeStateStatus}; ${facts.stackOrderText
         ? `probably a conflict in a layer of the native stack locks it: ${facts.stackOrderText}`
         : 'push an empty commit or push the head again'}`);
     }

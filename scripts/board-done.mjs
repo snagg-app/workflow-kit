@@ -156,7 +156,8 @@ async function done() {
   }
   const sha = localHead();
   // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.
-  const prepare = !file && !findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
+  const ownHandoff = findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
+  const prepare = !file && !ownHandoff;
   if (skipReason) {
     progress(`LOCAL TESTS SKIPPED ${sha}: ${skipReason}`);
     writeFileSync(skipped, sha);
@@ -178,12 +179,14 @@ async function done() {
   state.delivered = [state.value];
   const status = projectStatus(issue);
   if (partial) progress(postBacklink(number, pull.html_url));
-  // A head prepared after an earlier handoff has no handoff yet: it leaves Human review.
-  else if (status !== statuses.automatedReview && (prepare || status !== statuses.humanReview)) set('Status', statuses.automatedReview);
+  // A head without a handoff of its own leaves Human review, with or without FILE (#947): it stays on Automated review while waiting and after a red or timed-out wait.
+  else if (status !== statuses.automatedReview && (!ownHandoff || status !== statuses.humanReview)) set('Status', statuses.automatedReview);
   progress('done: waiting for CI and reviews');
   const waitStart = Date.now(), polled = await poll(() => reviewsForHead(prNumber));
   took('CI and reviews', waitStart);
   if (isResult(polled)) return polled;
+  // #947: another push (bot, second agent) during the wait made the tested head stale; no handoff for code this run never tested.
+  if (polled.pr.headRefOid !== sha) return failed(`the PR head changed while waiting (${polled.pr.headRefOid.slice(0, 7)}, tested and pushed ${sha.slice(0, 7)}); no handoff written. Fetch it, review the foreign push, then run done again`);
   if (polled.failed) return reviewOutcome(polled, { quota: true });
   const head = polled.pr.headRefOid;
   if (prepare) return result('ok', 'PREPARED', { headline: `PREPARED #${number} head ${head.slice(0, 7)}: ${skipReason ? 'local tests skipped; ready' : 'tests, ready'} and automated review are done; no handoff comment, boxes stay open, no Human review. ${skipReason ? 'Repeat --skip-local-tests REASON to skip local tests again; then run' : 'Run the final proof, then'} board.mjs done ${number} FILE`,
