@@ -363,7 +363,14 @@ function api(argv, input, stdout, stderr, exit) {
   let data;
   if (query.startsWith('mutation')) {
     // mutation-fails: GitHub refuses every write.
-    if (fs.existsSync('mutation-fails') || (fs.existsSync('close-fails') && query.includes('closeIssue'))) exit(1);
+    // status-fails: only the status write is refused. mutation-limited: every write meets the used-up quota, and stays so.
+    if (fs.existsSync('mutation-fails') || (fs.existsSync('close-fails') && query.includes('closeIssue')) || (fs.existsSync('status-fails') && query.includes('updateProjectV2ItemFieldValue'))) exit(1);
+    if (fs.existsSync('mutation-limited')) {
+      fs.appendFileSync('limited-hits', 'x\n');
+      answer(JSON.stringify({ errors: [{ type: 'RATE_LIMIT', message: 'API rate limit already exceeded for user ID 1.' }] }), [0, Math.floor(Date.now() / 1000) + 1]);
+      stderr('gh: API rate limit already exceeded for user ID 1.\n');
+      exit(1);
+    }
     fs.appendFileSync('mutations', query + '\n');
     // The item or issue each mutation wrote to, one line per mutation.
     fs.appendFileSync('mutation-targets', argv.filter(arg => /^(item|issue)=/.test(arg)).join(' ') + '\n');
