@@ -124,9 +124,9 @@ ${error.message}`);
   };
 
   const list = await gitIn(['worktree', 'list', '--porcelain']);
-  const listed = parseWorktrees(list.out);
   // Without the list every volume looks orphaned; the main checkout is always in it.
-  if (!list.ok || listed.length === 0) { console.error('git worktree list failed or came back empty; nothing was removed'); process.exit(1); }
+  const listed = list.ok ? parseWorktrees(list.out) : [];
+  if (listed.length === 0) { console.error('git worktree list failed or came back empty; nothing was removed'); process.exit(1); }
   const worktrees = listed.map((w, index) => ({ ...w, main: index === 0, current: norm(w.path) === norm(root) }));
   const only = option.only && norm(option.only);
   if (only && !worktrees.some(w => norm(w.path) === only)) refuse(`--only ${option.only} is no worktree of this project`);
