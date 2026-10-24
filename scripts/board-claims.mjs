@@ -94,9 +94,9 @@ function workReasons(issue, session, takeover) {
   const heads = new Set(prs.map(pr => pr.headRefName));
   const describe = pr => `open PR ${refOf(pr.repository, pr.number)}${pr.headRefName ? ` (branch ${pr.headRefName}${claimOf(pr) ? `, ${claimOf(pr).line}` : ''})` : ''}`;
   const blocked = mayTake ? [] : prs.map(pr => `${describe(pr)} closes this issue; ${own}`);
-  const why = isStale(issue) ? `stale %: no activity for ${ago(idleMs(issue))}` : '%: --takeover';
-  const notes = mayTake ? prs.map(pr => `${why.replace('%', describe(pr))}; start takes it over`) : [];
-  if (claim) (mayTake ? notes : blocked).push(mayTake ? `${why.replace('%', `claim of session ${claim.session}`)}; start takes it over` : `claimed by ${claim.agent} (session ${claim.session}) without a PR yet; ${own}`);
+  const why = who => isStale(issue) ? `stale ${who}: no activity for ${ago(idleMs(issue))}` : `${who}: --takeover`;
+  const notes = mayTake ? prs.map(pr => `${why(describe(pr))}; start takes it over`) : [];
+  if (claim) (mayTake ? notes : blocked).push(mayTake ? `${why(`claim of session ${claim.session}`)}; start takes it over` : `claimed by ${claim.agent} (session ${claim.session}) without a PR yet; ${own}`);
   // A branch without an open PR (#504): without own commits it holds nothing, without a commit for staleHours it is orphaned (a note), else it holds.
   for (const branch of workBranches(issue).filter(branch => !heads.has(branch))) {
     const { ahead, idle } = branchWork(issue, branch), agent = branch.split('/')[0];

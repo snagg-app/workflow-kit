@@ -1,7 +1,7 @@
 // The one guard for writing into a project: the path must lie below the checkout and no component on the way may be a link or a file.
 // Every writer of `kit setup` (hook files, profile, board marker, skills, provider output) goes through this module.
 import assert from 'node:assert/strict';
-import { existsSync, lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, readlinkSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 
 const present = path => lstatSync(path, { throwIfNoEntry: false });
@@ -38,7 +38,10 @@ export function projectFile(root, file) {
 export function writeProjectFile(root, file, value) {
   const target = projectFile(root, file);
   localDirectory(root, dirname(target));
-  if (!existsSync(target) || readFileSync(target, 'utf8').replaceAll('\r\n', '\n') !== value) writeFileSync(target, value);
+  // Read once and treat a missing file as ENOENT: no separate existence check that could go stale before the read.
+  let current;
+  try { current = readFileSync(target, 'utf8').replaceAll('\r\n', '\n'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (current !== value) writeFileSync(target, value);
 }
 
 /** renameSync that waits out the short locks Windows antivirus and indexers put on fresh files. */
