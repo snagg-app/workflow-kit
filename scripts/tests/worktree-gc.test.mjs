@@ -28,9 +28,17 @@ test('only a clean, pushed, idle, old worktree is finished; each guard keeps it'
 
 test('an unreadable process list counts as busy, so a worktree is kept when we cannot see whether it runs', () => {
   const path = resolve('/work/tree');
-  assert.equal(busyFrom({ ok: true, out: '42\tnode /elsewhere/tool.mjs' }, path), false);
-  assert.equal(busyFrom({ ok: true, out: `42\tnode ${path}/tool.mjs` }, path), true);
+  assert.equal(busyFrom({ ok: true, out: '42\t1\tnode /elsewhere/tool.mjs' }, path), false);
+  assert.equal(busyFrom({ ok: true, out: `42\t1\tnode ${path}/tool.mjs` }, path), true);
   assert.equal(busyFrom({ ok: false, out: '' }, path), true);
+});
+
+test('the shells that started the script carry the path too and do not count as busy, a foreign process still does', () => {
+  const path = resolve('/work/tree');
+  const chain = [`10\t1\tbash -c "node gc.mjs --only ${path}"`, `20\t10\tbash -c "node gc.mjs --only ${path}"`, '30\t20\tnode gc.mjs'].join('\n');
+  assert.equal(busyFrom({ ok: true, out: chain }, path, 30), false);
+  assert.equal(busyFrom({ ok: true, out: `${chain}\n99\t1\tvim ${path}/file` }, path, 30), true);
+  assert.equal(busyFrom({ ok: true, out: `${chain}\n99\t10\tnode ${path}/sibling.mjs` }, path, 30), true, 'a child of the shell is no ancestor');
 });
 
 test('a failed count of unpushed commits is unknown and keeps the worktree, never zero', () => {
