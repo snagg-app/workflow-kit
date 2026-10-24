@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { describe, test } from 'node:test';
-import { isolatedGit, run as exec, temporary } from './fixtures.mjs';
+import { copyKitScripts, isolatedGit, run as exec, temporary } from './fixtures.mjs';
 
 const skills = ['ponytail', 'ponytail-audit', 'ponytail-debt', 'ponytail-gain', 'ponytail-help', 'ponytail-review'];
 const hooks = ['activate', 'config', 'instructions', 'mode-tracker', 'runtime', 'subagent'];
@@ -34,13 +34,12 @@ async function fixture(t) {
   await git(upstream, 'add', '.'); await git(upstream, 'commit', '--quiet', '-m', 'Fixture sources');
   await git(kit, 'submodule', 'add', '--quiet', upstream, '.vendor/ponytail');
   await git(kit, 'commit', '--quiet', '-am', 'Pin local fixture');
+  copyKitScripts(kit); // before the fixture's own notice and patch, which replace the real ones
   write(join(kit, 'scripts/ponytail/NOTICE.md'), 'Fixture attribution\n');
   write(join(kit, 'scripts/ponytail/adaptations.patch'),
     'diff --git a/skills/ponytail/SKILL.md b/skills/ponytail/SKILL.md\n'
     + '--- a/skills/ponytail/SKILL.md\n+++ b/skills/ponytail/SKILL.md\n'
     + '@@ -1,3 +1,3 @@\n # ponytail\n-base\n+patched\n Grüße 🎴\n');
-  for (const script of ['provider.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'provider-matt-pocock.mjs', 'provider-list.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'lock.mjs', 'provider-links.mjs', 'write-guard.mjs', 'git-tool.mjs', 'run-program.mjs', 'agents.mjs', 'versions.json', 'versions.mjs', 'ponytail-patch.mjs'])
-    copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   const run = () => exec(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'setup'], { cwd: root });
   const update = () => exec(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'update'], { cwd: kit });
   return { kit, root, source: join(kit, '.vendor/ponytail'), expected, run, update };

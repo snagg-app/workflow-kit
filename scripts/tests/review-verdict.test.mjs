@@ -53,6 +53,16 @@ test('an optional reviewer is shown and never awaited', () => {
   assert.equal(judge(eyes, { optionalReviewers: ['coderabbitai'] }).done, true);
 });
 
+test('a Draft skip of a check listed in ignoredChecks waits for nothing (#887)', () => {
+  // A Backend run skipped while Draft (after the Draft conversion, before Ready) and no run since Ready.
+  const draftSkip = { __typename: 'CheckRun', name: 'Backend', status: 'COMPLETED', conclusion: 'SKIPPED',
+    checkSuite: { createdAt: ago(10), databaseId: 100, app: { slug: 'github-actions' }, workflowRun: { databaseId: 10, event: 'pull_request', workflow: { id: 'W' } } } };
+  const draft = facts({ contexts: [draftSkip], pr: { convertEvents: { nodes: [{ createdAt: ago(20) }] }, readyEvents: { nodes: [{ createdAt: ago(5) }] } } });
+  assert.equal(judge(draft).done, false, 'Without ignoredChecks the Draft skip still waits for a run since Ready');
+  assert.equal(judge(draft, { ignoredChecks: ['Backend'] }).done, true);
+  assert.equal(judge(draft, { ignoredChecks: ['Lint'] }).done, false, 'A check not listed still waits');
+});
+
 test('open Sonar issues are red, an unreadable count is not clean, a failed read throws', () => {
   const withSonar = answer => facts({ contexts: [job(1), sonarCheck], sonar: new Map([[sonarCheck, answer]]) });
   assert.equal(judge(withSonar({ total: 0, lines: [] })).failed, false);
