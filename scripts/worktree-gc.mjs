@@ -7,9 +7,8 @@
 // Volumes: `worktreeVolumePrefixes` in .github/workflow-project.json lists the name prefixes; a volume is
 // `<prefix><sha256(worktree root)[0:12]>[-suffix]`. Only those names are ever touched, and never a name containing
 // one of `worktreeVolumeProtect` (the project's long-lived volumes; also --volume-protect, repeatable).
-// A worktree is deleted only if ALL hold: no local changes, no commits missing on the remote (or in a closed/merged PR),
+// A worktree is deleted only if ALL hold: no local changes, no commits missing on the remote (or in a merged PR),
 // no running process, not locked by a living session, older than --min-age. Anything unclear is kept.
-import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -41,6 +40,11 @@ export function unpushedCount(result) {
 export function unpushedFor(count, headIsClosed) {
   if (count === null) return null;
   return headIsClosed ? 0 : count;
+}
+
+/** Head commits of merged PRs from `gh pr list --json headRefOid,mergedAt`. A PR closed without a merge saved nothing. Unreadable output gives an empty set. */
+export function mergedHeads(json) {
+  try { return new Set(JSON.parse(json).filter(pr => pr.mergedAt).map(pr => pr.headRefOid)); } catch { return new Set(); }
 }
 
 /** Why this worktree must stay, or null if it is finished. Pure: the facts are gathered elsewhere.
@@ -105,12 +109,15 @@ ${error.message}`);
     process.exit(2);
   }
   if (option.help) { console.log(usage); return; }
+  const refuse = message => { console.error(`${usage}\n${message}`); process.exit(2); };
+  if (!/^\d+$/.test(option['min-age'])) refuse('--min-age needs a whole number of minutes (0 or more)');
+  if (!/^[1-9]\d*$/.test(option.jobs)) refuse('--jobs needs a whole number of 1 or more');
   const root = projectRoot();
   const gitAsync = gitAsyncIn({}, root);
   const exec = (tool, args, cwd = root) => new Promise(done => execFile(tool.file, args, { cwd, env: tool.env, encoding: 'utf8', maxBuffer: 1 << 28 },
     (error, stdout) => done({ ok: !error, out: stdout ?? '' })));
   const gitIn = (args, cwd = root) => gitAsync(cwd, ...args);
-  const jobs = Math.max(1, Number(option.jobs));
+  const jobs = Number(option.jobs);
   const pool = async (items, work) => {
     const queue = [...items];
     await Promise.all(Array.from({ length: jobs }, async () => { for (let item; (item = queue.shift());) await work(item); }));
@@ -119,11 +126,11 @@ ${error.message}`);
   const listed = parseWorktrees((await gitIn(['worktree', 'list', '--porcelain'])).out);
   const worktrees = listed.map((w, index) => ({ ...w, main: index === 0, current: norm(w.path) === norm(root) }));
   const only = option.only && norm(option.only);
-  if (only) assert(worktrees.some(w => norm(w.path) === only), `--only ${option.only} is no worktree of this project`);
+  if (only && !worktrees.some(w => norm(w.path) === only)) refuse(`--only ${option.only} is no worktree of this project`);
 
-  // Facts: commits of closed/merged PRs count as saved (a squash merge leaves them on no remote branch).
+  // Facts: commits of merged PRs count as saved (a squash merge leaves them on no remote branch).
   const gh = (() => { try { return externalTool('gh', root); } catch { return null; } })();
-  const closedHeads = new Set(!gh ? [] : (await exec(gh, ['pr', 'list', '--state', 'closed', '--limit', '1000', '--json', 'headRefOid', '--jq', '.[].headRefOid'])).out.split(/\s+/).filter(Boolean));
+  const closedHeads = !gh ? new Set() : mergedHeads((await exec(gh, ['pr', 'list', '--state', 'merged', '--limit', '1000', '--json', 'headRefOid,mergedAt'])).out);
   const processes = process.platform === 'win32'
     ? (await exec({ file: 'powershell.exe', env: process.env }, ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }']))
     : (await exec({ file: 'ps', env: process.env }, ['-eo', 'pid,args']));

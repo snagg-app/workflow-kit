@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isolatedGit, run, temporary } from './fixtures.mjs';
-import { busyFrom, keepReason, orphanVolumes, rootHashes, unpushedCount, unpushedFor } from '../worktree-gc.mjs';
+import { busyFrom, keepReason, mergedHeads, orphanVolumes, rootHashes, unpushedCount, unpushedFor } from '../worktree-gc.mjs';
 
 const script = fileURLToPath(new URL('../worktree-gc.mjs', import.meta.url));
 const finished = { dirty: false, unpushed: 0, busy: false, locked: null, ageMinutes: 1000 };
@@ -86,6 +86,23 @@ test('dry run is the default and deletes nothing; --rm deletes only finished wor
   for (const path of [dirty, unpushed, locked]) assert.ok(existsSync(path), `${path} is kept`);
   assert.ok(!git(main, 'branch', '--list', 'done').trim(), 'its local branch is gone');
   assert.ok(git(main, 'branch', '--list', 'unpushed').trim(), 'the branch with unpushed commits stays');
+});
+
+test('only the head of a merged PR counts as saved, a closed but unmerged one does not', () => {
+  const listing = JSON.stringify([{ headRefOid: 'aaa', mergedAt: '2026-10-01T00:00:00Z' }, { headRefOid: 'bbb', mergedAt: null }]);
+  assert.deepEqual([...mergedHeads(listing)], ['aaa']);
+  assert.deepEqual([...mergedHeads('not json')], []);
+});
+
+test('invalid --min-age, --jobs and an unknown --only are refused with exit 2, even with --rm', async t => {
+  const dir = temporary(t, 'worktree-gc-');
+  const env = isolatedGit(dir);
+  execFileSync('git', ['init', '-b', 'main', dir], { env });
+  for (const args of [['--min-age', '30m'], ['--min-age', '-1'], ['--jobs', 'abc'], ['--jobs', '0'], ['--only', join(dir, 'nope')]]) {
+    const result = await run(process.execPath, [script, '--cwd', dir, '--rm', ...args], { env });
+    assert.equal(result.status, 2, args.join(' '));
+    assert.doesNotMatch(result.stderr, /AssertionError|\sat /, 'no stack trace');
+  }
 });
 
 test('an unknown option is refused with exit 2 and a usage text, --help exits 0', async () => {
