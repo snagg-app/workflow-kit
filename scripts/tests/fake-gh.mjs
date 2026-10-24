@@ -116,11 +116,18 @@ function api(argv, input, stdout, stderr, exit) {
       }
       if (!fs.existsSync('comment-noop')) {
         const items = JSON.parse(fs.readFileSync(comments));
+        // rival-comment: another session's claim lands just before this write (a parallel start).
+        if (fs.existsSync('rival-comment')) items.push({ id: items.length + 1, user: { login: 'worker' }, created_at: '2026-10-07T00:00:00Z', body: fs.readFileSync('rival-comment', 'utf8'), html_url: 'u' });
         items.push({ id: items.length + 1, user: { login: 'worker' }, created_at: '2026-10-07T00:00:00Z', body: input, html_url: 'https://github.com/test/example/issues/1#issuecomment-' + (items.length + 1) });
         fs.writeFileSync(comments, JSON.stringify(items));
         fs.writeFileSync(backlink, JSON.stringify({ ...JSON.parse(fs.readFileSync(backlink)), comments: items.length }));
       }
       stdout('{}');
+      exit(0);
+    }
+    if (parts[3] === 'issues' && parts[4] === 'comments' && argv.includes('DELETE')) {
+      fs.appendFileSync('comment-deletes', parts[5] + '\n');
+      stdout('');
       exit(0);
     }
     if (parts[3] === 'issues' && parts[5] === 'comments' && fs.existsSync(comments)) {

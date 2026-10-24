@@ -138,6 +138,32 @@ test('start claims without branch or PR; the same call resumes, a foreign claim 
   assert.match(JSON.parse(text('backlink-comments-1.json')).at(-1).body, /Session: S2\n/);
 });
 
+test('two sessions start at once: the claim comment written first wins, the other stops and withdraws its comment (#943)', t => {
+  const { run, writeIssue, file, text } = startFixture(t);
+  writeIssue(issue('Ready'));
+  writeFileSync(file('rival-comment'), 'Beansprucht.\nAgent: claude, Session: S2\nBasis: main\n');
+  const result = run('start', '1', '--session', 'S1');
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.match(result.stdout, /session S2 claimed #1 first/);
+  assert.equal(text('comment-deletes'), '2\n', 'only the own comment is withdrawn');
+});
+
+test('done opens no first PR with the claim of another session (#943)', t => {
+  const { checkout, run, writeIssue, git, file, text, env } = startFixture(t);
+  writeIssue(issue('Ready'));
+  assert.equal(run('start', '1', '--session', 'S1').status, 0);
+  const body = 'Beansprucht.\nAgent: claude, Session: S1\nBasis: main\n';
+  writeIssue({ ...JSON.parse(text('issue.json')), comments: { nodes: [{ createdAt: new Date().toISOString(), url: 'u', body }] } });
+  writeFileSync(file('work.txt'), 'x');
+  git(checkout, 'add', 'work.txt');
+  git(checkout, 'commit', '-q', '-m', 'work');
+  env.CLAUDE_CODE_SESSION_ID = 'S2';
+  const result = run('done', '1');
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.match(result.stdout + result.stderr, /claim of session S1/);
+  assert.equal(existsSync(file('created-pr')), false);
+});
+
 test('start sets push.default to simple in the clone, even when the clone had upstream (#3822)', t => {
   const { checkout, run, writeIssue, git } = startFixture(t);
   git(checkout, 'config', 'push.default', 'upstream');
