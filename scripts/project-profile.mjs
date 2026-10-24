@@ -122,7 +122,7 @@ export function textsFor(project) {
 const profileFile = '.github/workflow-project.json';
 // Lists of non-empty strings: the field and what its entries are.
 const lists = {
-  optionalReviewers: 'bot logins or app slugs', updateBranchChecks: 'check names', awaitApps: 'app slugs', selfReview: 'check names', push: 'shell commands',
+  optionalReviewers: 'bot logins or app slugs', updateBranchChecks: 'check names', ignoredChecks: 'check names', awaitApps: 'app slugs', selfReview: 'check names', push: 'shell commands',
   requiredFields: 'field names', worktreeVolumePrefixes: 'volume name prefixes', worktreeVolumeProtect: 'volume name parts',
 };
 const numbers = { reviewerGraceMinutes: [3, 'a number of minutes, 0 or more (0 turns the grace off)'], staleHours: [6, 'a number of hours, 0 or more'] };

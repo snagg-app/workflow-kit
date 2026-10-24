@@ -217,6 +217,26 @@ test('merge merges the base for a red check from updateBranchChecks, but only wh
   assert.deepEqual(calls(), []);
 });
 
+test('a red check from ignoredChecks is shown as ignored and never decides; any other red check stays FAILED (#868)', t => {
+  const { checkout, run, show, calls, first, headOf } = mergeFixture(t);
+  const check = (name, conclusion) => ({ __typename: 'CheckRun', name, status: 'COMPLETED', conclusion });
+  const rollup = (...nodes) => ({ statusCheckRollup: { contexts: { totalCount: nodes.length, nodes } } });
+  const config = join(checkout, '.github/workflow-project.json'), plain = JSON.parse(readFileSync(config, 'utf8'));
+  writeFileSync(config, JSON.stringify({ ...plain, ignoredChecks: ['submit-gradle'] }));
+
+  show(headOf(first, rollup(check('CI', 'SUCCESS'), check('submit-gradle', 'FAILURE'))));
+  const waited = run('wait', '7');
+  assert.equal(waited.status, 0, waited.stdout + waited.stderr);
+  assert.match(waited.stdout, /^check submit-gradle: FAILURE \[ignored: listed in ignoredChecks\]$/m);
+
+  show(headOf(first, rollup(check('CI', 'SUCCESS'), check('submit-gradle', 'FAILURE'), check('lint', 'FAILURE'))));
+  const failed = run('wait', '7');
+  assert.equal(failed.status, 1);
+  assert.match(failed.stdout, /^FAILED: check lint FAILURE$/m);
+  assert.doesNotMatch(failed.stdout, /FAILED: .*submit-gradle/);
+  assert.deepEqual(calls(), []);
+});
+
 test('merge merges the base when the Sonar analysis of the head links another PR, then merges (#640)', t => {
   const { run, show, calls, json, first, second, headOf } = mergeFixture(t);
   const token = process.env.SONAR_TOKEN;
