@@ -29,6 +29,7 @@ async function fixture(t) {
     .concat(hooks.map(name => [`hooks/ponytail-${name}.js`, name === 'runtime' ? '' : `// ${name}\r\n`])));
   expected.set('skills/ponytail/SKILL.md', '# ponytail\nbase\nGrüße 🎴\n');
   expected.set('LICENSE', 'License\r\n© Example 🎴\r\n');
+  write(join(upstream, 'package.json'), JSON.stringify({ version: '9.8.7' }));
   for (const [path, content] of expected) write(join(upstream, path), content);
   await git(upstream, 'add', '.'); await git(upstream, 'commit', '--quiet', '-m', 'Fixture sources');
   await git(kit, 'submodule', 'add', '--quiet', upstream, '.vendor/ponytail');
@@ -38,14 +39,27 @@ async function fixture(t) {
     'diff --git a/skills/ponytail/SKILL.md b/skills/ponytail/SKILL.md\n'
     + '--- a/skills/ponytail/SKILL.md\n+++ b/skills/ponytail/SKILL.md\n'
     + '@@ -1,3 +1,3 @@\n # ponytail\n-base\n+patched\n Grüße 🎴\n');
-  for (const script of ['provider.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'provider-matt-pocock.mjs', 'provider-list.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'lock.mjs', 'provider-links.mjs', 'write-guard.mjs', 'git-tool.mjs', 'run-program.mjs', 'agents.mjs', 'versions.json', 'versions.mjs'])
+  for (const script of ['provider.mjs', 'provider-ponytail.mjs', 'provider-impeccable.mjs', 'provider-matt-pocock.mjs', 'provider-list.mjs', 'code-review-failure-paths.mjs', 'checkout-root.mjs', 'lock.mjs', 'provider-links.mjs', 'write-guard.mjs', 'git-tool.mjs', 'run-program.mjs', 'agents.mjs', 'versions.json', 'versions.mjs', 'ponytail-patch.mjs'])
     copyFileSync(new URL(`../${script}`, import.meta.url), join(kit, 'scripts', script));
   const run = () => exec(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'setup'], { cwd: root });
-  return { root, source: join(kit, '.vendor/ponytail'), expected, run };
+  const update = () => exec(process.execPath, [join(kit, 'scripts/provider.mjs'), 'ponytail', 'update'], { cwd: kit });
+  return { kit, root, source: join(kit, '.vendor/ponytail'), expected, run, update };
 }
 const succeeds = result => assert.equal(result.status, 0, result.stderr);
 
 describe('ponytail setup', { concurrency: true }, () => {
+test('update records the pinned upstream version and publishes its adapted files', async t => {
+  const f = await fixture(t);
+  const manifest = join(f.kit, 'scripts/versions.json');
+  const versions = JSON.parse(readFileSync(manifest, 'utf8'));
+  versions.ponytail = '0.0.0';
+  writeFileSync(manifest, JSON.stringify(versions));
+  assert.equal(JSON.parse(readFileSync(join(f.source, 'package.json'), 'utf8')).version, '9.8.7');
+  succeeds(await f.update());
+  assert.equal(JSON.parse(readFileSync(manifest, 'utf8')).ponytail, '9.8.7');
+  assert.equal(readFileSync(join(f.kit, '.agents/skills/ponytail/SKILL.md'), 'utf8'), '# ponytail\npatched\nGrüße 🎴\n');
+});
+
 test('setup writes byte-correct ordinary files for every provider and reruns without changes', async t => {
   const f = await fixture(t); succeeds(await f.run());
   for (const [path, original] of f.expected) {
