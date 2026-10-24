@@ -131,6 +131,22 @@ test('ready marks a Draft PR ready only for the expected pushed commit and never
   assert.equal(mutations(), 0);
 });
 
+test('ready waits briefly for the expected head of an already ready PR, as it does for a Draft', t => {
+  const { checkout, run, reset, restOverlays } = fixture(t);
+  const NEW = 'c0ffee'.repeat(6) + 'abcd', OLD = 'decade'.repeat(6) + 'abcd';
+  const quick = ['--attempts', '3', '--interval', '0.01'];
+  const mutations = () => existsSync(join(checkout, 'mutations')) ? readFileSync(join(checkout, 'mutations'), 'utf8').split('\n').filter(Boolean).length : 0;
+  reset();
+  writeFileSync(join(checkout, 'pr.json'), JSON.stringify({ id: 'PR7', number: 7, state: 'OPEN', isDraft: false, isCrossRepository: false,
+    headRefOid: OLD, headRepository: { nameWithOwner: 'test/example' } }));
+  // A push just before done: the first read still shows the old head, the next one the new head.
+  restOverlays([{ headRefOid: OLD }, { headRefOid: NEW }]);
+  const result = run('ready', '7', NEW, ...quick);
+  assert.equal(result.status, 0, 'A fresh head that shows up on a later read is accepted: ' + result.stdout + result.stderr);
+  assert.match(result.stdout, /^READY /m);
+  assert.equal(mutations(), 0, 'An already ready PR is never written again');
+});
+
 test('ready refuses an unknown flag or extra word before any write', t => {
   fixture(t).refusesUnknownFlag('ready', '7', 'a'.repeat(40));
 });
