@@ -1,6 +1,6 @@
 // The claim format (#643, #789): "Agent: NAME, Session: ID", written by `start`, read by every board command. The one module that builds or searches claim lines.
 // NAME is any agent of the agent table (agents.mjs), so a new agent needs no entry here; its session variable is `sessionEnv` there.
-import { readFileSync, statSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { agents, agentNames, detectAgent } from './agents.mjs';
 
@@ -45,7 +45,9 @@ export function ownSession(explicit, env = process.env, cwd = process.cwd(), rec
 // variable a subagent inherits from its parent. The git dir is per worktree; a new `start` in the same worktree overwrites it.
 const sessionFile = directory => {
   const dot = join(directory, '.git');
-  const gitDir = statSync(dot).isDirectory() ? dot : resolve(directory, /^gitdir:\s*(.+)$/m.exec(readFileSync(dot, 'utf8'))[1].trim()); // a worktree's .git is a file naming its git dir
+  let gitDir = dot;
+  // a worktree's .git is a file naming its git dir; reading a directory fails with EISDIR (no stat before the read: a race)
+  try { gitDir = resolve(directory, /^gitdir:\s*(.+)$/m.exec(readFileSync(dot, 'utf8'))[1].trim()); } catch (error) { if (error.code !== 'EISDIR') throw error; }
   return join(gitDir, 'workflow-kit-session');
 };
 /** The session `start` recorded in this worktree, or undefined (no record, no git). */
