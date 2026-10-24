@@ -33,7 +33,7 @@ const head = 'a'.repeat(40);
 const block = steps.find(step => name(step) === 'Approve the repository CI').split('        run: |\n')[1].replace(/^          /gm, '');
 
 /** Runs the step with gh, git and sleep replaced; gh answers the run list as after its jq filter, one "id conclusion" per run. */
-function approve({ runs = [], approveFails = false } = {}) {
+function approve({ runs = [], codeqlRuns = runs, approveFails = false } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'renovate regenerate '));
   const log = join(dir, 'gh.log').replaceAll('\\', '/');
   const result = spawnSync(bash, ['-c', `
@@ -42,12 +42,13 @@ function approve({ runs = [], approveFails = false } = {}) {
     gh() {
       echo "$*" >> "${log}"
       case "$*" in
+        *"--workflow codeql.yml "*) printf '%s' "$CODEQL_RUNS" ;;
         "run list"*) printf '%s' "$RUNS" ;;
         "api "*) return ${approveFails ? 1 : 0} ;;
       esac
     }
     ${block}
-  `], { encoding: 'utf8', timeout: 20000, env: { ...process.env, RUNS: runs.join('\n'), GITHUB_REPOSITORY: 'o/r' } });
+  `], { encoding: 'utf8', timeout: 20000, env: { ...process.env, RUNS: runs.join('\n'), CODEQL_RUNS: codeqlRuns.join('\n'), GITHUB_REPOSITORY: 'o/r' } });
   let ghCalls = '';
   try { ghCalls = readFileSync(log, 'utf8'); } catch { /* gh was never called */ }
   rmSync(dir, { recursive: true, force: true });
@@ -56,12 +57,15 @@ function approve({ runs = [], approveFails = false } = {}) {
 
 test('a CI run held for approval on the pushed commit is approved; a running or finished one is left alone', () => {
   const approvals = result => result.ghCalls.split('\n').filter(call => call.startsWith('api -X POST')).length;
-  const held = approve({ runs: ['7 action_required'] });
+  const held = approve({ runs: ['7 action_required'], codeqlRuns: ['9 action_required'] });
   assert.equal(held.status, 0, held.stderr);
-  assert.equal(approvals(held), 1);
+  assert.equal(approvals(held), 2);
   assert.match(held.ghCalls, /actions\/runs\/7\/approve/);
+  assert.match(held.ghCalls, /actions\/runs\/9\/approve/);
   // The list is asked for the pushed commit and the pull_request event only.
   assert.match(held.ghCalls, new RegExp(`--event pull_request --commit ${head}`));
+  for (const workflow of ['repository.yml', 'codeql.yml'])
+    assert.ok(held.ghCalls.includes(`--workflow ${workflow} --event pull_request --commit ${head}`));
   for (const conclusion of ['', 'success', 'failure']) {
     const other = approve({ runs: [`8 ${conclusion}`] });
     assert.equal(other.status, 0, other.stderr);
@@ -72,6 +76,10 @@ test('a CI run held for approval on the pushed commit is approved; a running or 
   assert.notEqual(none.status, 0);
   assert.match(none.stdout, /No pull_request run/);
   assert.notEqual(approve({ runs: ['7 action_required'], approveFails: true }).status, 0);
+  const missingCodeql = approve({ runs: ['7 success'], codeqlRuns: [] });
+  assert.notEqual(missingCodeql.status, 0);
+  assert.match(missingCodeql.stdout, /codeql\.yml/);
+  assert.notEqual(approve({ runs: ['7 success'], codeqlRuns: ['9 action_required'], approveFails: true }).status, 0);
 });
 
 const check = steps.find(step => name(step) === 'Check who changed the branch').split('        run: |\n')[1].replace(/^          /gm, '');
@@ -99,7 +107,7 @@ async function guard(change, author = 'renovate[bot]') {
 
 test('a branch may change the pin and the generated data, nothing that decides what runs with which rights', async () => {
   // Every case has its own repository, so they run side by side.
-  const paths = ['.github/workflows/repository.yml', 'scripts/a.mjs', 'renovate.json'];
+  const paths = ['.github/workflows/repository.yml', '.github/workflows/codeql.yml', 'scripts/a.mjs', 'renovate.json'];
   const [ok, renamed, foreign, ...changes] = await Promise.all([
     guard(({ put }) => { put('.vendor/pin', 'new\n'); put('scripts/ponytail/adaptations.patch', 'new\n'); }),
     // A rename lists only its new path unless renames are switched off: the moved-away workflow must still count.
