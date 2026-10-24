@@ -66,9 +66,10 @@ export function setupBoard({ root, github, repo, number: requestedNumber, kitPro
     { id: priority.id }).node?.issueField?.options;
   assert.ok(priorityOptions?.length >= 2, 'Priority needs a usable explicit scale; configure/verify its choices before completing setup');
   github.linkProject(project.number, owner, repo);
-  const labels = new Set(github.labelNames(repo));
+  // GitHub label names are case-insensitive: „Security“ already covers „security“.
+  const labels = new Set(github.labelNames(repo).map(name => name.toLowerCase()));
   for (const { name: label, color } of projectLabels(saved ?? {}))
-    if (!labels.has(label)) github.createLabel(repo, label, color);
+    if (!labels.has(label.toLowerCase())) github.createLabel(repo, label, color);
   saveProject();
   return {
     status: 0, note: `bound to project #${project.number}`,
