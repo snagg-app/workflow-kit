@@ -185,12 +185,18 @@ async function done() {
   const waitStart = Date.now(), polled = await poll(() => reviewsForHead(prNumber));
   took('CI and reviews', waitStart);
   if (isResult(polled)) return polled;
+  // #982: somebody merged the PR while done waited; the verdict has no comments then. Say so, change nothing.
+  if (polled.pr.state === 'MERGED') return result('ok', 'ALREADY MERGED', { headline: `ALREADY MERGED #${number}: PR #${prNumber} was merged while done waited; no changes`, data: { issue: number, pr: prNumber } });
   // #947: another push (bot, second agent) during the wait made the tested head stale; no handoff for code this run never tested.
   if (polled.pr.headRefOid !== sha) return failed(`the PR head changed while waiting (${polled.pr.headRefOid.slice(0, 7)}, tested and pushed ${sha.slice(0, 7)}); no handoff written. Fetch it, review the foreign push, then run done again`);
   if (polled.failed) return reviewOutcome(polled, { quota: true });
   const head = polled.pr.headRefOid;
   if (prepare) return result('ok', 'PREPARED', { headline: `PREPARED #${number} head ${head.slice(0, 7)}: ${skipReason ? 'local tests skipped; ready' : 'tests, ready'} and automated review are done; no handoff comment, boxes stay open, no Human review. ${skipReason ? 'Repeat --skip-local-tests REASON to skip local tests again; then run' : 'Run the final proof, then'} board.mjs done ${number} FILE`,
     data: { issue: number, pr: prNumber, head } });
+  // #982: the wait also ends on blockers only (open thread, change request, unreadable Sonar count); then nothing is ticked or posted. handoff() would refuse later, but the issue would already say "done".
+  if (polled.lines.some(line => line.startsWith('blocker:') || /^unresolved threads: [1-9]/.test(line))) {
+    return reviewOutcome({ ...polled, failed: true, reasons: ['review blockers or open threads on this head; fix them, then run done again (nothing ticked, no handoff comment)'] });
+  }
   // Boxes are ticked only once the checks of the head are green.
   if (!partial) {
     const written = writeBody(before => tickAcceptance(before));

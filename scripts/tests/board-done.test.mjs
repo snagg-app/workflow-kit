@@ -720,3 +720,28 @@ test('done writes no handoff when another push changed the head during the wait 
   assert.equal(text('stored'), 'Automated review');
   assert.deepEqual(json('issues-comments.json'), []);
 });
+
+test('done reports a PR merged during the wait and changes nothing on the issue (#982)', t => {
+  const { run, json, text, checkout } = delivery(t, handoffFixture);
+  writeFileSync(join(checkout, 'pr-reads.json'), JSON.stringify([...Array(1).fill({}), { state: 'MERGED' }]));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^ALREADY MERGED #1/m);
+  assert.doesNotMatch(result.stdout + result.stderr, /TypeError/);
+  assert.equal(text('stored'), 'Automated review');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'), 'no ticks');
+});
+
+test('done ticks and posts nothing while the wait ends on a blocker only (#982)', t => {
+  const { run, file, json, text } = delivery(t, handoffFixture);
+  const pr = json('pr.json');
+  pr.latestOpinionatedReviews = { totalCount: 1, nodes: [{ state: 'CHANGES_REQUESTED', author: { login: 'reviewer' } }] };
+  writeFileSync(file('pr.json'), JSON.stringify(pr));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^blocker: changes requested by reviewer/m);
+  assert.equal(text('stored'), 'Automated review');
+  assert.deepEqual(json('issues-comments.json'), []);
+  assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'), 'no ticks');
+});
