@@ -344,3 +344,7 @@ ruleset passes, instead of waiting for the next Renovate run, which came too rar
 digests. A Renovate-only commit fails that check until the regenerated outputs are pushed. `rebaseWhen` is
 `conflicted`: the ruleset does not require up-to-date branches, and constant rebases after every
 `main` merge kept CI pending whenever Renovate checked, so the automerge never fired.
+
+Dependabot security updates use the same protected merge queue, including major updates.
+The metadata-only workflow never checks out pull-request code. The ruleset also requires
+CodeQL; GitHub secret scanning, push protection and private vulnerability reporting are enabled.
