@@ -41,7 +41,6 @@ function sweep() {
         .findLast(event => event.event === 'reopened' && Date.parse(event.created_at) > Date.parse(delivered.mergedAt));
       if (reopened) {
         progress(`#${issue.number} stays open: reopened ${reopened.created_at} after PR #${delivered.number} was merged`);
-        resets++;
         continue;
       }
       if (delivered) {
@@ -61,13 +60,17 @@ function sweep() {
       if (!pr) continue;
       plan ??= resolveOption('Status', statuses.automatedReview);
       // The comment first: a failed comment must not leave an issue out of Human review that nobody was told about.
-      graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id,
-        body: texts.conflict(pr.url, statuses) });
+      // A status write that failed in an earlier run left the comment behind: write it once, like the delivered comment.
+      const body = texts.conflict(pr.url, statuses);
+      if (!restAll(`repos/${project.repository}/issues/${issue.number}/comments`).some(comment => comment.body === body))
+        graphql('mutation($issue:ID!,$body:String!){addComment(input:{subjectId:$issue,body:$body}){clientMutationId}}', { issue: issue.id, body });
       writeOption(issue, plan);
       reset.push(issue.number);
       progress(`#${issue.number} reset to ${statuses.automatedReview}: PR #${pr.number} has merge conflicts`);
       resets++;
     } catch (error) {
+      // A used-up quota would fail every further issue the same way: stop at once.
+      if (error?.quotaUsedUp) throw error;
       // One issue sweep cannot judge or write must not stop the others; the run reports it and ends red.
       skipped.push(`#${issue.number} skipped: ${String(error?.message ?? error).split('\n')[0]}`);
     }
