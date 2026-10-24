@@ -5,7 +5,7 @@ authority to merge ([review loop](../CONTRIBUTING.md#review-loop) step 7). It ap
 `done` (open non-draft PR, CI green, every reviewer with a trace on the head finished or
 stalled, no `blocker:` line, no open thread, determined merge state, the PR body's self-review section when the project lists `"selfReview"`) and prints the same
 lines. Like `wait` it looks again until CI and every reviewer have finished (`--max-minutes`, default 9: then
-`still waiting: call merge again`, exit 4; `--interval SECONDS`, 0 to 60, sets a fixed pause between looks); a red check or
+`still waiting: call merge again`, exit 4; `--interval SECONDS`, 10 to 60, sets a fixed pause between looks); a red check or
 blocker ends `FAILED` (exit 1), an undetermined merge state `WAITING` (exit 3), and nothing is merged. A single PR is merged as it is, also when the base changed the same files (#552).
 Only a red check makes it merge the base into the PR branch first (`PUT pulls/N/update-branch` with the checked head as `expected_head_sha`),
 wait for the new head and its CI the same way, check the gates again and merge that head: when the only red check is one listed in `"updateBranchChecks"`

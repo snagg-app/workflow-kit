@@ -32,7 +32,8 @@ export const TABLE = [
   [/^scripts\/tests\/(gh-shapes\.mjs$|gh-shapes\/)/, [BOARD, 'gh-shapes.test.mjs']],
   [/^scripts\/record-gh-shapes\.mjs$/, ['gh-shapes.test.mjs']],
   [/^scripts\/quota-sample\.mjs$/, ['quota-sample.test.mjs']],
-  [/^scripts\/is-main\.mjs$/, ['is-main.test.mjs']],
+  [/^scripts\/is-main\.mjs$/, ['board-modules.test.mjs', 'is-main.test.mjs']], // board-readme.mjs imports it
+  [/^\.githooks\//, ['git-hooks.test.mjs']],
   [/^scripts\/affected-tests\.mjs$/, ['affected-tests.test.mjs']],
   [/^scripts\/worktree-gc\.mjs$/, ['worktree-gc.test.mjs']],
   [/^scripts\/checkout-root\.mjs$/, [ALL]],
@@ -53,7 +54,8 @@ export const TABLE = [
   [/^scripts\/versions\.mjs$/, ['entrypoints.test.mjs', 'matt-pocock.test.mjs', 'ponytail-batch.test.mjs']],
   [/^scripts\/kit-hook\.mjs$/,['kit-init-hook.test.mjs', 'ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
   [/^scripts\/run-program\.mjs$/, [BOARD, 'git-tool.test.mjs']],
-  [/^scripts\/(git-tool|kit-check|kit-entry)\.mjs$/, ['git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', 'kit-setup.test.mjs']],
+  [/^scripts\/git-tool\.mjs$/, [BOARD, 'git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', 'kit-setup.test.mjs']], // board-checkout.mjs imports it
+  [/^scripts\/(kit-check|kit-entry)\.mjs$/, ['git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', 'kit-setup.test.mjs']],
   [/^scripts\/plugin-skills\.mjs$/, ['skill-core.test.mjs']],
   [/^scripts\/(impeccable-release\.mjs|impeccable\/)|^\.vendor\/impeccable$/, ['impeccable-update.test.mjs']],
   [/^scripts\/provider-impeccable\.mjs$/, ['provider.test.mjs', 'impeccable-update.test.mjs', 'impeccable-hooks.test.mjs', 'matt-pocock.test.mjs']],
