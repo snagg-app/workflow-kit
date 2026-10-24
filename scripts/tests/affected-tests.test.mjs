@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -30,9 +30,16 @@ test('a hook change selects the hook tests and nothing slower than needed', () =
 });
 
 test('a changed test runs itself; an unmapped script is reported instead of skipped', () => {
-  const result = affectedTests(['scripts/tests/setup.test.mjs', 'scripts/measure-base-load.mjs']);
+  const result = affectedTests(['scripts/tests/setup.test.mjs', 'scripts/not-yet-mapped.mjs']);
   assert.ok(names(result).includes('setup.test.mjs'));
-  assert.deepEqual(result.unmapped, ['scripts/measure-base-load.mjs']);
+  assert.deepEqual(result.unmapped, ['scripts/not-yet-mapped.mjs']);
+});
+
+test('every kit script outside scripts/tests has a row in the table', () => {
+  const root = fileURLToPath(new URL('../..', import.meta.url));
+  const files = execFileSync('git', ['ls-files', '--', ':(glob)scripts/**/*.mjs'], { cwd: root, encoding: 'utf8' }).split('\n')
+    .filter(file => file && !file.startsWith('scripts/tests/'));
+  assert.deepEqual(files.filter(file => !TABLE.some(([pattern]) => pattern.test(file))), []);
 });
 
 test('a project map names the commands of the changed paths, each once', () => {
