@@ -6,6 +6,7 @@
   "dependencyDashboard": false,
   "gitIgnoredAuthors": ["41898282+github-actions[bot]@users.noreply.github.com"],
   "automerge": true,
+  "ignoreTests": false,
   "automergeType": "pr",
   "platformAutomerge": true,
   "rebaseWhen": "conflicted",
