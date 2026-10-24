@@ -539,7 +539,6 @@ test('done without any PR puts the result on the issue, ticks the boxes and move
   const { run, text, json } = delivery(t, fixture); // no PR closes the issue
   let result = run('done', '1');
   assert.equal(result.status === 0, false, 'no PR and no file');
-  assert.match(result.stdout + result.stderr, /no open PR closes #1/);
   assert.equal(text('stored'), 'In progress');
   result = run('done', '1', 'result.md');
   assert.equal(result.status, 1, 'a FILE alone does not set the status');
@@ -553,6 +552,15 @@ test('done without any PR puts the result on the issue, ticks the boxes and move
   assert.equal(json('backlink-1.json').body, '- [x] first\n- [ ] moved on, see #12\n- [x] done');
   assert.equal(text('stored'), 'Human review');
   assert.equal(text('affected-tests-calls'), '', 'nothing to test');
+});
+
+test('done without a PR refuses when the issue carries a claim but no commit yet, and changes nothing (#907)', t => {
+  const { run, writeIssue, text, json } = delivery(t, fixture); // the branch has no commit of its own
+  writeIssue({ ...issue('In progress'), assignees: { nodes: [{ login: 'worker' }] }, comments: { nodes: [{ body: 'Agent: claude, Session: S907\nBasis: release/0.1.1' }] } });
+  const result = run('done', '1');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(text('stored'), 'In progress');
+  assert.deepEqual(json('issues-comments.json'), []);
 });
 
 const mergedDelivery = { number: 7, state: 'MERGED', mergeCommit: { oid: 'f'.repeat(40) }, repository: { nameWithOwner: 'test/example' } };

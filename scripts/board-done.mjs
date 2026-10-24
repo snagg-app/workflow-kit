@@ -11,7 +11,7 @@ import { failed, isResult, result } from './board-result.mjs';
 import { pushPlan } from './board-checkout.mjs';
 import { args, checkout, git, github, graphql, issueName, issueOwner, issueProject, localHead, number, progress, project, projectDirectory, rest, restAll, state, statuses, step, texts } from './board-context.mjs';
 import { postBacklink, tickAcceptance, writeBody } from './board-body.mjs';
-import { handoffHeadLine } from './claim.mjs';
+import { commentClaims, handoffHeadLine } from './claim.mjs';
 import { currentIssuePr, isPartialPr } from './board-claims.mjs';
 import { isSpec, lines, projectStatus, readIssue, specRefusal } from './board-common.mjs';
 import { resolveOption, set } from './board-fields.mjs';
@@ -49,6 +49,8 @@ async function done() {
   // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch; the later push names that branch, so an upstream on the base is harmless (#651).
   const early = prNumber === undefined ? {} : pushPlan({ stand: checkout.stand(), number });
   if (early.refuse) return failed(early.refuse);
+  // A claim without a commit of its own (#907): `start` is done, the first commit opens the PR. Only a missing claim still points at `start`.
+  if (prNumber === undefined && !file && !found.unknown && commentClaims(issue).length) return failed(`no PR closes #${number} yet: commit your work first, then run done ${number} again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
   // No open PR but a FILE: a check task whose PR is already closed (or never opened) takes the way of the PR without a change.
   if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}: run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
   const pull = prNumber === undefined ? undefined : rest(`repos/${project.repository}/pulls/${prNumber}`);
