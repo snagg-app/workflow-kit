@@ -22,6 +22,15 @@ import { isMain } from './is-main.mjs';
 
 const norm = path => resolve(path).replaceAll('\\', '/').replace(/\/$/, '').toLowerCase();
 
+/** Does a running process (other than this script) have `path` in its command line? `listing` is {ok, out} of the process list.
+ * An unreadable list (ok:false) counts as busy: we cannot prove the worktree is idle. */
+export function busyFrom(listing, path) {
+  if (!listing.ok) return true;
+  const here = norm(path);
+  return listing.out.split(/\r?\n/).filter(line => !line.startsWith(`${process.pid}\t`) && !line.trim().startsWith(`${process.pid} `))
+    .some(line => line.replaceAll('\\', '/').toLowerCase().includes(here));
+}
+
 /** Why this worktree must stay, or null if it is finished. Pure: the facts are gathered elsewhere.
  * `explicit` (--only) skips the two guards meant for other sessions' trees (lock, age); the safety checks always apply. */
 export function keepReason(w, { minAge = 120, explicit = false } = {}) {
@@ -96,9 +105,8 @@ async function main() {
   const gh = (() => { try { return externalTool('gh', root); } catch { return null; } })();
   const closedHeads = new Set(!gh ? [] : (await exec(gh, ['pr', 'list', '--state', 'closed', '--limit', '1000', '--json', 'headRefOid', '--jq', '.[].headRefOid'])).out.split(/\s+/).filter(Boolean));
   const processes = process.platform === 'win32'
-    ? (await exec({ file: 'powershell.exe', env: process.env }, ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }'])).out
-    : (await exec({ file: 'ps', env: process.env }, ['-eo', 'pid,args'])).out;
-  const commandLines = processes.split(/\r?\n/).filter(line => !line.startsWith(`${process.pid}\t`) && !line.trim().startsWith(`${process.pid} `)).map(line => line.replaceAll('\\', '/').toLowerCase());
+    ? (await exec({ file: 'powershell.exe', env: process.env }, ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId)`t$($_.CommandLine)" }']))
+    : (await exec({ file: 'ps', env: process.env }, ['-eo', 'pid,args']));
 
   await pool(worktrees.filter(w => !w.main && !w.current), async w => {
     const ref = w.branch ? `refs/heads/${w.branch}` : w.head;
@@ -106,8 +114,7 @@ async function main() {
     w.unpushed = closedHeads.has(w.head) ? 0 : (Number.isFinite(unpushed) ? unpushed : null);
     if (w.missing) w.dirty = false; // nothing on disk to lose
     else { const status = await gitIn(['--no-optional-locks', 'status', '--porcelain'], w.path); w.dirty = !status.ok || status.out.trim() !== ''; }
-    const here = norm(w.path);
-    w.busy = !w.missing && commandLines.some(line => line.includes(here));
+    w.busy = !w.missing && busyFrom(processes, w.path);
     const pid = w.locked?.match(/pid (\d+)/)?.[1];
     w.lockAlive = pid ? alive(Number(pid)) : undefined;
     try {

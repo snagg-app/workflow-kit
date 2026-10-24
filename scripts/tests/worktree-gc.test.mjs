@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isolatedGit, run, temporary } from './fixtures.mjs';
-import { keepReason, orphanVolumes, rootHashes } from '../worktree-gc.mjs';
+import { busyFrom, keepReason, orphanVolumes, rootHashes } from '../worktree-gc.mjs';
 
 const script = fileURLToPath(new URL('../worktree-gc.mjs', import.meta.url));
 const finished = { dirty: false, unpushed: 0, busy: false, locked: null, ageMinutes: 1000 };
@@ -24,6 +24,13 @@ test('only a clean, pushed, idle, old worktree is finished; each guard keeps it'
   assert.equal(keepReason({ ...finished, locked: 'dead (pid 1)', lockAlive: false }), null);
   assert.equal(keepReason({ ...finished, ageMinutes: 0, locked: 'x' }, { explicit: true }), null, '--only skips lock and age');
   assert.ok(keepReason({ ...finished, dirty: true }, { explicit: true }), '--only never skips the safety checks');
+});
+
+test('an unreadable process list counts as busy, so a worktree is kept when we cannot see whether it runs', () => {
+  const path = resolve('/work/tree');
+  assert.equal(busyFrom({ ok: true, out: '42\tnode /elsewhere/tool.mjs' }, path), false);
+  assert.equal(busyFrom({ ok: true, out: `42\tnode ${path}/tool.mjs` }, path), true);
+  assert.equal(busyFrom({ ok: false, out: '' }, path), true);
 });
 
 test('volumes: protected names are never touched, living roots keep theirs, other names are ignored', () => {
