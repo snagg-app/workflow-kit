@@ -94,6 +94,11 @@ function judgeChecks(ctx, s) {
       lines.push(`check ${label}: ${pending ? 'pending' : check.conclusion ?? check.state}${check.title || check.description ? ` (${check.title || check.description})` : ''} [optional reviewer, not awaited]`);
       continue;
     }
+    // A check the project lists in "ignoredChecks" is shown and never decides (#868).
+    if ((settings.ignoredChecks ?? []).includes(label)) {
+      lines.push(`check ${label}: ${pending ? 'pending' : check.conclusion ?? check.state} [ignored: listed in ignoredChecks]`);
+      continue;
+    }
     // CI never stalls: a running check is not success however long it takes.
     if (pending) { waiting.push({ text: `check ${label}`, since: Infinity }); continue; }
     const result = check.conclusion ?? check.state;

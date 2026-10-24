@@ -80,7 +80,10 @@ shown as a note. An analyzer such as SonarCloud listed there still reports its o
 as a blocker, because they are findings, not waiting. A `null` or other non-list value is an
 ERROR; omit the field instead. A check that only asks for the base to be merged (the retarget restart check of a
 stacked PR) goes in `"updateBranchChecks"`, a list of check names: `board.mjs merge` then merges the base into the PR
-branch instead of ending `FAILED`. The script keeps these settings too.
+branch instead of ending `FAILED`. A check that is not authoritative for the project (for example a GitHub-owned
+check that cannot run without Actions budget) goes in `"ignoredChecks"`, a list of check names: `wait`, `done` and
+`merge` show it as `[ignored: listed in ignoredChecks]` and neither await it nor count it red; every other red check
+stays `FAILED`. The script keeps these settings too.
 `"doneBaseMerge"` selects the project's rule for the first untested `done` head:
 `"always"` (the default, also when omitted) merges the fetched PR base before tests;
 `"overlap"` merges only when both sides changed a path since their merge-base or Git
