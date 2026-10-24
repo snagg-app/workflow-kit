@@ -11,7 +11,8 @@ import { installersDone, run as exec, temporary } from './fixtures.mjs';
 
 const root = process.env.WORKFLOW_KIT_TARGET || fileURLToPath(new URL('../../', import.meta.url));
 const windows = process.platform === 'win32';
-const hookTimeout = Number(process.env.WORKFLOW_KIT_HOOK_TIMEOUT_MS) || 30_000;
+// Allein läuft der Test in etwa 3 s; 120 s Obergrenze, damit volle Läufe unter Last nicht am Zeitlimit scheitern (#883).
+const hookTimeout = Number(process.env.WORKFLOW_KIT_HOOK_TIMEOUT_MS) || 120_000;
 const { impeccable: version } = JSON.parse(readFileSync(new URL('../versions.json', import.meta.url), 'utf8'));
 
 test('two SessionStart hooks at the same time install Impeccable once, and the next call finds it', async t => {
