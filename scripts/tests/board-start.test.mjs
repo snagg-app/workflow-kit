@@ -149,6 +149,26 @@ test('two sessions start at once: the claim comment written first wins, the othe
   assert.deepEqual(JSON.parse(text('backlink-comments-1.json')).map(comment => comment.id), [1], 'only the winner claim stays');
 });
 
+test('a progress comment without a session during start is no rival claim (#1005)', t => {
+  const { run, writeIssue, file, text } = startFixture(t);
+  writeIssue(issue('Ready'));
+  writeFileSync(file('rival-comment'), 'Fortschritt.\nAgent: claude\n');
+  const result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(existsSync(file('comment-deletes')), false, 'the own claim stays');
+  assert.match(text('backlink-comments-1.json'), /Session: S1/);
+});
+
+test('a claim that REST already lists but the issue query does not yet blocks start (#1005)', t => {
+  const { run, writeIssue, file, text } = startFixture(t);
+  writeIssue(issue('Ready'));
+  writeFileSync(file('backlink-comments-1.json'), JSON.stringify([{ id: 1, user: { login: 'worker' }, created_at: '2026-10-07T00:00:00Z', body: 'Beansprucht.\nAgent: claude, Session: S2\nBasis: main\n', html_url: 'u' }]));
+  const result = run('start', '1', '--session', 'S1');
+  assert.notEqual(result.status, 0, result.stdout);
+  assert.match(result.stdout, /changed while starting/);
+  assert.equal(JSON.parse(text('backlink-comments-1.json')).length, 1, 'nothing was written');
+});
+
 test('two sessions take over the same PR at once: the older claim wins, the other writes no PR body (#979)', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
   git(checkout, 'push', '-q', 'origin', 'main:refs/heads/claude/1-fixture');
@@ -412,6 +432,7 @@ test('start --takeover continues a pushed branch without a PR and claims it for 
   writeFileSync(file('branches.json'), JSON.stringify(['claude/1-fixture']));
   const claim = { createdAt: new Date().toISOString(), url: 'u', body: 'Beansprucht.\nAgent: claude, Session: OLD\nBasis: main\n' };
   writeIssue({ ...issue('In progress'), updatedAt: new Date().toISOString(), comments: { nodes: [claim] }, branches: [{ name: 'claude/1-fixture' }] });
+  writeFileSync(file('backlink-comments-1.json'), JSON.stringify([{ id: 1, ...claim }]));
 
   let result = run('start', '1', '--session', 'S2');
   assert.equal(result.status, 1, result.stdout + result.stderr);
@@ -501,6 +522,7 @@ test('start of the own session continues the pushed branch of the issue instead 
   writeFileSync(file('branches.json'), JSON.stringify(['claude/1-fixture']));
   const claim = { createdAt: new Date().toISOString(), url: 'u', body: 'Beansprucht.\nAgent: claude, Session: S2\nBasis: main\n' };
   writeIssue({ ...issue('In progress'), updatedAt: new Date().toISOString(), comments: { nodes: [claim] }, branches: [{ name: 'claude/1-fixture' }] });
+  writeFileSync(file('backlink-comments-1.json'), JSON.stringify([{ id: 1, ...claim }]));
   const result = run('start', '1', '--session', 'S2');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');

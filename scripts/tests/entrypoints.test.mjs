@@ -160,6 +160,20 @@ test('search ignore is created or extended without losing project lines', t => {
   assert.deepEqual(readFileSync(path), once);
 });
 
+test('Windows line endings in .gitignore and .ignore stay; new lines follow them; nothing missing means no write (#1010)', t => {
+  const f = fixture(t);
+  for (const name of ['.gitignore', '.ignore']) write(join(f.root, name), '/mine/\r\n\r\n');
+  succeeds(f.run('--existing'));
+  for (const name of ['.gitignore', '.ignore']) {
+    const content = readFileSync(join(f.root, name), 'utf8');
+    assert.ok(content.startsWith('/mine/\r\n\r\n') && content.length > 10, name);
+    assert.equal(content.replaceAll('\r\n', ''), content.replaceAll('\n', '').replaceAll('\r', ''), 'no lone LF: ' + name);
+  }
+  const once = readFileSync(join(f.root, '.gitignore'));
+  succeeds(f.run('--existing'));
+  assert.deepEqual(readFileSync(join(f.root, '.gitignore')), once);
+});
+
 test('--cwd names the project to initialize, not the working directory', t => {
   const f = fixture(t), other = join(f.base, 'other');
   mkdirSync(join(other, '.git'), { recursive: true });
