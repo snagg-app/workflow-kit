@@ -11,11 +11,9 @@ when the value is no branch name, `origin/<base>` is unknown locally or git cann
 `origin/<base>` (that last one only for an issue with no branch yet and no stack); no fetch, never a verdict. Then `start` first brings the shared kit checkout to `origin/main` (fast-forward, like the session hook; an agent in a fresh worktree has no hook, #813) and stops without a write when it cannot (kit not on `main`, local changes or commits, no fast-forward). Then it:
 sets `submodule.recurse true` and `push.recurseSubmodules no` in the clone (only with a `.gitmodules`) and `push.default simple`, assigns the authenticated user,
 sets In progress and posts the claim comment (`Agent: NAME, Session: ID` and `Basis: BRANCH` (`Base: BRANCH` in an English project; both are read), the base: the base PR's branch of a stack,
-else the Project base field, else the default branch). It creates no branch and no PR: the first `done` pushes your branch
-(`<agent>/<number>-<title>`, or the checkout's own branch of that shape) and opens the Draft PR (`Closes #N` and the claim line) with its native link.
+else the Project base field, else the default branch). It creates the local branch `<agent>/<number>-<title>` from `origin/<base>` (or keeps the checkout's own branch of that shape) and no PR: the first `done` pushes it and opens the Draft PR (`Closes #N` and the claim line) with its native link.
 When the branch already has an open PR that the issue does not list yet, `done` reuses and links it instead of opening a second one (GitHub answers 422, #725).
-An issue that already has an open PR (a takeover, a resume) continues on that PR's branch (`git switch`). Then it runs `git fetch origin`, brings the kit to its pin, and
-last the optional `"setup"` shell command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`, run like a `push` command, in the checkout, with `BRANCH`);
+An issue that already has an open PR (a takeover, a resume) continues on that PR's branch (`git switch`). Then it runs `git fetch origin` and, last, the optional `"setup"` shell command of `.github/workflow-project.json` (for example `"node scripts/bootstrap.mjs"`, run like a `push` command, in the checkout, with `BRANCH`);
 if it fails, `start` ends with an error and the output, claim and status stay, and `start` again resumes. The claim holds the issue for every session whose ID it does not name; once the PR exists, its body line is the claim. Keep the claim
 line when you rewrite the PR body. It ends with
 `START #N session … base … (claim only …)`, or `… branch … base … PR #…` with an existing PR; for a stack it names the PR to link above. Abandoned work (below, `next`) is taken over

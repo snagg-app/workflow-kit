@@ -17,6 +17,7 @@ import { context, install } from './provider.mjs';
 import { setupSkills } from './setup-skills.mjs';
 import { writeProjectFile } from './write-guard.mjs';
 import { isMain } from './is-main.mjs';
+import { requireNode } from './versions.mjs';
 
 const scripts = dirname(fileURLToPath(import.meta.url));
 
@@ -103,6 +104,7 @@ export async function kitSetup(root, { onStep = () => {}, refresh = false } = {}
 }
 
 if (isMain(import.meta.url)) {
+  requireNode();
   enterCwd();
   const refresh = process.argv[2] === 'setup' && process.argv[3] === '--refresh';
   if (!['setup', 'check'].includes(process.argv[2]) || process.argv.length > (refresh ? 4 : 3)) {

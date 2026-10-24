@@ -19,7 +19,6 @@ test('start refuses a spec before assignment or claim writes', t => {
 function startFixture(t) {
   const { checkout, run, writeIssue, env } = fixture(t);
   env.CODEX_THREAD_ID = '';
-  env.BOARD_FIXTURE_DEVELOP_GIT = '1';
   const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, encoding: 'utf8', env: isolatedGit(dirname(checkout)) }).trim();
   const origin = join(dirname(checkout), 'origin.git');
   git(dirname(checkout), 'init', '-q', '--bare', origin);

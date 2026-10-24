@@ -223,21 +223,19 @@ beim Erstellen, bei jeder Body-Änderung und bei Claim-, Übergabe- und Statusko
 
 ## Delivery
 
-**Branch.** `board.mjs start` creates the branch from the issue so GitHub links it
-(`gh issue develop ISSUE --name <agent>/ISSUE-topic --base <base>`), runs `git fetch origin` and
-`git switch --track`: GitHub cuts it from the current remote base, which a local clone often does not have yet, never
-from your local `main`. It reuses your existing branch and PR for the same
-issue. If creation fails, check the remote branches and issue links before retrying.
+**Branch.** `board.mjs start` runs `git fetch origin` and creates the local branch `<agent>/<number>-<title>`
+with `git switch -c … --no-track origin/<base>`, so it starts from the remote base, never from your local `main`.
+Nothing is pushed and no PR is opened; the first `done` pushes the branch. It reuses your existing branch and PR for
+the same issue. If creation fails, check the remote branches before retrying.
 
 **PR body.** The first `done` opens the Draft PR with `Closes #N` and the claim line `Agent: …, Session: …` (keep that line); for each further issue the PR fully delivers, write `Closes #N` (cross-repo:
 `Closes OWNER/REPO#N`) for each issue the PR fully delivers, and `Refs #N` for
 related work. Closing keywords work only in PRs into the default branch. Partial
 delivery never closes an issue; split the undeliverable part first
-([undeliverable acceptance](#undeliverable-acceptance)). A branch created from the
-issue is a branch connection, not proof of a direct PR connection. After creating
-the PR or changing its body or base, verify the delivered issue in
-`gh pr view PR --json closingIssuesReferences`. On a non-default base, `start` and `done` connect
-the issue (GitHub's Development sidebar does too) and read the connection back. This connection closes
+([undeliverable acceptance](#undeliverable-acceptance)). A branch name alone links
+nothing to the issue. After creating the PR or changing its body or base, verify the delivered issue in
+`gh pr view PR --json closingIssuesReferences`. On a non-default base, `done` connects
+the issue (GitHub's Development sidebar does too) and reads the connection back. This connection closes
 the issue only when merged into the default branch; keep the project's release
 rules for references and completion. A part that must go to another base (for
 example tooling to `main`) is a separate PR with `Refs #N` and no closing link;

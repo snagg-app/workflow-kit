@@ -1,4 +1,4 @@
-// `start ISSUE`: claim, branch and Draft PR.
+// `start ISSUE`: claim and local branch; the Draft PR comes with the first `done` (openFirstPr).
 // Its functions run nothing when imported; run-time data comes from board-context.mjs, helpers of other commands by import.
 import assert from 'node:assert/strict';
 import { existsSync, realpathSync } from 'node:fs';
@@ -168,7 +168,7 @@ function start() {
   const final = readIssue();
   assert.equal(projectItem(final)?.status?.name, statuses.inProgress, `${statuses.inProgress} status read-back differs`);
   assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');
-  // The project's setup (e.g. its dependencies) runs last, on the branch with the kit at its pin; a failure leaves claim, status and PR, so start again resumes.
+  // The project's setup (e.g. its dependencies) runs last, on the branch with the kit on origin/main; a failure leaves claim, status and PR, so start again resumes.
   // #705: the setup can run for minutes; a start that is cut off or read in the background shows that the claim is complete.
   if (project.setup) {
     progress(`CLAIMED #${number} session ${session} branch ${branch}; the project setup runs now (START follows when it is done)`);
