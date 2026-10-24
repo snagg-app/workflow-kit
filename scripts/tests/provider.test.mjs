@@ -2,14 +2,16 @@
 // Nutzen: Absturz mitten im Veroeffentlichen, zwei gleichzeitige Laeufe und falsche Pruefsummen werden einmal hier geprueft; je Anbieter genuegt ein Rauchtest.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { context, guarded, install, outsideCheckouts, publish, withLock } from '../provider.mjs';
 import impeccable from '../provider-impeccable.mjs';
+import ponytail from '../provider-ponytail.mjs';
 import { temporary } from './fixtures.mjs';
 
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -61,6 +63,47 @@ test('a verified file that lost its executable bit gets it back', { skip: proces
   writeFileSync(file, 'engine', { mode: 0o644 });
   await install(fake({ engine: { bytes: Buffer.from('engine'), mode: 0o555 } }), c);
   assert.equal(statSync(file).mode & 0o111, 0o111);
+});
+
+test('an old installation that cannot be removed is skipped and the installation still succeeds', async t => {
+  const { parent, c } = installFixture(t);
+  const old = join(parent, '0.9.0');
+  mkdirSync(old, { recursive: true });
+  writeFileSync(join(old, 'engine'), 'old');
+  // Windows cannot delete a program that is running from the folder; POSIX cannot remove entries from a read-only folder.
+  let running = null;
+  if (process.platform === 'win32') {
+    cpSync(process.execPath, join(old, 'busy.exe'));
+    running = spawn(join(old, 'busy.exe'), ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' });
+    await once(running, 'spawn');
+  } else {
+    chmodSync(old, 0o555);
+  }
+  // Last: adding files renews the folder's modification time, and an unused folder is what gets pruned.
+  const past = new Date(Date.now() - 40 * 86_400_000);
+  utimesSync(old, past, past);
+  try {
+    await install(fake({ engine: { bytes: Buffer.from('new') } }), c);
+    assert.equal(readFileSync(join(parent, '1.0.0/engine'), 'utf8'), 'new');
+    assert.equal(existsSync(join(old, 'engine')), true, 'the old installation is kept for the next run');
+  } finally {
+    if (running) running.kill(); else chmodSync(old, 0o755);
+  }
+});
+
+test('the Ponytail start files are written only when their content changes', async t => {
+  const dir = join(temporary(t, 'ponytail launcher '), 'install');
+  mkdirSync(dir, { recursive: true });
+  const names = ['launch.sh', 'launch.cmd'];
+  ponytail.install.after(dir, {});
+  const first = Object.fromEntries(names.map(name => [name, readFileSync(join(dir, name), 'utf8')]));
+  const past = new Date(Date.now() - 86_400_000);
+  for (const name of names) utimesSync(join(dir, name), past, past);
+  ponytail.install.after(dir, {});
+  for (const name of names) assert.equal(statSync(join(dir, name)).mtimeMs, past.getTime(), `${name} was rewritten although it is unchanged`);
+  writeFileSync(join(dir, 'launch.sh'), 'stale');
+  ponytail.install.after(dir, {});
+  assert.equal(readFileSync(join(dir, 'launch.sh'), 'utf8'), first['launch.sh'], 'a changed start file is replaced');
 });
 
 test('a home inside a checkout is refused before anything is written', async t => {
