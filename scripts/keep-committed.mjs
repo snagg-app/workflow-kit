@@ -4,6 +4,7 @@ import { closeSync, fchmodSync, fstatSync, mkdirSync, openSync, readFileSync, wr
 import { dirname, join } from 'node:path';
 import { agents, sourceProviders } from './agents.mjs';
 import { gitIn } from './git-tool.mjs';
+import { keepFiles } from './write-guard.mjs';
 
 /** The generated outputs a project commits (skills and agent definitions of every agent, hook sources); the project's settings and hook entries are not among them. */
 const outputs = () => [...new Set([...Object.values(agents).flatMap(agent => [agent.skills, agent.agents]), ...sourceProviders])];
@@ -36,9 +37,11 @@ export async function keepCommitted(root, work, { refresh = false, log = console
   let tracked;
   try { tracked = gitIn({}, root)(root, 'ls-files', '-z', '--', ...outputs()).split('\0').filter(Boolean); } catch { return work(); } // not a Git checkout: nothing is committed
   const before = new Map(tracked.map(file => [file, snapshot(join(root, file))]));
+  keepFiles(tracked);
   try {
     return await work();
   } finally { // also after a failed run: no half-written committed file
+    keepFiles([]);
     const restored = [];
     for (const [file, old] of before) {
       if (!old || isSame(snapshot(join(root, file)), old)) continue; // absent before: nothing to preserve
