@@ -6,7 +6,7 @@ import path from 'node:path';
 import { handlerId, hookFiles } from './agents.mjs';
 import { asking, gitIn, gitStamp, patient, unattended } from './git-tool.mjs';
 import { sharedKit } from './kit-entry.mjs';
-import { locked } from './lock.mjs';
+import { holder, locked } from './lock.mjs';
 import { readProfileLenient, textsFor } from './project-profile.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -49,7 +49,7 @@ const KIT_LOCK_WAIT_MS = 60_000;
 const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /** `git pull --ff-only` and the kit's own submodules. Work in progress in the checkout is never touched, only reported. */
-function updateKit(git, kit, say, root, wait = 0) {
+function updateKit(git, kit, say, root, wait = 0, speak = false) {
   const branch = git(kit, 'symbolic-ref', '--short', '-q', 'HEAD').out;
   if (branch !== 'main')
     return say(textsAt(root).kitNotMain(kit, branch), true);
@@ -66,8 +66,11 @@ function updateKit(git, kit, say, root, wait = 0) {
   const give = Date.now() + wait;
   let ran = locked(lock, 10 * 60_000, work);
   while (!ran && Date.now() < give) { pause(200); ran = locked(lock, 10 * 60_000, work); }
-  // Another run still holds the lock: the hook stays silent, but the kit is not known to be current (#813), so `start` stops.
-  if (!ran) say(null, true);
+  // Another run still holds the lock: the hook stays silent, but the kit is not known to be current (#813), so `start` stops. #929: `start` (speak) names the lock and its holder; running again helps.
+  if (!ran) {
+    const { pid, age } = holder(lock);
+    say(speak ? textsAt(root).kitLocked(lock, pid, age) : null, 'retry');
+  }
 }
 
 /** The one repair of `.vendor/workflow-kit` (hook and `kit setup`): a link (Windows junction, else symlink) to the shared kit. Returns '' when in order, else what needs a human. */
@@ -87,7 +90,7 @@ export function linkKit(root, kit) {
 }
 
 /** Check one checkout: link it to the shared kit, then update the kit; report what needs a human. */
-function checkKit(git, dir, update, say, updated, shared, wait = 0) {
+function checkKit(git, dir, update, say, updated, shared, wait = 0, speak = false) {
   const top = git(dir, 'rev-parse', '--show-toplevel');
   if (!top.ok || !top.out) {
     if (isDirectory(path.join(dir, '.vendor/workflow-kit')))
@@ -101,7 +104,7 @@ function checkKit(git, dir, update, say, updated, shared, wait = 0) {
   if (real(path.join(root, 'scripts/kit-hook.mjs')) === real(path.join(scripts, 'kit-hook.mjs')) || (!entry && !mentionsKit(root))) return;
   const kit = shared ?? sharedKit(git(root, 'rev-parse', '--path-format=absolute', '--git-common-dir').out), problem = linkKit(root, kit);
   if (problem) return say(problem, true);
-  if (update && !updated.has(kit)) { updated.add(kit); updateKit(git, kit, (message, stuck) => { if (stuck) updated.delete(kit); say(message, stuck); }, root, wait); } // a failed update is tried again by the next call of this process
+  if (update && !updated.has(kit)) { updated.add(kit); updateKit(git, kit, (message, stuck) => { if (stuck) updated.delete(kit); say(message, stuck); }, root, wait, speak); } // a failed update is tried again by the next call of this process
   return kit;
 }
 
@@ -146,20 +149,21 @@ export const kitEnvironment = (env = process.env) => ({
  * The kit check of one directory; returns `{ messages, stuck }` (no messages: all in order). After a clean full check the git dir gets a stamp (`kit-ok`). While project commit, kit commit
  * and kit path are unchanged and the stamp is young, the next call skips the check and the pull: one git call plus file reads. Time is only an addition, never the key.
  * `stuck` (#813): the shared kit could not follow origin (not main, local work, no fast-forward); `start` refuses on it.
+ * `retry` (#929): the cause is a lock another run holds, so running again helps; otherwise a human must fix the kit checkout.
  * `update`: also pull the shared kit (the hook at session start); board.mjs and `kit check` read only.
  * `force`: ignore the stamp (`start` must see the real state of origin, #813).
  * `kit`: the kit checkout that runs (`kit setup`, `WORKFLOW_KIT_DIR`), instead of the shared one found next to the project.
  * `fresh`: how long a stamp counts, in ms. `updated`: kits already pulled by this process (pass one Set to several calls to pull once).
  * `git`: a runner `(dir, ...args) => output` that throws on failure (gitIn); the default is the kit's safe one, the hook and board.mjs pass theirs.
  */
-export function kitCheck(dir, { update = false, force = false, git: run = gitIn(patient, dir), kit: shared, fresh = 600_000, updated = new Set() } = {}) {
-  const git = asking(run), messages = [], result = { messages, stuck: false };
-  const say = (message, stuck) => { if (message) messages.push(message); if (stuck) result.stuck = true; };
+export function kitCheck(dir, { update = false, force = false, git: run = gitIn(patient, dir), kit: shared, fresh = 600_000, updated = new Set(), wait = KIT_LOCK_WAIT_MS } = {}) {
+  const git = asking(run), messages = [], result = { messages, stuck: false, retry: false };
+  const say = (message, stuck) => { if (message) messages.push(message); if (stuck) result.stuck = true; if (stuck === 'retry') result.retry = true; };
   const [gitDir, head] = git(dir, 'rev-parse', '--absolute-git-dir', 'HEAD').out.split('\n');
   const stamp = gitStamp(gitDir, 'kit-ok'), known = force ? null : stamp.read();
   if (known && known.git === gitDir && known.head === head && Date.now() - known.at < fresh && (known.pulled || !update)
     && (!shared || shared === known.kit) && kitHead(known.kit) === known.kitHead) return result;
-  const kit = checkKit(git, dir, update, say, updated, shared, force ? KIT_LOCK_WAIT_MS : 0);
+  const kit = checkKit(git, dir, update, say, updated, shared, force ? wait : 0, force);
   if (kit && !messages.length && !result.stuck)
     stamp.write({ git: gitDir, head: git(dir, 'rev-parse', 'HEAD').out, kit, kitHead: kitHead(kit), pulled: update, at: Date.now() }); // the check may have fast-forwarded the project, so the commit is read again
   return result;
