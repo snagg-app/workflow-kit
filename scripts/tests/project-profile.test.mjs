@@ -1,7 +1,7 @@
 // Zweck: Das Projekt-Profil wird an einer Stelle gelesen und geprüft (#756): gültige und ungültige Profile, eine kaputte Datei, der UI-Zwischenspeicher.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -36,6 +36,14 @@ const invalid = [
   ['a switch that is a text', '{"ponytail":"auto"}', /ponytail in/],
 ];
 for (const [name, text, message] of invalid) test(`profile: ${name} is refused with a message that names the field`, () => assert.throws(() => parseProfile(text), message));
+
+test('profile: a misspelled key is named with the closest known one (#953)', () => {
+  assert.throws(() => parseProfile('{"doneBaseMerges":"overlap"}'), /Unknown key "doneBaseMerges".*did you mean "doneBaseMerge"\?/);
+  assert.throws(() => parseProfile('{"zzzzzzzzzzzzzzz":1}'), /Unknown key "zzzzzzzzzzzzzzz"/);
+});
+
+for (const path of ['F:/Workspace/Vaultdex/workflow-kit/.github/workflow-project.json', 'F:/Workspace/Vaultdex/Vaultdex/.claude/worktrees/chief-of-staff-orchestrate-018748/.github/workflow-project.json'])
+  test(`profile: the real profile ${path} reads without an unknown key (#953)`, { skip: !existsSync(path) }, () => parseProfile(readFileSync(path, 'utf8'), path));
 
 test('profile: every language has the same texts, and a text follows the language', () => {
   const english = textsFor({}), german = textsFor({ language: 'de' });
