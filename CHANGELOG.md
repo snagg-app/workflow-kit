@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **`done` sagt bei einem Claim ohne Commit den echten Grund (#907).** Wer `start` gelaufen hat, aber noch nicht committet hat, bekommt bei `done ISSUE` ohne Datei jetzt „commit your work first, then run done again“ statt des Hinweises „run board.mjs start“, der in die Irre führte. Ohne Claim bleibt der Hinweis auf `start`. Die Meldung nennt weiter `done ISSUE FILE --no-pr` für eine reine Erkundung.
+
 - **Jedes Kit-Skript hat einen Eintrag in der Test-Zuordnung (#902).** `scripts/affected-tests.mjs` ordnet jedem Skript die Tests zu, die bei einer Änderung laufen. Bisher fehlten `keep-committed.mjs`, `provider-list.mjs` und `measure-base-load.mjs`; eine Änderung an ihnen lief ohne Test durch. Ein neuer Test bricht jetzt, sobald ein Skript unter `scripts/` keinen Eintrag hat.
 
 - **Quota-Messung zeigt Hilfe statt eine Datei namens `--help` anzulegen (#901).** `node scripts/quota-sample.mjs --help` (oder `-h`) druckt die Hilfe und endet mit Exit 0. Ein Argument, das mit `-` beginnt, wird abgelehnt (Exit 2 mit Hinweis), statt als Dateiname zu dienen. Eine echte Messung startet nur mit einem Dateinamen ohne `-`.
