@@ -514,7 +514,8 @@ test('merge runs the push commands of the project file as of the merge commit, o
   git(checkout, 'push', '-q', 'origin', 'main');
   writeFileSync(join(checkout, 'merge-oid'), git(checkout, 'rev-parse', 'HEAD'));
   const merged = run('merge', '7');
-  assert.equal(merged.status, 0, merged.stdout + merged.stderr);
+  assert.equal(merged.status, 2, merged.stdout + merged.stderr); // a failed push command is an error, the merge itself stays MERGED
+  assert.match(merged.stdout, /MERGED #7/);
   assert.equal(readFileSync(env.PUSHED, 'utf8').trim().replaceAll('\r', ''), 'main\nkit', 'the commands ran with the branch and found the kit in a project without submodule, the one after the failure did not');
   assert.match(merged.stdout, /^note: the push commands of main failed/m);
 });
