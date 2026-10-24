@@ -8,12 +8,13 @@ import { fakeGh } from './fake-gh.mjs';
 import { temporary } from './fixtures.mjs';
 
 // The fake gh reads and writes its files in the working directory: each case runs in a folder of its own.
-function bind(t, profile, kitProject = { owner: 'kitorg', number: 5 }) {
+function bind(t, profile, kitProject = { owner: 'kitorg', number: 5 }, existingLabels = []) {
   const home = process.cwd();
   t.after(() => process.chdir(home)); // before the folder is removed
   const root = temporary(t, 'board setup ');
   process.chdir(root);
   mkdirSync(join(root, '.github'));
+  writeFileSync(join(root, 'labels.json'), JSON.stringify(existingLabels));
   if (profile) writeFileSync(join(root, '.github/workflow-project.json'), JSON.stringify(profile));
   useGhAdapter(fakeGh);
   t.after(() => useGhAdapter(undefined));
@@ -39,6 +40,12 @@ test('without a template in the profile the board of the kit repository is copie
 
 test('a malformed template is refused before anything is copied', t => {
   assert.throws(() => bind(t, { boardTemplate: { owner: 'acme' } }), /boardTemplate in /);
+});
+
+test('a label that exists in another letter case is not created again', t => {
+  const { result, calls } = bind(t, { boardTemplate: { owner: 'acme', number: 3 }, labels: [{ name: 'security', color: '1d76db' }], language: 'de' }, undefined, ['Security']);
+  assert.equal(result.status, 0);
+  assert.deepEqual(calls.filter(call => call.startsWith('label create')), []);
 });
 
 test('a malformed label list is refused before any label is created', t => {
