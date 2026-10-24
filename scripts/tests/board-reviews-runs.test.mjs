@@ -64,8 +64,11 @@ test('reviews tells the newest run of a job from cancelled, skipped and Draft ru
   const quickReady = contexts => readyHead(contexts, { createdAt: minutesAgo(5 + 2 / 60) });
   assert.equal(reviews(quickReady([draftRun(1, 'SKIPPED', { minutes: 5 + 1 / 60 }), draftRun(2, 'SUCCESS', { minutes: 5 - 2 / 60 })]), oldTraces), 0, 'A run executed just after a quick Ready is the proof');
   assert.equal(reviews(quickReady([draftRun(1, 'SKIPPED', { minutes: 5 + 1 / 60 }), draftRun(2, 'SKIPPED', { minutes: 5 - 2 / 60 })]), oldTraces), 3, 'A skip just after a quick Ready stays a Draft skip');
-  // A workflow that does not start on Ready (default pull_request_target types) leaves its skip from opening as the only run: wait waits a while, then notes it.
-  const noReadyRun = { event: 'pull_request_target', minutes: 25 };
+  // #940: pull_request_target does not start on Ready by default (opened, synchronize, reopened), so its skip from opening never gets a Ready run and must not make wait lag.
+  assert.equal(reviews(readyHead([draftRun(1, 'SKIPPED', { event: 'pull_request_target', minutes: 25 }), draftRun(2, 'SKIPPED', { name: 'Lint', workflow: 'Lint', event: 'pull_request', minutes: 25 }), draftRun(3, 'SUCCESS', { name: 'Lint', workflow: 'Lint', minutes: 2 })]), oldTraces), 0,
+    'A pull_request_target skip with no Ready run does not wait (skipped in Draft, green after Ready)');
+  // A pull_request workflow that does not start on Ready (path filter, no ready_for_review) leaves its skip from opening as the only run: wait waits a while, then notes it.
+  const noReadyRun = { event: 'pull_request', minutes: 25 };
   assert.equal(reviews(readyHead([draftRun(1, 'SKIPPED', noReadyRun)]), oldTraces), 3, 'Precondition: shortly after Ready the missing run may still start');
   const longReady = readyHead([draftRun(1, 'SKIPPED', noReadyRun)], { readyEvents: { nodes: [{ createdAt: minutesAgo(11) }] } });
   assert.equal(reviews(longReady, oldTraces), 0, 'A skip from opening with no run after Ready for 10 minutes does not wait forever');
