@@ -139,7 +139,8 @@ function pruneUnused(parent, keep) {
   for (const name of readdirSync(parent)) {
     const old = join(parent, name), entry = lstatSync(old);
     if (name.startsWith('.') || old === keep || !entry.isDirectory() || Date.now() - entry.mtimeMs < unusedDays * 86_400_000) continue;
-    rmSync(old, { recursive: true, force: true });
+    // Cleanup is best effort: a folder still in use (Windows keeps running programs locked) stays and the next install retries it.
+    try { rmSync(old, { recursive: true, force: true }); } catch { continue; }
     removed.push(old);
   }
   return removed;

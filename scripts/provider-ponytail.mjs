@@ -2,10 +2,11 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { agentLabels, providers, sharedSkills, sourceProviders } from './agents.mjs';
 import { setVersion } from './versions.mjs';
+import { rename } from './write-guard.mjs';
 
 const patch = 'scripts/ponytail/adaptations.patch';
 const skillName = /^ponytail(?:-[a-z0-9]+)*$/;
@@ -129,9 +130,12 @@ exec /bin/sh "\${0%/*}/launch.sh" "$@"
 `,
       };
       for (const [name, content] of Object.entries(launchers)) {
+        const file = path.join(destination, name);
+        // Rewriting an unchanged start file would fail on Windows while another session runs it.
+        if (existsSync(file) && readFileSync(file, 'utf8') === content) continue;
         const temporary = path.join(destination, `.${name}.tmp`);
         writeFileSync(temporary, content, { mode: 0o755 });
-        renameSync(temporary, path.join(destination, name));
+        rename(temporary, file);
       }
     },
   },
