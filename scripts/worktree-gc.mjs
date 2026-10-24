@@ -31,6 +31,12 @@ export function busyFrom(listing, path) {
     .some(line => line.replaceAll('\\', '/').toLowerCase().includes(here));
 }
 
+/** Number of commits not on any remote, from the rev-list result {ok, out}. A failed or unreadable count is null (unknown), never 0. */
+export function unpushedCount(result) {
+  if (!result.ok || !/^\d+$/.test(result.out.trim())) return null;
+  return Number(result.out.trim());
+}
+
 /** Why this worktree must stay, or null if it is finished. Pure: the facts are gathered elsewhere.
  * `explicit` (--only) skips the two guards meant for other sessions' trees (lock, age); the safety checks always apply. */
 export function keepReason(w, { minAge = 120, explicit = false } = {}) {
@@ -118,8 +124,8 @@ ${error.message}`);
 
   await pool(worktrees.filter(w => !w.main && !w.current), async w => {
     const ref = w.branch ? `refs/heads/${w.branch}` : w.head;
-    const unpushed = /^0+$/.test(w.head ?? '0') && !w.branch ? null : Number((await gitIn(['rev-list', '--count', ref, '--not', '--remotes'])).out);
-    w.unpushed = closedHeads.has(w.head) ? 0 : (Number.isFinite(unpushed) ? unpushed : null);
+    const unpushed = /^0+$/.test(w.head ?? '0') && !w.branch ? null : unpushedCount(await gitIn(['rev-list', '--count', ref, '--not', '--remotes']));
+    w.unpushed = closedHeads.has(w.head) ? 0 : unpushed;
     if (w.missing) w.dirty = false; // nothing on disk to lose
     else { const status = await gitIn(['--no-optional-locks', 'status', '--porcelain'], w.path); w.dirty = !status.ok || status.out.trim() !== ''; }
     w.busy = !w.missing && busyFrom(processes, w.path);

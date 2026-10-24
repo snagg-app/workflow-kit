@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isolatedGit, run, temporary } from './fixtures.mjs';
-import { busyFrom, keepReason, orphanVolumes, rootHashes } from '../worktree-gc.mjs';
+import { busyFrom, keepReason, orphanVolumes, rootHashes, unpushedCount } from '../worktree-gc.mjs';
 
 const script = fileURLToPath(new URL('../worktree-gc.mjs', import.meta.url));
 const finished = { dirty: false, unpushed: 0, busy: false, locked: null, ageMinutes: 1000 };
@@ -31,6 +31,14 @@ test('an unreadable process list counts as busy, so a worktree is kept when we c
   assert.equal(busyFrom({ ok: true, out: '42\tnode /elsewhere/tool.mjs' }, path), false);
   assert.equal(busyFrom({ ok: true, out: `42\tnode ${path}/tool.mjs` }, path), true);
   assert.equal(busyFrom({ ok: false, out: '' }, path), true);
+});
+
+test('a failed count of unpushed commits is unknown and keeps the worktree, never zero', () => {
+  assert.equal(unpushedCount({ ok: false, out: '' }), null);
+  assert.ok(keepReason({ ...finished, unpushed: unpushedCount({ ok: false, out: '' }) }));
+  assert.equal(unpushedCount({ ok: true, out: '0\n' }), 0);
+  assert.equal(unpushedCount({ ok: true, out: '3\n' }), 3);
+  assert.equal(unpushedCount({ ok: true, out: '' }), null, 'empty output is unknown too');
 });
 
 test('volumes: protected names are never touched, living roots keep theirs, other names are ignored', () => {
