@@ -100,3 +100,9 @@ test('the Sonar door reads only the linked analysis and never reads an unreadabl
   assert.deepEqual(sonarIssues('https://sonarcloud.io/d?id=k&pullRequest=7', 7, '[0 New issues]'), { total: 0, lines: [] });
   assert.equal(sonarIssues('https://sonarcloud.io/d?id=k&pullRequest=7', 7, 'passed').total, null);
 });
+
+test('an open thread line names the number that `board.mjs threads` takes', () => {
+  const lines = judge(facts({ threads: ['https://github.com/test/example/pull/7#discussion_r555', 'thread-0'] })).lines;
+  assert.ok(lines.includes('thread https://github.com/test/example/pull/7#discussion_r555 (board.mjs threads 7 --resolve 555)'));
+  assert.ok(lines.includes('thread thread-0'), 'A link without a number stays as it was');
+});
