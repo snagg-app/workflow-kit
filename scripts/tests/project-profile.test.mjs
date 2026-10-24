@@ -37,6 +37,16 @@ const invalid = [
 ];
 for (const [name, text, message] of invalid) test(`profile: ${name} is refused with a message that names the field`, () => assert.throws(() => parseProfile(text), message));
 
+test('profile: a misspelled key is named with the closest known one (#953)', () => {
+  assert.throws(() => parseProfile('{"doneBaseMerges":"overlap"}'), /Unknown key "doneBaseMerges".*did you mean "doneBaseMerge"\?/);
+  assert.throws(() => parseProfile('{"zzzzzzzzzzzzzzz":1}'), /Unknown key "zzzzzzzzzzzzzzz"/);
+});
+
+test('profile: the kit\'s own profile and a project profile with the project-owned keys read without an unknown key (#953)', () => {
+  parseProfile(readFileSync(new URL('../../.github/workflow-project.json', import.meta.url), 'utf8'));
+  parseProfile(JSON.stringify({ repository: 'o/r', owner: 'o', number: 1, id: 'P', url: 'u', start: 'ready', setup: 'npm ci', push: ['x'], baseBranch: { field: 'F' }, worktreeVolumePrefixes: ['v'], skills: ['core'] }));
+});
+
 test('profile: every language has the same texts, and a text follows the language', () => {
   const english = textsFor({}), german = textsFor({ language: 'de' });
   assert.deepEqual(Object.keys(german), Object.keys(english));

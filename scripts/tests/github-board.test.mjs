@@ -51,3 +51,29 @@ test('a label that exists in another letter case is not created again', t => {
 test('a malformed label list is refused before any label is created', t => {
   assert.throws(() => bind(t, { number: 4, labels: [{ name: 'ci' }] }), /labels in /);
 });
+
+test('a first run that stops after the copy is continued, not counted as finished and not copied twice (#953)', t => {
+  const home = process.cwd();
+  t.after(() => process.chdir(home));
+  const root = temporary(t, 'board resume ');
+  process.chdir(root);
+  mkdirSync(join(root, '.github'));
+  writeFileSync(join(root, 'labels.json'), '[]');
+  const file = join(root, '.github/workflow-project.json');
+  writeFileSync(file, JSON.stringify({ repository: 'acme/app', boardTemplate: { owner: 'acme', number: 3 }, statuses: { humanReview: 'Nowhere' } }));
+  useGhAdapter(fakeGh);
+  t.after(() => useGhAdapter(undefined));
+  const github = createGithub({ tool: {}, projectDirectory: root, sleep() {} });
+  assert.throws(() => setupBoard({ root, github, repo: 'acme/app' }));
+  const half = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal(half.number, 9);
+  assert.equal(half.id, undefined, 'no finished marker after a failed run');
+  writeFileSync(file, JSON.stringify({ ...half, statuses: undefined }));
+  const result = setupBoard({ root, github, repo: 'acme/app' });
+  assert.equal(result.status, 0);
+  assert.match(result.note, /^bound to project #9/);
+  const calls = readFileSync(join(root, 'setup-calls'), 'utf8').split('\n');
+  assert.equal(calls.filter(call => call.startsWith('project copy')).length, 1, calls.join('\n'));
+  assert.ok(calls.some(call => call.startsWith('label create')), 'the labels run after the resume');
+  assert.equal(JSON.parse(readFileSync(file, 'utf8')).id, 'PVT_new');
+});
