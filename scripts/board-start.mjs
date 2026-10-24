@@ -1,7 +1,7 @@
 // `start ISSUE`: claim, branch and Draft PR.
 // Its functions run nothing when imported; run-time data comes from board-context.mjs, helpers of other commands by import.
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { detectAgent } from './agents.mjs';
@@ -79,7 +79,12 @@ function start() {
   assert.match(session ?? '', /^\w[\w.-]*$/, 'start needs your session id: pass --session ID');
   // The same hints the session-start hook gives (#690): an agent without hooks gets them here.
   // #813: a driver in a fresh worktree gets no SessionStart hook, so start itself brings the shared kit to origin/main (fast-forward) and stops when it cannot.
+  const linked = join(projectDirectory, '.vendor/workflow-kit'), hadLink = existsSync(linked);
   const { messages: kitHints, stuck } = kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt, update: true, force: true });
+  // #863: a fresh worktree (a subagent's) has no link yet; the check made it, and one line says so.
+  let told = hadLink;
+  const linkNote = () => { if (!told && existsSync(linked) && (told = true)) progress(`linked .vendor/workflow-kit to ${realpathSync(linked)} (it was missing in this worktree)`); };
+  linkNote();
   [...kitHints, ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
   assert.ok(!stuck, `the shared kit could not be brought to origin/main (${kitHints.at(-1) ?? 'another update holds the kit lock'}); nothing was written, fix the kit checkout and run start again`);
   // One checkout-wide setting each, so a commit in a submodule never rides along with a project push and a branch switch follows the submodule pins.
@@ -150,6 +155,7 @@ function start() {
         // #848: a fresh worktree stood on an old commit that did not mention the kit, so the check above skipped the link; on the base the project names the kit, so link it now.
         const again = kitCheck(projectDirectory, { ...kitEnvironment(env), git: gitAt, force: true });
         again.messages.forEach(progress);
+        linkNote();
         assert.ok(!again.stuck, `the kit link of the fresh worktree failed (${again.messages.at(-1) ?? 'unknown'}); claim and status stay: fix it and run start again`);
       }
     }

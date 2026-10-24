@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fixture, handoffPr, issue, predecessor, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
@@ -73,6 +73,8 @@ test('start brings the shared kit to origin/main, and refuses without a write wh
   let result = run('start', '1', '--session', 'S1');
   assert.notEqual(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /could not be brought to origin\/main/);
+  // #863: the fresh worktree had no link; start made it and said so in one line, even though the update then stopped it.
+  assert.match(result.stdout + result.stderr, /linked \.vendor\/workflow-kit to .* \(it was missing in this worktree\)/);
   assert.equal(git(kit, 'rev-parse', 'HEAD'), mine);
   assert.equal(existsSync(file('stored')), false, 'nothing was claimed');
   // Behind origin/main: start fast-forwards the kit first.
@@ -81,6 +83,7 @@ test('start brings the shared kit to origin/main, and refuses without a write wh
   result = run('start', '1', '--session', 'S1');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(git(kit, 'rev-parse', 'HEAD'), git(upstream, 'rev-parse', 'HEAD'));
+  assert.equal(realpathSync(join(checkout, '.vendor/workflow-kit')), realpathSync(kit));
 });
 
 test('the claim comment follows the profile language, and a claim in either language is read (#759)', t => {
