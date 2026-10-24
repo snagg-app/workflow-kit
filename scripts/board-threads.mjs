@@ -19,11 +19,11 @@ function readThreads(pr) {
   const threads = [];
   for (let after; ;) {
     const page = graphql(`query($owner:String!,$name:String!,$number:Int!,$after:String){repository(owner:$owner,name:$name){pullRequest(number:$number){
-      reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:1){nodes{databaseId url body author{login}}}}}}}}`,
+      reviewThreads(first:100,after:$after){pageInfo{hasNextPage endCursor} nodes{id isResolved isOutdated path line comments(first:100){nodes{databaseId url body author{login}}}}}}}}`,
     { owner, name, number: pr, ...(after && { after }) }).repository.pullRequest.reviewThreads;
     for (const node of page.nodes) {
       const comment = node.comments.nodes[0];
-      threads.push({ id: node.id, number: comment?.databaseId, resolved: node.isResolved, outdated: node.isOutdated, path: node.path, line: node.line,
+      threads.push({ replies: node.comments.nodes.slice(1).map(reply => reply.body), id: node.id, number: comment?.databaseId, resolved: node.isResolved, outdated: node.isOutdated, path: node.path, line: node.line,
         author: comment?.author?.login ?? 'unknown', url: comment?.url ?? 'unreadable thread', first: (comment?.body ?? '').split('\n').find(line => line.trim())?.trim().slice(0, 100) ?? '' });
     }
     if (!page.pageInfo.hasNextPage) return threads;
@@ -47,7 +47,7 @@ function threads() {
   for (const wanted of named) {
     const thread = all.find(candidate => candidate.number === wanted);
     if (thread.resolved) { skipped.push(wanted); continue; }
-    if (reply !== undefined) {
+    if (reply !== undefined && !thread.replies.includes(reply)) { // a rerun after a failed closing must not answer twice
       graphql('mutation($thread:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$thread,body:$body}){comment{id}}}', { thread: thread.id, body: reply });
     }
     const written = graphql('mutation($thread:ID!){resolveReviewThread(input:{threadId:$thread}){thread{isResolved}}}', { thread: thread.id });

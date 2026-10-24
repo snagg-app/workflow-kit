@@ -33,7 +33,7 @@ export function fixture(t) {
   // By default the driver has posted the handoff comment long after any push; tests about it replace this file.
   writeFileSync(join(checkout, 'issues-comments.json'), JSON.stringify([handoffComment()]));
   // The session variables of the running agent must not reach board.mjs; a test names its own session.
-  const env = { CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '', BOARD_FIELD_CACHE: '0', BOARD_TRACE: '', SONAR_TOKEN: '' }; // no token of the developer's own environment: the Sonar count comes from the fake check summary
+  const env = { CODEX_THREAD_ID: '', CLAUDE_CODE_SESSION_ID: '', BOARD_FIELD_CACHE: '0', BOARD_MIN_INTERVAL: '0', BOARD_TRACE: '', SONAR_TOKEN: '' }; // no token of the developer's own environment: the Sonar count comes from the fake check summary
   const board = {
     checkout, env,
     // A call that hangs (a `wait` that never ends) would block the whole file silently: it is cut off and named with its test.
@@ -108,7 +108,7 @@ export const handoffPr = changes => ({
 
 /** What the reviews tests share: a checkout, PR snapshots, Codex traces and `look` (write the snapshot, run `reviews`). */
 export function reviewsFixture(t) {
-  const { checkout, run, runBriefly, queries, graphqlReads, restOverlays, reset } = fixture(t);
+  const { env, checkout, run, runBriefly, queries, graphqlReads, restOverlays, reset } = fixture(t);
   const minutesAgo = minutes => new Date(Date.now() - minutes * 60_000).toISOString();
   const codexUser = { login: 'chatgpt-codex-connector[bot]', type: 'Bot' };
   const check = (status, conclusion = status === 'COMPLETED' ? 'SUCCESS' : null) => ({ __typename: 'CheckRun', name: 'CI', status, conclusion });
@@ -152,5 +152,5 @@ export function reviewsFixture(t) {
   };
   const readyHead = (contexts, extra) => ({ ...pr({ contexts, pushed: 10 }), isDraft: false, createdAt: minutesAgo(30), readyEvents: { nodes: [{ createdAt: minutesAgo(5) }] }, ...extra });
   const oldTraces = { comments: [codex('Completed', 0)] };
-  return { checkout, run, runBriefly, queries, graphqlReads, restOverlays, reset, minutesAgo, job, draftRun, readyHead, oldTraces, codexUser, check, suite, pr, codex, reaction, look, reviews };
+  return { env, checkout, run, runBriefly, queries, graphqlReads, restOverlays, reset, minutesAgo, job, draftRun, readyHead, oldTraces, codexUser, check, suite, pr, codex, reaction, look, reviews };
 }

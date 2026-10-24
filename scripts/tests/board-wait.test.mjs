@@ -191,6 +191,14 @@ test('wait treats HTTP 200 GraphQL quota errors as a pause and keeps reading RES
   assert.ok(restReads() >= 2, 'REST was read during the quota pause');
 });
 
+test('wait --interval 0 still pauses 10 seconds between looks, so it cannot burn the shared quota', t => {
+  const { env, run, pr, show, restReads } = restFixture(t);
+  show(pr());
+  env.BOARD_MIN_INTERVAL = undefined;
+  assert.equal(run('wait', '7', '--merged', '--interval', '0', '--max-minutes', '0.05').status, 4);
+  assert.ok(restReads() <= 2, 'A pause of 0 would read dozens of times in 3 s: ' + restReads());
+});
+
 test('wait --merged reads REST only, and --interval is bounded', t => {
   const { run, pr, show, graphqlSent } = restFixture(t);
   show(pr());

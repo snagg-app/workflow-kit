@@ -496,7 +496,7 @@ function api(argv, input, stdout, stderr, exit) {
     const asked = Number(argv.find(arg => arg.startsWith('number='))?.slice(7));
     data = { repository: { pullRequest: { reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null },
       nodes: JSON.parse(fs.readFileSync('threads.json')).filter(entry => entry.pr === asked).map(entry => ({ id: entry.id, isResolved: entry.isResolved, isOutdated: entry.isOutdated, path: entry.path, line: entry.line,
-        comments: { nodes: [{ databaseId: entry.databaseId, url: entry.url, body: entry.body, author: entry.author && { login: entry.author } }] } })) } } } };
+        comments: { nodes: [{ databaseId: entry.databaseId, url: entry.url, body: entry.body, author: entry.author && { login: entry.author } }, ...(entry.replies ?? []).map(body => ({ databaseId: 0, url: '', body, author: { login: 'driver' } }))] } })) } } } };
   }
   else if (query.includes('reviewThreads(first:100')) {
     const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};
