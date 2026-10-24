@@ -32,10 +32,11 @@ test('a kit lock released during the wait does not stop start, the hook stays si
   const lock = join(kit, '.git/kit-update.lock');
   mkdirSync(lock);
   // A separate process releases the lock once this test writes the marker, i.e. after the hook check below.
-  // No timer: a wall-clock delay raced the hook check under load (the git calls of kitCheck can take seconds).
+  // No wall clock at all (#963): neither a delay nor a deadline, since the git calls of kitCheck take seconds under load and a deadline released the lock before the hook check ran.
+  // The releaser also stops when the lock is gone (the test removed the temp folder), so it never outlives the test.
   const marker = join(temp, 'hook-done');
   const releaserFile = join(temp, 'release-lock.mjs');
-  writeFileSync(releaserFile, "import { existsSync, rmSync } from 'node:fs';\nconst [lock, marker] = process.argv.slice(2);\nconst deadline = Date.now() + 60_000;\nconst timer = setInterval(() => { if (existsSync(marker) || Date.now() > deadline) { clearInterval(timer); rmSync(lock, { recursive: true, force: true }); } }, 10);\n");
+  writeFileSync(releaserFile, "import { existsSync, rmSync } from 'node:fs';\nconst [lock, marker] = process.argv.slice(2);\nconst timer = setInterval(() => { if (existsSync(marker) || !existsSync(lock)) { clearInterval(timer); rmSync(lock, { recursive: true, force: true }); } }, 10);\n");
   const releaser = spawn(process.execPath, [releaserFile, lock, marker], { detached: true, stdio: 'ignore' });
   releaser.unref();
 
@@ -44,7 +45,7 @@ test('a kit lock released during the wait does not stop start, the hook stays si
   assert.deepEqual(hook.messages, []);
   writeFileSync(marker, '');
 
-  const start = kitCheck(project, { kit, update: true, force: true, fresh: 0 });
+  const start = kitCheck(project, { kit, update: true, force: true, fresh: 0, wait: 600_000 });
   assert.equal(start.stuck, false, 'start waits for the released lock and goes on');
   assert.deepEqual(start.messages, []);
   rmSync(lock, { recursive: true, force: true });
