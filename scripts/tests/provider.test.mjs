@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -92,7 +92,17 @@ test('a lock of a dead or hung run is taken over, the lock of a live one is wait
   assert.ok(existsSync(lock), 'the live holder keeps its lock');
   const old = new Date(Date.now() - 60_000);
   utimesSync(lock, old, old);
-  assert.equal(await withLock(lock, () => 'hung holder replaced', { stale: 1000 }), 'hung holder replaced');
+  await assert.rejects(withLock(lock, () => assert.fail('must not run'), { wait: 300, stale: 1000 }), 'an old lock of a live process is not taken over');
+  assert.ok(existsSync(lock));
+  rmSync(join(lock, 'pid'));
+  utimesSync(lock, old, old);
+  assert.equal(await withLock(lock, () => 'pid-less old lock replaced', { stale: 1000 }), 'pid-less old lock replaced');
+});
+
+test('a run whose lock was taken over by another does not delete that lock when it finishes', async t => {
+  const lock = join(temporary(t, 'provider lock '), 'x.lock');
+  await withLock(lock, () => { writeFileSync(join(lock, 'pid'), String(process.pid + 1)); });
+  assert.equal(readFileSync(join(lock, 'pid'), 'utf8'), String(process.pid + 1));
 });
 
 test('a failed run is logged, a later success removes the log, and the lock is free either way', async t => {
