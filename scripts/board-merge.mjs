@@ -70,7 +70,7 @@ function deleteHeadBranch(pr) {
   return `branch deleted: ${branch}`;
 }
 
-const buildFolders = /^(?:node_modules|\.vendor|build|dist|out|target|coverage|\.gradle|\.next|\.cache)\/?$/;
+const buildFolders = /(?:^|\/)(?:node_modules|\.vendor|build|dist|out|target|coverage|\.gradle|\.next|\.cache)\//;
 
 /**
  * Delete the folder of an agent worktree (under an agent's `worktrees` folder of the agent table) that has the merged branch checked out: `git worktree remove` leaves what Git does not track
@@ -93,8 +93,9 @@ function removeAgentWorktree(branch, head) {
       if (changed || unpushed) return `worktree kept: ${path} holds unsaved work (${changed} changed files, ${unpushed} commits not pushed)`;
       // #993: a locked worktree belongs to a session; ignored files (notes, .env) outside the usual build folders would go with the folder.
       if (/^locked(?: |$)/m.test(block)) return `worktree kept: ${path} is locked`;
-      const ignored = gitAt(path, 'status', '--porcelain', '--ignored').split(/\r?\n/).filter(line => line.startsWith('!! ') && !buildFolders.test(line.slice(3)) && !lstatSync(join(path, line.slice(3))).isSymbolicLink()); // a link is unlinked, its target stays
-      if (ignored.length) return `worktree kept: ${path} holds ignored files: ${ignored.map(line => line.slice(3)).join(', ')}`;
+      // One line per file (status would collapse a folder such as backend/ that only holds ignored build output); a link is unlinked, its target stays.
+      const ignored = gitAt(path, 'ls-files', '--others', '--ignored', '--exclude-standard').split(/\r?\n/).filter(file => file && !buildFolders.test(file) && !file.split('/').some((_, index, parts) => lstatSync(join(path, ...parts.slice(0, index + 1))).isSymbolicLink()));
+      if (ignored.length) return `worktree kept: ${path} holds ignored files: ${ignored.join(', ')}`;
       rmSync(path, { recursive: true, force: true });
       gitAt(projectDirectory, 'worktree', 'prune');
       return `worktree deleted: ${path}`;

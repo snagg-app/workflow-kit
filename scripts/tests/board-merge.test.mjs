@@ -624,7 +624,7 @@ test('merge keeps a locked worktree and one with ignored files outside the build
   assert.equal(existsSync(agent), true, 'a locked worktree stays');
   assert.match(locked.stdout, /^worktree kept: .*agent-1 is locked$/m);
   git(checkout, 'worktree', 'unlock', agent);
-  writeFileSync(join(checkout, '.gitignore'), '.env\nnode_modules\n');
+  writeFileSync(join(checkout, '.gitignore'), '.env\nnode_modules\nbuild\n');
   git(checkout, 'add', '.gitignore');
   git(checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'ignore');
   git(agent, 'merge', '-q', 'main');
@@ -636,6 +636,15 @@ test('merge keeps a locked worktree and one with ignored files outside the build
   assert.equal(ignored.status, 0, ignored.stdout + ignored.stderr);
   assert.equal(existsSync(join(agent, '.env')), true, 'the ignored note is not lost');
   assert.match(ignored.stdout, /^worktree kept: .*agent-1 holds ignored files: \.env$/m);
+  // nested build output of a multi-module repo is no user file
+  rmSync(join(agent, '.env'));
+  for (const nested of ['frontend/web/node_modules', 'backend/api/build']) {
+    mkdirSync(join(agent, nested), { recursive: true });
+    writeFileSync(join(agent, nested, 'x'), 'x');
+  }
+  const nestedRun = run('merge', '7');
+  assert.equal(nestedRun.status, 0, nestedRun.stdout + nestedRun.stderr);
+  assert.equal(existsSync(agent), false, 'nested build folders do not keep the worktree');
 });
 
 test('merge reads a direct merge back several times when GitHub still shows the PR as open for a moment (#966)', t => {
