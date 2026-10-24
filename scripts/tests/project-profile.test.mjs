@@ -1,7 +1,7 @@
 // Zweck: Das Projekt-Profil wird an einer Stelle gelesen und geprüft (#756): gültige und ungültige Profile, eine kaputte Datei, der UI-Zwischenspeicher.
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -42,8 +42,10 @@ test('profile: a misspelled key is named with the closest known one (#953)', () 
   assert.throws(() => parseProfile('{"zzzzzzzzzzzzzzz":1}'), /Unknown key "zzzzzzzzzzzzzzz"/);
 });
 
-for (const path of ['F:/Workspace/Vaultdex/workflow-kit/.github/workflow-project.json', 'F:/Workspace/Vaultdex/Vaultdex/.claude/worktrees/chief-of-staff-orchestrate-018748/.github/workflow-project.json'])
-  test(`profile: the real profile ${path} reads without an unknown key (#953)`, { skip: !existsSync(path) }, () => parseProfile(readFileSync(path, 'utf8'), path));
+test('profile: the kit\'s own profile and a project profile with the project-owned keys read without an unknown key (#953)', () => {
+  parseProfile(readFileSync(new URL('../../.github/workflow-project.json', import.meta.url), 'utf8'));
+  parseProfile(JSON.stringify({ repository: 'o/r', owner: 'o', number: 1, id: 'P', url: 'u', start: 'ready', setup: 'npm ci', push: ['x'], baseBranch: { field: 'F' }, worktreeVolumePrefixes: ['v'], skills: ['core'] }));
+});
 
 test('profile: every language has the same texts, and a text follows the language', () => {
   const english = textsFor({}), german = textsFor({ language: 'de' });
