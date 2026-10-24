@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fixture, test } from './board-fixture.mjs';
+import { fixture, handoffPr, test } from './board-fixture.mjs';
 
 const thread = (databaseId, extra = {}) => ({ pr: 7, id: `T${databaseId}`, isResolved: false, isOutdated: false, path: 'scripts/a.mjs', line: 12, databaseId,
   url: `https://github.com/test/example/pull/7#discussion_r${databaseId}`, body: 'Fix this\nlonger text', author: 'coderabbitai', ...extra });
@@ -9,6 +9,8 @@ const thread = (databaseId, extra = {}) => ({ pr: 7, id: `T${databaseId}`, isRes
 function setup(t, threads) {
   const board = fixture(t);
   writeFileSync(join(board.checkout, 'threads.json'), JSON.stringify(threads));
+  writeFileSync(join(board.checkout, 'pr.json'), JSON.stringify(handoffPr()));
+  writeFileSync(join(board.checkout, 'pulls-reviews.json'), '[]');
   const stored = () => JSON.parse(readFileSync(join(board.checkout, 'threads.json'), 'utf8'));
   return { ...board, stored };
 }
@@ -63,4 +65,35 @@ test('threads names an already resolved thread without writing, and refuses --re
   assert.match(done.stdout, /^thread 101 was already resolved$/m);
   assert.equal(existsSync(join(checkout, 'mutations')), false);
   assert.equal(run('threads', '7', '--reply', 'x').status, 2, '--reply alone is refused');
+});
+
+// #958: a bot's change request stays standing after the fix when the bot only comments on the new head.
+function staleSetup(t, threads, reviews) {
+  const board = setup(t, threads);
+  writeFileSync(join(board.checkout, 'pulls-reviews.json'), JSON.stringify(reviews));
+  return { ...board, calls: join(board.checkout, 'calls') };
+}
+const review = (id, login, state, commit, type = 'Bot') => ({ id, user: { login: type === 'Bot' ? `${login}[bot]` : login, type }, state, commit_id: commit, submitted_at: '2026-10-07T00:00:00Z', html_url: 'r' });
+
+test('threads --resolve dismisses the stale change request of a bot once its last thread is closed and it saw the head', t => {
+  const { run, calls } = staleSetup(t, [thread(101), thread(102)], [review(5, 'coderabbitai', 'CHANGES_REQUESTED', 'old'), review(6, 'coderabbitai', 'COMMENTED', 'abcdef1234')]);
+  let result = run('threads', '7', '--resolve', '101');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(existsSync(calls), false, 'A thread of the bot is still open');
+  result = run('threads', '7', '--resolve', '102');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(readFileSync(calls, 'utf8'), /^dismiss 5 .*abcdef1/);
+  assert.match(result.stdout, /dismissed stale change request by coderabbitai/);
+});
+
+test('threads --resolve never dismisses a human, a bot that has not seen the head, or a bot with threads left', t => {
+  for (const [reviews, others] of [
+    [[review(5, 'alice', 'CHANGES_REQUESTED', 'old', 'User'), review(6, 'alice', 'COMMENTED', 'abcdef1234', 'User')], []],
+    [[review(5, 'coderabbitai', 'CHANGES_REQUESTED', 'old')], []],
+    [[review(5, 'coderabbitai', 'CHANGES_REQUESTED', 'old'), review(6, 'coderabbitai', 'COMMENTED', 'abcdef1234')], [thread(103)]],
+  ]) {
+    const { run, calls } = staleSetup(t, [thread(101, { author: reviews[0].user.type === 'Bot' ? 'coderabbitai' : 'alice' }), ...others], reviews);
+    assert.equal(run('threads', '7', '--resolve', '101').status, 0);
+    assert.equal(existsSync(calls), false);
+  }
 });

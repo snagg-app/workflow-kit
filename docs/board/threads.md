@@ -9,3 +9,5 @@ One query reads all threads of the PR, resolved ones too.
 It writes nothing when one number is not a thread of this PR (a typo, or a thread of another PR). A thread that is already resolved is named and left alone.
 There is no "close all" and no "close all outdated": whether a finding is fixed is your decision, so name the threads you checked.
 A reply needs `--resolve`.
+
+After closing, `--resolve` dismisses the stale change request of a review bot (a review author GitHub types as Bot) when none of that bot's threads is open and the bot has reviewed the current head after the request (#958). A person's review is never dismissed.

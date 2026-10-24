@@ -2,7 +2,8 @@
 // Its functions run nothing when imported; run-time data comes from board-context.mjs.
 import assert from 'node:assert/strict';
 import { failed, result } from './board-result.mjs';
-import { args, graphql, name, number, owner, progress } from './board-context.mjs';
+import { args, github, graphql, name, number, owner, progress, rest, restAll } from './board-context.mjs';
+import { login } from './review-verdict.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -55,8 +56,31 @@ function threads() {
     progress(`thread ${wanted} resolved`);
   }
   const left = open.filter(thread => !resolved.includes(thread.number));
+  const dismissed = resolved.length ? dismissStaleBotReviews(left) : [];
   return result('ok', 'RESOLVED', { headline: `resolved threads: ${resolved.length}, open threads: ${left.length}`,
-    notes: [...skipped.map(wanted => `thread ${wanted} was already resolved`), ...left.map(line)], data: { resolved, skipped, open: left.map(thread => thread.number) } });
+    notes: [...skipped.map(wanted => `thread ${wanted} was already resolved`), ...dismissed.map(bot => `dismissed stale change request by ${bot}: all its threads are resolved`), ...left.map(line)],
+    data: { resolved, skipped, open: left.map(thread => thread.number), dismissed } });
+}
+
+/**
+ * #958: a bot (CodeRabbit …) often checks the fixed head with a plain comment, so its old change request stands and blocks the merge.
+ * It is dismissed when none of the bot's threads is open and the bot has reviewed the current head after that request. A person's
+ * review is never touched: only authors GitHub types as Bot qualify. Returns the bots whose request was dismissed.
+ */
+function dismissStaleBotReviews(left) {
+  const repository = `repos/${owner}/${name}`, head = rest(`${repository}/pulls/${number}`).head.sha;
+  const reviews = restAll(`${repository}/pulls/${number}/reviews`).filter(review => review.user?.type === 'Bot');
+  const dismissed = [];
+  for (const bot of new Set(reviews.map(review => login(review.user)))) {
+    const own = reviews.filter(review => login(review.user) === bot);
+    const standing = own.findLast(review => ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state));
+    if (standing?.state !== 'CHANGES_REQUESTED' || standing.commit_id === head || !own.some(review => review.commit_id === head)) continue;
+    if (left.some(thread => thread.author === bot)) continue;
+    github.write('PUT', `${repository}/pulls/${number}/reviews/${standing.id}/dismissals`,
+      { fields: { message: `All review threads of ${bot} are resolved and it has reviewed head ${head.slice(0, 7)}; the change request is stale.` } });
+    dismissed.push(bot);
+  }
+  return dismissed;
 }
 
 export { threads };
