@@ -5,7 +5,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { detectAgent } from './agents.mjs';
-import { claimIn, claimLine, claimOf, commentClaims, hasClaim, withClaim } from './claim.mjs';
+import { claimIn, claimLine, claimOf, commentClaims, hasClaim, recordSession, withClaim } from './claim.mjs';
 import { shared } from './board-args.mjs';
 import { pushPlan, targetBranch } from './board-checkout.mjs';
 import { result } from './board-result.mjs';
@@ -182,6 +182,7 @@ function start() {
   const final = readIssue();
   assert.equal(projectItem(final)?.status?.name, statuses.inProgress, `${statuses.inProgress} status read-back differs`);
   assert.ok(final.assignees.nodes.some(user => sameLogin(user.login, login)), 'Assignment read-back differs');
+  recordSession(projectDirectory, session); // #973: done and every later command of this worktree take this session, not an inherited variable
   // The project's setup (e.g. its dependencies) runs last, on the branch with the kit on origin/main; a failure leaves claim, status and PR, so start again resumes.
   // #705: the setup can run for minutes; a start that is cut off or read in the background shows that the claim is complete.
   if (project.setup) {

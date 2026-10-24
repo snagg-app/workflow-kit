@@ -1,5 +1,7 @@
 // The claim format (#643, #789): "Agent: NAME, Session: ID", written by `start`, read by every board command. The one module that builds or searches claim lines.
 // NAME is any agent of the agent table (agents.mjs), so a new agent needs no entry here; its session variable is `sessionEnv` there.
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { agents, agentNames, detectAgent } from './agents.mjs';
 
 // `start` writes it as an issue comment (with "Basis: BRANCH"); once the first push opens the Draft PR, the PR body carries it and decides. The field may stand anywhere in a line
@@ -32,9 +34,24 @@ export const isReply = text => new RegExp(`^Agent:[ \\t]*(${agentNames().join('|
  * The own session: `--session` (`explicit`), else the variable of an agent that only its own session sets (CODEX_THREAD_ID), else the session an agent's `sessionFromDirectory` finds in the working directory,
  * else the variable of the other agents (CLAUDE_CODE_SESSION_ID: the session itself, not a subagent).
  */
-export function ownSession(explicit, env = process.env, cwd = process.cwd()) {
+export function ownSession(explicit, env = process.env, cwd = process.cwd(), recorded = undefined) {
   const fromEnv = names => names.map(name => env[agents[name].sessionEnv]).find(Boolean);
   const fromDirectory = dir => agentNames().map(name => agents[name].sessionFromDirectory?.exec(dir)?.[1]).find(Boolean);
   const marked = agentNames().filter(name => agents[name].detectEnv);
-  return explicit ?? fromEnv(marked) ?? fromDirectory(cwd) ?? fromEnv(agentNames().filter(name => !marked.includes(name)));
+  return explicit ?? fromEnv(marked) ?? recorded ?? fromDirectory(cwd) ?? fromEnv(agentNames().filter(name => !marked.includes(name)));
 }
+
+// #973: `start --session X` records X in the git dir of its worktree, so `done` (which has no --session) and every later command take the session of `start`, not the
+// variable a subagent inherits from its parent. The git dir is per worktree; a new `start` in the same worktree overwrites it.
+const sessionFile = directory => {
+  const dot = join(directory, '.git');
+  let gitDir = dot;
+  // a worktree's .git is a file naming its git dir; reading a directory fails with EISDIR (no stat before the read: a race)
+  try { gitDir = resolve(directory, /^gitdir:\s*(.+)$/m.exec(readFileSync(dot, 'utf8'))[1].trim()); } catch (error) { if (error.code !== 'EISDIR') throw error; }
+  return join(gitDir, 'workflow-kit-session');
+};
+/** The session `start` recorded in this worktree, or undefined (no record, no git). */
+export function recordedSession(directory) {
+  try { return readFileSync(sessionFile(directory), 'utf8').trim() || undefined; } catch { return undefined; }
+}
+export const recordSession = (directory, session) => writeFileSync(sessionFile(directory), `${session}\n`);

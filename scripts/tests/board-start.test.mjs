@@ -148,7 +148,7 @@ test('two sessions start at once: the claim comment written first wins, the othe
   assert.equal(text('comment-deletes'), '2\n', 'only the own comment is withdrawn');
 });
 
-test('done opens no first PR with the claim of another session (#943)', t => {
+test('done takes the session of start, not the variable a subagent inherits (#973)', t => {
   const { checkout, run, writeIssue, git, file, text, env } = startFixture(t);
   writeIssue(issue('Ready'));
   assert.equal(run('start', '1', '--session', 'S1').status, 0);
@@ -157,10 +157,24 @@ test('done opens no first PR with the claim of another session (#943)', t => {
   writeFileSync(file('work.txt'), 'x');
   git(checkout, 'add', 'work.txt');
   git(checkout, 'commit', '-q', '-m', 'work');
-  env.CLAUDE_CODE_SESSION_ID = 'S2';
+  env.CLAUDE_CODE_SESSION_ID = 'PARENT';
+  const result = run('done', '1');
+  assert.doesNotMatch(result.stdout + result.stderr, /not of this session/);
+  assert.equal(existsSync(file('created-pr')), true, result.stdout + result.stderr);
+});
+
+test('done opens no first PR with the claim of another session (#943)', t => {
+  const { checkout, run, writeIssue, git, file, text, env } = startFixture(t);
+  writeIssue(issue('Ready'));
+  assert.equal(run('start', '1', '--session', 'S1').status, 0);
+  const body = 'Beansprucht.\nAgent: claude, Session: S2\nBasis: main\n';
+  writeIssue({ ...JSON.parse(text('issue.json')), comments: { nodes: [{ createdAt: new Date().toISOString(), url: 'u', body }] } });
+  writeFileSync(file('work.txt'), 'x');
+  git(checkout, 'add', 'work.txt');
+  git(checkout, 'commit', '-q', '-m', 'work');
   const result = run('done', '1');
   assert.notEqual(result.status, 0, result.stdout);
-  assert.match(result.stdout + result.stderr, /claim of session S1/);
+  assert.match(result.stdout + result.stderr, /claim of session S2/);
   assert.equal(existsSync(file('created-pr')), false);
 });
 
