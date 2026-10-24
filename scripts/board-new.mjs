@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { result } from './board-result.mjs';
 import { args, github, graphql, project, rest, restAll, specLabel, statuses, memory } from './board-context.mjs';
 import { named } from './board-common.mjs';
-import { dropFieldsCache, fieldWords, planFields } from './board-fields.mjs';
+import { dropFieldsCache, fieldWords, guardOption, planFields } from './board-fields.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
@@ -44,7 +44,12 @@ function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields 
     assert.ok(pairs.some(([fieldName]) => fieldName.toLowerCase() === required.toLowerCase()), `the project requires ${required}: give a value for it`);
   }
   const plans = planFields(pairs);
-  assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || plans.find(plan => plan.fieldName === 'Status').option.name === statuses.backlog, `A new spec starts in ${statuses.backlog}; only a human-invoked spec-review changes its status`);
+  const statusPlan = plans.find(plan => plan.fieldName === 'Status');
+  assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || statusPlan.option.name === statuses.backlog, `A new spec starts in ${statuses.backlog}; only a human-invoked spec-review changes its status`);
+  // The same Status guards as `field`, judged on the issue as it is about to exist: its body and labels; no assignee or Project item yet.
+  // Backlog has no guard of its own (a new spec's Backlog was allowed just above).
+  if (statusPlan.option.name !== statuses.backlog) guardOption({ number: 'neu', body: text, state: 'OPEN', labels: { nodes: wanted.map(name => ({ name })), totalCount: wanted.length },
+    assignees: { nodes: [] }, projectItems: { nodes: [] } }, statusPlan);
   // Open issues over REST, not the search index, which misses one created seconds ago by a parallel session (#618). PRs are listed too.
   memory.repositoryLists ??= { milestones: restAll(`repos/${project.repository}/milestones`), labels: restAll(`repos/${project.repository}/labels`),
     issues: restAll(`repos/${project.repository}/issues`).filter(item => !item.pull_request) };
