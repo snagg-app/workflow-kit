@@ -85,7 +85,8 @@ function start() {
   let told = hadLink;
   const linkNote = () => { if (!told && existsSync(linked) && (told = true)) progress(`linked .vendor/workflow-kit to ${realpathSync(linked)} (it was missing in this worktree)`); };
   linkNote();
-  [...kitHints, ...modulesCheck(projectDirectory, { git: gitAt })].forEach(progress);
+  // #938: with a project setup, start installs the dependencies itself (below), so the "nichts installiert" hint would be wrong.
+  [...kitHints, ...(project.setup ? [] : modulesCheck(projectDirectory, { git: gitAt }))].forEach(progress);
   assert.ok(!stuck, `the shared kit could not be brought to origin/main (${kitHints.at(-1) ?? 'another update holds the kit lock'}); nothing was written, ${retry ? 'run start again: waiting helps' : 'a human has to fix the kit checkout first (retrying alone does not help)'}`);
   // One checkout-wide setting each, so a commit in a submodule never rides along with a project push and a branch switch follows the submodule pins.
   if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);

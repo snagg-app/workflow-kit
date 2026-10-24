@@ -242,6 +242,20 @@ for (const [setup, expected] of [[undefined, ''], ['echo "setup on $BRANCH" > se
   });
 }
 
+// #938: start installs the dependencies itself when the project has a setup, so the "node_modules fehlt, nichts installiert" hint would be wrong there.
+for (const [setup, hinted] of [['mkdir -p node_modules', false], [undefined, true]]) {
+  test(`start ${setup ? 'with a setup shows no node_modules hint' : 'without setup keeps the node_modules hint'} (#938)`, t => {
+    const { run, writeIssue, file, text } = startFixture(t);
+    writeFileSync(file('package.json'), JSON.stringify({ name: 'fixture', dependencies: { left: '1.0.0' } }));
+    writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...JSON.parse(text('.github/workflow-project.json')), setup }));
+    writeIssue(issue('Ready'));
+    const result = run('start', '1', '--session', 'S1');
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.equal(/node_modules fehlt/.test(result.stdout + result.stderr), hinted, result.stdout + result.stderr);
+    assert.equal(existsSync(file('node_modules')), Boolean(setup));
+  });
+}
+
 test('start branches from origin/<base> of the Zielrelease and refuses an empty field without a write (#657)', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
   const project = JSON.parse(text('.github/workflow-project.json'));
