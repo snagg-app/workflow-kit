@@ -35,7 +35,11 @@ function put(path, old) {
 export async function keepCommitted(root, work, { refresh = false, log = console.log } = {}) {
   if (refresh) return work();
   let tracked;
-  try { tracked = gitIn({}, root)(root, 'ls-files', '-z', '--', ...outputs()).split('\0').filter(Boolean); } catch { return work(); } // not a Git checkout: nothing is committed
+  try { tracked = gitIn({ env: { LC_ALL: 'C', LANGUAGE: 'C' } }, root)(root, 'ls-files', '-z', '--', ...outputs()).split('\0').filter(Boolean); } catch (error) {
+    // Only "not a Git checkout" means nothing is committed; any other Git failure (ownership, locked index, no git) must not switch the protection off.
+    if (/not a git repository/i.test(String(error.stderr ?? error.message))) return work();
+    throw new Error(`Cannot tell which kit files are committed (git ls-files failed): ${String(error.stderr || error.message).trim()}`);
+  }
   const before = new Map(tracked.map(file => [file, snapshot(join(root, file))]));
   keepFiles(tracked);
   try {

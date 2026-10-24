@@ -199,7 +199,7 @@ export function readProfileAt(rest, repository, ref) {
 /** The profile of a project directory, checked; without a file the defaults. The single read of a profile on disk. */
 export function readProfile(root) {
   const file = join(root, profileFile);
-  return parseProfile(existsSync(file) ? readFileSync(file, 'utf8') : '{}');
+  return parseProfile(existsSync(file) ? readFileSync(file, 'utf8').replace(/^﻿/, '') : '{}'); // BOM from Windows PowerShell 5.1
 }
 
 /** The profile of a project directory for readers that must not fail: a broken one reads as {} (English texts, no setup command); reporting it is board.mjs's job. The single fallback. */
