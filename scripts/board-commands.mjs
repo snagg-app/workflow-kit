@@ -12,8 +12,9 @@ import { specs as create } from './board-new.mjs';
 import { specs as stack } from './board-stack.mjs';
 import { specs as start } from './board-start.mjs';
 import { specs as sweep } from './board-sweep.mjs';
+import { specs as threads } from './board-threads.mjs';
 import { specs as wait } from './board-wait.mjs';
 
 // Listed in the order of the work: the visible commands first, then the steps `start` and `done` take (hidden from the list).
-export const commandSpecs = [start, done, next, sweep, fields, create, block, wait, merge, stack, body, check, handoff].flat()
+export const commandSpecs = [start, done, next, sweep, threads, fields, create, block, wait, merge, stack, body, check, handoff].flat()
   .sort((a, b) => Boolean(a.hidden) - Boolean(b.hidden));

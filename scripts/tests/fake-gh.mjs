@@ -359,6 +359,15 @@ function api(argv, input, stdout, stderr, exit) {
     fs.appendFileSync('mutations', query + '\n');
     // The item or issue each mutation wrote to, one line per mutation.
     fs.appendFileSync('mutation-targets', argv.filter(arg => /^(item|issue)=/.test(arg)).join(' ') + '\n');
+    // threads.json ([{ pr, id, isResolved, isOutdated, path, line, databaseId, url, body, author }]): replies and resolutions change it like GitHub does.
+    if (query.includes('resolveReviewThread') || query.includes('addPullRequestReviewThreadReply')) {
+      const stored = JSON.parse(fs.readFileSync('threads.json'));
+      const thread = stored.find(entry => entry.id === argv.find(arg => arg.startsWith('thread='))?.slice(7));
+      if (query.includes('resolveReviewThread')) thread.isResolved = !fs.existsSync('resolve-noop');
+      else thread.replies = [...thread.replies ?? [], argv.find(arg => arg.startsWith('body=')).slice(5)];
+      fs.writeFileSync('threads.json', JSON.stringify(stored));
+      return answer(JSON.stringify({ data: query.includes('resolveReviewThread') ? { resolveReviewThread: { thread: { isResolved: thread.isResolved } } } : { addPullRequestReviewThreadReply: { comment: { id: 'C1' } } } }));
+    }
     if (/\bm\d+:\w+\(/.test(query)) {
       // Aliased mutations (m0:…, m1:…) with their values written into the query: items are PI-<issue id>, kept per item in
       // stored-items.json ({ item: { field: option } }); add-exists is GitHub refusing the add of every issue, but answering the rest.
@@ -464,6 +473,13 @@ function api(argv, input, stdout, stderr, exit) {
     const lost = fs.existsSync('lost') && fs.readFileSync('lost', 'utf8');
     data = { repository: { issue: { issueFieldValues: { nodes: [] },
       projectItems: { nodes: [{ project: { id: 'P1' }, fieldValues: { nodes: Object.entries(values).map(([id, name]) => ({ name: lost || name, field: { name: names[id] } })) } }] } } } };
+  }
+  else if (query.includes('isOutdated')) {
+    // The threads of the asked PR (threads.json), every field the `threads` command reads.
+    const asked = Number(argv.find(arg => arg.startsWith('number='))?.slice(7));
+    data = { repository: { pullRequest: { reviewThreads: { pageInfo: { hasNextPage: false, endCursor: null },
+      nodes: JSON.parse(fs.readFileSync('threads.json')).filter(entry => entry.pr === asked).map(entry => ({ id: entry.id, isResolved: entry.isResolved, isOutdated: entry.isOutdated, path: entry.path, line: entry.line,
+        comments: { nodes: [{ databaseId: entry.databaseId, url: entry.url, body: entry.body, author: entry.author && { login: entry.author } }] } })) } } } };
   }
   else if (query.includes('reviewThreads(first:100')) {
     const stackPrs = fs.existsSync('stack-prs.json') ? JSON.parse(fs.readFileSync('stack-prs.json')) : {};

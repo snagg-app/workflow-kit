@@ -374,7 +374,11 @@ function reportReview({ pr, facts, after, isOptional, dismissStale }, { lines })
   for (const comment of comments.filter(comment => after(comment.updated_at))) lines.push(`comment ${login(comment.user)} ${comment.html_url}`);
   for (const comment of inline.filter(comment => after(comment.updated_at))) lines.push(`inline ${login(comment.user)} ${comment.html_url}`);
   const { threads } = facts;
-  lines.push(`unresolved threads: ${threads.length}`, ...threads.map(link => `thread ${link}`));
+  lines.push(`unresolved threads: ${threads.length}`, ...threads.map(link => {
+    // The number `board.mjs threads` takes is the id of the first comment, the end of its link.
+    const id = /#discussion_r(\d+)$/.exec(link)?.[1];
+    return `thread ${link}${id ? ` (board.mjs threads ${pr.number} --resolve ${id})` : ''}`;
+  }));
   // Mergeable is not merge-ready: a standing change request, a ruleset or conflicts still block the human.
   lines.push(`merge: ${pr.mergeStateStatus}, review decision: ${pr.reviewDecision ?? 'none'}`);
   assert.equal(pr.latestOpinionatedReviews.nodes.length, pr.latestOpinionatedReviews.totalCount, 'Not every review decision is readable');
