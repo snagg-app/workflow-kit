@@ -255,12 +255,14 @@ function ready(prNumber = number, sha = state.value) {
     // A fork's or another repository's branch is not ours to mark ready.
     // GitHub reports the canonical spelling; the configured OWNER/REPO may differ in case.
     if (pr.isCrossRepository || pr.headRepository?.nameWithOwner?.toLowerCase() !== project.repository.toLowerCase()) return refuse(`PR #${prNumber} does not come from a branch of ${project.repository}`);
-    if (!pr.isDraft) {
-      if (!pr.headRefOid.startsWith(sha.toLowerCase())) return refuse(`PR #${prNumber} is already ready with head ${pr.headRefOid.slice(0, 7)}, not ${sha.slice(0, 7)}`);
-      return result('ok', 'READY', { headline: `READY #${prNumber} head ${pr.headRefOid} (already ready)`, data: { pr: prNumber, head: pr.headRefOid } });
+    // A fresh push can lag in the answer for a ready PR too: wait for the expected head the same way as for a Draft.
+    if (pr.headRefOid.startsWith(sha.toLowerCase())) {
+      if (!pr.isDraft) return result('ok', 'READY', { headline: `READY #${prNumber} head ${pr.headRefOid} (already ready)`, data: { pr: prNumber, head: pr.headRefOid } });
+      break;
     }
-    if (pr.headRefOid.startsWith(sha.toLowerCase())) break;
-    if (attempt >= attempts) return refuse(`PR #${prNumber} still reports head ${pr.headRefOid.slice(0, 7)} after ${attempts} reads; expected ${sha.slice(0, 7)}`);
+    if (attempt >= attempts) return refuse(pr.isDraft
+      ? `PR #${prNumber} still reports head ${pr.headRefOid.slice(0, 7)} after ${attempts} reads; expected ${sha.slice(0, 7)}`
+      : `PR #${prNumber} is already ready with head ${pr.headRefOid.slice(0, 7)}, not ${sha.slice(0, 7)}`);
     sleep(interval);
   }
   // One more read narrows the window in which a new push could slip between check and mutation.
