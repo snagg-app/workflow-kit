@@ -147,4 +147,14 @@ const sameLogin = (a, b) => a?.toLowerCase() === b?.toLowerCase();
 
 const defaultBranchName = () => memory.defaultBranch ??= rest(`repos/${project.repository}`).default_branch;
 
-export { predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, projectStatus, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, feedbackNode, issueFeedback, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, sameLogin, defaultBranchName };
+/**
+ * The PR as the waiting loops of merge and handoff need it, from REST (the shared GraphQL points stay untouched, #882), in the GraphQL names:
+ * `headRefOid`, `mergeStateStatus` (undefined while GitHub computes it), `state` and the merge commit.
+ */
+function pullState(prNumber) {
+  const pull = rest(`repos/${project.repository}/pulls/${prNumber}`);
+  return { headRefOid: pull.head.sha, mergeStateStatus: pull.mergeable_state?.toUpperCase(), state: pull.merged ? 'MERGED' : pull.state === 'open' ? 'OPEN' : 'CLOSED',
+    mergeCommit: pull.merge_commit_sha ? { oid: pull.merge_commit_sha } : null };
+}
+
+export { pullState, predecessorFields, deliveryFields, baseSetting, baseField, issueFields, issueQuery, named, readIssue, loadDeliveries, projectItem, projectStatus, isSpec, specRefusal, stackOrderText, validTagName, decisionWait, feedbackNode, issueFeedback, refOf, logins, ago, prQuery, lines, text, readyQuery, quotaLine, sameLogin, defaultBranchName };
