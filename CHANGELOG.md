@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **Jedes Kit-Skript hat einen Eintrag in der Test-Zuordnung (#902).** `scripts/affected-tests.mjs` ordnet jedem Skript die Tests zu, die bei einer Änderung laufen. Bisher fehlten `keep-committed.mjs`, `provider-list.mjs` und `measure-base-load.mjs`; eine Änderung an ihnen lief ohne Test durch. Ein neuer Test bricht jetzt, sobald ein Skript unter `scripts/` keinen Eintrag hat.
+
 - **Quota-Messung zeigt Hilfe statt eine Datei namens `--help` anzulegen (#901).** `node scripts/quota-sample.mjs --help` (oder `-h`) druckt die Hilfe und endet mit Exit 0. Ein Argument, das mit `-` beginnt, wird abgelehnt (Exit 2 mit Hinweis), statt als Dateiname zu dienen. Eine echte Messung startet nur mit einem Dateinamen ohne `-`.
 
 - **Ein Befehl für den frischen Worktree (#896).** Fehlt `.vendor/workflow-kit`, genügt `node .agents/workflow-kit-hook.mjs link`: Die Einstiegsdatei findet das gemeinsame Kit (klont es bei Bedarf) und legt die Verknüpfung an, auch ohne Hooks (Codex, Handarbeit). Der Befehl steht in `AGENT_RULES.md` und `docs/parallel-drivers.md`; der alte Umweg über `start --cwd` ist gestrichen.
