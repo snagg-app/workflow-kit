@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import test from 'node:test';
+import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { commandSpecs } from '../board-commands.mjs';
 
 // The commands are modules with plain exports: importing one reads no project, calls no GitHub and prints nothing, so tests and other tools can use them.
@@ -18,4 +21,11 @@ test('every board command module can be imported without running anything, and e
   }
   assert.deepEqual(printed, []);
   assert.deepEqual(commandSpecs.map(spec => spec.run).filter(run => !exported.has(run)), []);
+});
+
+test('board-readme.mjs refuses an unknown option with exit 2 and leaves the README alone', () => {
+  const readme = fileURLToPath(new URL('../../README.md', import.meta.url)), before = readFileSync(readme, 'utf8');
+  const result = (() => { try { return execFileSync(process.execPath, [fileURLToPath(new URL('../board-readme.mjs', import.meta.url)), '--chek'], { stdio: 'pipe' }); } catch (error) { return error; } })();
+  assert.equal(result.status, 2);
+  assert.equal(readFileSync(readme, 'utf8'), before);
 });

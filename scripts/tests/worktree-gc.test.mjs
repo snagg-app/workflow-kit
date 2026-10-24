@@ -73,3 +73,10 @@ test('dry run is the default and deletes nothing; --rm deletes only finished wor
   assert.ok(!git(main, 'branch', '--list', 'done').trim(), 'its local branch is gone');
   assert.ok(git(main, 'branch', '--list', 'unpushed').trim(), 'the branch with unpushed commits stays');
 });
+
+test('an unknown option is refused with exit 2 and a usage text, --help exits 0', async () => {
+  const unknown = await run(process.execPath, [script, '--rm-all']), help = await run(process.execPath, [script, '--help']);
+  assert.equal(unknown.status, 2);
+  assert.doesNotMatch(unknown.stderr, /ERR_PARSE_ARGS/, 'no Node error code');
+  assert.equal(help.status, 0);
+});

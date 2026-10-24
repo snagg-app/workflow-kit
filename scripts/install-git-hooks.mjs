@@ -164,5 +164,12 @@ export function installGitHooks({ root, check = false, log = console.log }) {
   }
 }
 
-if (isMain(import.meta.url))
-  installGitHooks({ root: projectRoot(), check: process.argv.includes('--check') });
+if (isMain(import.meta.url)) {
+  const usage = `Usage: node scripts/install-git-hooks.mjs [--check]
+Installs the .githooks of this project into the Git directory; --check only reports what would change.`;
+  const [option, ...more] = process.argv.slice(2);
+  if (option === '--help' || option === '-h') console.log(usage);
+  else if (more.length || (option && option !== '--check')) { console.error(`${usage}
+Unknown argument; nothing was changed.`); process.exitCode = 2; }
+  else installGitHooks({ root: projectRoot(), check: option === '--check' });
+}
