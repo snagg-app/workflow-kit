@@ -4,7 +4,7 @@ import { cpSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, sym
 import { dirname, join } from 'node:path';
 import { agents, sharedSkills } from './agents.mjs';
 import { ownSkills } from './provider-list.mjs';
-import { checkDirectory, localDirectory, moveAside } from './write-guard.mjs';
+import { checkDirectory, isKept, localDirectory, moveAside } from './write-guard.mjs';
 
 const present = path => lstatSync(path, { throwIfNoEntry: false });
 
@@ -25,7 +25,7 @@ function same(path, source) {
 /** Publish generated files; keep equal output and preserve changed files or old junctions aside. */
 export function materialize(root, path, source, log) {
   localDirectory(root, dirname(path));
-  if (same(path, source)) return;
+  if (same(path, source) || isKept(root, path)) return;
   moveAside(root, path, log);
   cpSync(source, path, { recursive: true });
 }
@@ -45,7 +45,7 @@ export function linkSkills(root, log) {
       const source = join(shared, name), path = join(root, skills, name);
       if (lstatSync(source).isFile()) {
         if (same(path, source)) rmSync(path);
-      } else if (realpath(path) !== realpath(source)) {
+      } else if (realpath(path) !== realpath(source) && !isKept(root, path)) {
         if (same(path, source)) rmSync(path, { recursive: true });
         else moveAside(root, path, log);
         symlinkSync(source, path, 'junction');

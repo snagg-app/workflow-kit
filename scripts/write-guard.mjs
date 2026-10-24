@@ -7,6 +7,17 @@ import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 const present = path => lstatSync(path, { throwIfNoEntry: false });
 const stamp = new Date().toISOString().replaceAll(':', '-');
 
+let kept = [];
+
+/** `keepCommitted` names the committed files (relative, with `/`) it restores for the length of one run; none outside a run. */
+export const keepFiles = files => { kept = files; };
+
+/** True while a run keeps `path` (a committed file or a folder holding one): the writers leave it alone, so no backup of a file that stays as committed (#881). */
+export const isKept = (root, path) => {
+  const rel = relative(root, path).split(sep).join('/');
+  return kept.some(file => file === rel || file.startsWith(`${rel}/`));
+};
+
 /** Assert `path` lies below `root` and no existing component on the way is a link or a file (no redirected state). */
 export function checkDirectory(root, path) {
   const inside = relative(root, path);
