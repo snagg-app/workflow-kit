@@ -73,14 +73,17 @@ export function initProject({ root, existing = false, log = console.log, profile
     ...Object.values(agents).map(agent => agent.localSettings).filter(Boolean), '**/.impeccable/config.local.json', '**/skills/impeccable/scripts/bin/',
     // Skills an agent reads through links stay out of Git; its own skills are committed.
     ...Object.values(agents).filter(agent => agent.linksShared).flatMap(({ skills }) => [`/${skills}/*`, ...ownSkills().map(skill => `!/${skills}/${skill}/`)])];
-  const ignore = existsSync(safe('.gitignore')) ? text(safe('.gitignore')) : '';
-  const additions = patterns.filter(p => !ignore.split('\n').includes(p));
-  write('.gitignore', ignore.trimEnd() + (additions.length ? '\n' + additions.join('\n') : '') + '\n');
+  // Existing text stays byte for byte (a trailing space can be significant, `name\ `; so are the line endings); missing lines are appended in the file's own line ending.
+  const extend = (file, wanted) => {
+    const current = existsSync(safe(file)) ? readFileSync(safe(file), 'utf8') : '';
+    const have = current.split(/\r?\n/), missing = wanted.filter(line => line && !have.includes(line));
+    if (!missing.length) return;
+    const eol = current.includes('\r\n') ? '\r\n' : '\n';
+    write(file, current + (current && !current.endsWith('\n') ? eol : '') + missing.join(eol) + eol);
+  };
+  extend('.gitignore', patterns);
   // .ignore is read by ripgrep, not git. Like .gitignore it grows by the template's missing lines, also with --existing.
-  // Existing text stays byte for byte: a trailing space can be significant (`name\ `).
-  const searchIgnore = existsSync(safe('.ignore')) ? text(safe('.ignore')) : '';
-  const missing = text(join(kit, 'templates/.ignore')).split('\n').filter(line => line && !searchIgnore.split('\n').includes(line));
-  if (missing.length) write('.ignore', searchIgnore + (searchIgnore && !searchIgnore.endsWith('\n') ? '\n' : '') + missing.join('\n') + '\n');
+  extend('.ignore', text(join(kit, 'templates/.ignore')).split('\n'));
   log('Project files configured. Generate and commit skills for this kit update; install and trust hooks explicitly.');
 }
 
