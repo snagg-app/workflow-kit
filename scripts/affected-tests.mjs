@@ -32,7 +32,7 @@ export const TABLE = [
   [/^scripts\/tests\/(gh-shapes\.mjs$|gh-shapes\/)/, [BOARD, 'gh-shapes.test.mjs']],
   [/^scripts\/record-gh-shapes\.mjs$/, ['gh-shapes.test.mjs']],
   [/^scripts\/quota-sample\.mjs$/, ['quota-sample.test.mjs']],
-  [/^scripts\/is-main\.mjs$/, [BOARD, 'is-main.test.mjs']], // board-readme.mjs imports it
+  [/^scripts\/is-main\.mjs$/, ['board-modules.test.mjs', 'is-main.test.mjs']], // board-readme.mjs imports it
   [/^\.githooks\//, ['git-hooks.test.mjs']],
   [/^scripts\/affected-tests\.mjs$/, ['affected-tests.test.mjs']],
   [/^scripts\/worktree-gc\.mjs$/, ['worktree-gc.test.mjs']],

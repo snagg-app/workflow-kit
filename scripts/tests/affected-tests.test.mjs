@@ -30,8 +30,8 @@ test('a hook change selects the hook tests and nothing slower than needed', () =
 });
 
 test('the Git tool, is-main and the Git hooks select the tests that import them', () => {
-  assert.ok(names(affectedTests(['scripts/git-tool.mjs'])).includes('board-check.test.mjs'));
-  assert.ok(names(affectedTests(['scripts/is-main.mjs'])).includes('board-check.test.mjs'));
+  assert.ok(names(affectedTests(['scripts/git-tool.mjs'])).includes('board-checkout.test.mjs'));
+  assert.ok(names(affectedTests(['scripts/is-main.mjs'])).includes('board-modules.test.mjs'));
   assert.ok(names(affectedTests(['.githooks/pre-push'])).includes('git-hooks.test.mjs'));
 });
 

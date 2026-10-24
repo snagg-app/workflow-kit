@@ -123,7 +123,7 @@ async function poll(look) {
       }
       if (Date.now() >= github.deadline) return stillWaiting(result.pausedUntil);
       // Little quota lengthens the pause, but not while REST is read in place of GraphQL.
-      const pause = ['wait', 'merge'].includes(command) && args.flag('--interval') ? Math.max(numberOption('--interval', 0), Number(env.BOARD_MIN_INTERVAL ?? 10)) : github.pause(quiet++, result.pausedUntil);
+      const pause = ['wait', 'merge'].includes(command) && args.flag('--interval') ? Math.max(numberOption('--interval', 0), /^\d+(\.\d+)?$/.test(env.BOARD_MIN_INTERVAL ?? '') ? Number(env.BOARD_MIN_INTERVAL) : 10) : github.pause(quiet++, result.pausedUntil);
       await new Promise(resolve => setTimeout(resolve, Math.min(1000 * pause, github.deadline - Date.now())));
     }
   } catch (error) {
