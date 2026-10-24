@@ -60,8 +60,8 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
   /** A header quota is up to 4400 points too high (#625): in the window of a known quota it never raises it. */
   const cautious = fromHeaders => {
     const known = github.quota;
-    if (!fromHeaders || !known || Math.abs(Date.parse(known.resetAt) - Date.parse(fromHeaders.resetAt)) > 60_000) return fromHeaders;
-    return { ...known, remaining: Math.min(known.remaining, fromHeaders.remaining) };
+    if (!fromHeaders || !known || Date.parse(known.resetAt) <= Date.now() || Math.abs(Date.parse(known.resetAt) - Date.parse(fromHeaders.resetAt)) > 60_000) return fromHeaders;
+    return { ...fromHeaders, remaining: Math.min(known.remaining, fromHeaders.remaining) };
   };
   const errorMessages = body => {
     try { return (JSON.parse(body).errors ?? []).map(({ type, message }) => `${type ?? ''} ${message ?? ''}`).join('\n'); } catch { return ''; }
