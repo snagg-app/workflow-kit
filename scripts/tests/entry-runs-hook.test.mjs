@@ -20,7 +20,11 @@ test('the real entry file runs the real hook; a plain import runs nothing (#895)
   assert.equal(viaEntry.status, 0, viaEntry.stderr);
   assert.equal(JSON.parse(viaEntry.stdout).hookSpecificOutput.hookEventName, 'SessionStart');
 
-  const imported = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(hook)})`], { cwd: project, env, input: '{}', encoding: 'utf8' });
+  const bogus = spawnSync(process.execPath, [join(project, entryFile), 'Bogus', '--agent', 'claude'], { cwd: project, env, input: '{}', encoding: 'utf8' });
+  assert.equal(bogus.status, 2);
+  assert.match(bogus.stderr, /^Usage: kit-hook\.mjs/);
+
+  const imported =spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(hook)})`], { cwd: project, env, input: '{}', encoding: 'utf8' });
   assert.equal(imported.status, 0, imported.stderr);
   assert.equal(imported.stdout, '');
 });

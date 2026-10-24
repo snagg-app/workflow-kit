@@ -150,7 +150,7 @@ async function readInput() {
 
 // Script part: the only place that reads stdin, prints and ends the process.
 // Also run when the project's entry file (kit-entry.mjs copy) imported this module (#895).
-if (process.argv[1] && (realpathSync.native(process.argv[1]) === realpathSync.native(self) || path.basename(process.argv[1]) === path.basename(entryFile))) {
+if (process.argv[1] && (realpathSync.native(process.argv[1]) === realpathSync.native(self) || process.argv[1].replaceAll('\\', '/').endsWith(`/${entryFile}`))) {
   const [event, ...rest] = process.argv.slice(2);
   if (event === '--install') { if (rest.length) install(rest); process.exit(0); }
   const agent = rest[rest.indexOf('--agent') + 1];
