@@ -158,8 +158,8 @@ function start() {
     }
   } else {
     git('fetch', 'origin');
-    // #655: --takeover continues on the pushed branch of the predecessor, which has no PR yet.
-    handedBranch = takeover ? workBranches(fresh).find(name => branchWork(fresh, name).ahead) : undefined;
+    // #655: --takeover continues on the pushed branch of the predecessor, which has no PR yet; #995: so does the own session on its own claim.
+    handedBranch = takeover || isOwn(fresh, session) ? workBranches(fresh).find(name => branchWork(fresh, name).ahead) : undefined;
     if (handedBranch) continueOn(branch = handedBranch);
     // #657: the work branch starts on origin/<base> whatever the checkout stands on; an own branch of this issue (a resume) stays.
     else {
