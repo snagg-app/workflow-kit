@@ -164,6 +164,10 @@ a submodule update.
 pulled at every session start. It has no pin: a new kit commit reaches every branch and worktree
 without a merge. Never edit, commit or switch branches in that checkout.
 
+Fresh worktree without `.vendor/workflow-kit` (with or without hooks): the first command is
+`node .agents/workflow-kit-hook.mjs link`. It needs only Node, clones the shared kit if it is
+missing and creates the link; then `board.mjs` works.
+
 ## Kit issues from a project worktree
 
 Work on the kit in a worktree of the kit repository, never in the shared checkout behind
