@@ -81,10 +81,18 @@ const alive = pid => { try { process.kill(pid, 0); return true; } catch (error) 
 
 async function main() {
   enterCwd();
-  const { values: option } = parseArgs({ options: {
-    rm: { type: 'boolean' }, list: { type: 'boolean' }, only: { type: 'string' }, 'min-age': { type: 'string', default: '120' },
+  const usage = `Usage: node scripts/worktree-gc.mjs [--cwd DIR] [--list] [--rm] [--only PATH] [--min-age MINUTES] [--jobs N] [--volume-prefix P] [--volume-protect V]
+Lists the worktrees that can go; --rm removes them.`;
+  let option;
+  try { ({ values: option } = parseArgs({ options: {
+    help: { type: 'boolean', short: 'h' }, rm: { type: 'boolean' }, list: { type: 'boolean' }, only: { type: 'string' }, 'min-age': { type: 'string', default: '120' },
     jobs: { type: 'string', default: '8' }, 'volume-prefix': { type: 'string', multiple: true }, 'volume-protect': { type: 'string', multiple: true },
-  } });
+  } })); } catch (error) {
+    console.error(`${usage}
+${error.message}`);
+    process.exit(2);
+  }
+  if (option.help) { console.log(usage); return; }
   const root = projectRoot();
   const gitAsync = gitAsyncIn({}, root);
   const exec = (tool, args, cwd = root) => new Promise(done => execFile(tool.file, args, { cwd, env: tool.env, encoding: 'utf8', maxBuffer: 1 << 28 },

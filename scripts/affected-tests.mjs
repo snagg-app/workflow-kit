@@ -144,7 +144,16 @@ export function quiet(verbose, command, args, options, { summary, noise, ok, lab
 
 if (isMain(import.meta.url)) {
   enterCwd(); // `--cwd PROJECT_DIR` at any position; file arguments are relative to it
-  const { values, positionals: given } = parseArgs({ allowPositionals: true, options: { run: { type: 'boolean' }, verbose: { type: 'boolean' }, resume: { type: 'string' }, base: { type: 'string', default: 'origin/main' } } });
+  const usage = `Usage: node scripts/affected-tests.mjs [--cwd DIR] [--run] [--verbose] [--resume FILE] [--base REF] [FILE...]
+Lists the tests for the changed files (--run runs them).`;
+  let parsed;
+  try { parsed = parseArgs({ allowPositionals: true, options: { help: { type: 'boolean', short: 'h' }, run: { type: 'boolean' }, verbose: { type: 'boolean' }, resume: { type: 'string' }, base: { type: 'string', default: 'origin/main' } } }); } catch (error) {
+    console.error(`${usage}
+${error.message}`);
+    process.exit(2);
+  }
+  if (parsed.values.help) { console.log(usage); process.exit(0); }
+  const { values, positionals: given } = parsed;
   // A project that uses the kit through .vendor/workflow-kit: kit tests follow the kit's own changes, the project map the project's.
   const root = projectRoot(), inKit = realpathSync.native(root) === realpathSync.native(kit);
   const kitFiles = given.length ? (inKit ? given : []) : changedFiles(inKit ? values.base : undefined, kit);

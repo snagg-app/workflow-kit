@@ -144,3 +144,11 @@ test('every table row points at tests that exist', () => {
   for (const [, targets] of TABLE) for (const target of targets)
     assert.ok(available.some(name => (target instanceof RegExp ? target.test(name) : name === target)), String(target));
 });
+
+test('an unknown option is refused with exit 2 and a usage text, --help exits 0', async () => {
+  const script = fileURLToPath(new URL('../affected-tests.mjs', import.meta.url));
+  const unknown = await run(process.execPath, [script, '--nope']), help = await run(process.execPath, [script, '--help']);
+  assert.equal(unknown.status, 2);
+  assert.doesNotMatch(unknown.stderr, /ERR_PARSE_ARGS/, 'no Node error code');
+  assert.equal(help.status, 0);
+});

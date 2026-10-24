@@ -43,6 +43,16 @@ async function fixture(t, { hooks = true, extraEnv = {} } = {}) {
 }
 
 describe('install-git-hooks', { concurrency: true }, () => {
+test('an unknown option is refused with exit 2 and installs nothing; --help changes nothing', async t => {
+  const f = await fixture(t);
+  for (const option of ['--chek', '--help']) {
+    const result = await exec(process.execPath, [script, option], { cwd: f.repo, env: { ...process.env, GIT_CONFIG_GLOBAL: f.global, GIT_CONFIG_NOSYSTEM: '1' } });
+    assert.equal(result.status, option === '--help' ? 0 : 2);
+    assert.equal(existsSync(f.hooks), false);
+    assert.equal(await f.value('--local'), '');
+  }
+});
+
 test('--check reports a copy only when the installed hooks differ from .githooks (#730)', async t => {
   const f = await fixture(t);
   assert.match(await f.run('--check'), /would copy/, 'nothing installed yet');
