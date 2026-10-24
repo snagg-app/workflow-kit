@@ -50,6 +50,12 @@ function api(argv, input, stdout, stderr, exit) {
     if (parts[3] === 'issues' && parts[5] === 'assignees' && argv.includes('POST')) {
       const issue = JSON.parse(fs.readFileSync('issue.json'));
       fs.writeFileSync('issue.json', JSON.stringify({ ...issue, assignees: { nodes: [{ login: 'worker' }] } }));
+      // rival-comment: another session's claim lands right after the free check of start, before its slow steps (a parallel start).
+      if (fs.existsSync('rival-comment')) {
+        const items = JSON.parse(fs.readFileSync('backlink-comments-1.json'));
+        items.push({ id: items.length + 1, user: { login: 'worker' }, created_at: '2026-10-07T00:00:00Z', body: fs.readFileSync('rival-comment', 'utf8'), html_url: 'u' });
+        fs.writeFileSync('backlink-comments-1.json', JSON.stringify(items));
+      }
       stdout('{}');
       exit(0);
     }
@@ -121,6 +127,11 @@ function api(argv, input, stdout, stderr, exit) {
         fs.writeFileSync(backlink, JSON.stringify({ ...JSON.parse(fs.readFileSync(backlink)), comments: items.length }));
       }
       stdout('{}');
+      exit(0);
+    }
+    if (parts[3] === 'issues' && parts[4] === 'comments' && argv.includes('DELETE')) {
+      fs.appendFileSync('comment-deletes', parts[5] + '\n');
+      stdout('');
       exit(0);
     }
     if (parts[3] === 'issues' && parts[5] === 'comments' && fs.existsSync(comments)) {
