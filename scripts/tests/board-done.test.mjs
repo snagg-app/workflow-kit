@@ -466,10 +466,13 @@ test('done counts --max-minutes from its start, so slow tests leave less time to
   pending.commits.nodes[0].commit.statusCheckRollup.contexts.nodes = [{ __typename: 'CheckRun', name: 'CI', status: 'IN_PROGRESS', conclusion: null }];
   writeFileSync(file('pr.json'), JSON.stringify(pending));
   writeFileSync(file('affected-tests-seconds'), '2');
-  const started = Date.now(), result = run('done', '1', 'result.md', '--max-minutes', '0.05'); // 3 s, of which the tests (2 s) use most
+  const result = run('done', '1', 'result.md', '--max-minutes', '0.05'); // 3 s, of which the tests (2 s) use most
   assert.equal(result.status, 4, result.stdout + result.stderr);
   assert.match(result.stdout, /^still waiting: call done again$/m);
-  assert.ok(Date.now() - started < 4200, 'the wait did not start its own full period after the tests');
+  // Only the wait itself is timed (its own line), not the whole process: start-up and teardown of the child grow under load (#967).
+  // The wait gets at most the 1 s left of the 3 s; a full period of its own would take 3 s.
+  const waited = Number(/^done: CI and reviews took ([\d.]+) s$/m.exec(result.stdout)?.[1]);
+  assert.ok(waited < 2.5, `the wait did not start its own full period after the tests (took ${waited} s)`);
 });
 
 test('done closes a PR without a change, puts the result on the issue and moves it to Human review', t => {
