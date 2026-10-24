@@ -105,6 +105,15 @@ test('invalid --min-age, --jobs and an unknown --only are refused with exit 2, e
   }
 });
 
+test('an unreadable worktree list stops the run with an error, before anything is removed', async t => {
+  const dir = temporary(t, 'worktree-gc-');
+  mkdirSync(join(dir, '.git'));
+  const result = await run(process.execPath, [script, '--cwd', dir, '--rm', '--min-age', '0'], { env: isolatedGit(dir) });
+  assert.equal(result.status, 1, result.stdout);
+  assert.match(result.stderr, /worktree list/);
+  assert.doesNotMatch(result.stderr, /AssertionError|\sat /, 'no stack trace');
+});
+
 test('an unknown option is refused with exit 2 and a usage text, --help exits 0', async () => {
   const unknown = await run(process.execPath, [script, '--rm-all']), help = await run(process.execPath, [script, '--help']);
   assert.equal(unknown.status, 2);
