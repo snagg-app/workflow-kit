@@ -128,6 +128,24 @@ test('--resume skips the green steps of the same head after a red one', async t 
   assert.ok(again.stdout.includes(`skip (green for this head): ${ok}`) && again.stdout.includes(`run: ${bad}`), again.stdout);
 });
 
+test('--resume runs a green step again after an uncommitted change', async t => {
+  const script = fileURLToPath(new URL('../affected-tests.mjs', import.meta.url));
+  const { NODE_TEST_CONTEXT, ...outside } = process.env;
+  const project = temporary(t, 'affected-tests-');
+  await run('git', ['init', '-q'], { cwd: project });
+  await run('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], { cwd: project });
+  mkdirSync(join(project, '.github'));
+  const ok = 'node -e "process.exit(0)"';
+  writeFileSync(join(project, '.github/affected-tests.json'), JSON.stringify({ 'a/**': ok }));
+  const steps = join(project, 'steps');
+  const ask = () => run(process.execPath, [script, '--run', '--resume', steps, 'a/B.java'], { cwd: project, env: outside });
+  assert.equal((await ask()).status, 0);
+  assert.ok((await ask()).stdout.includes('skip (green for this head)'), 'unchanged state is skipped');
+  writeFileSync(join(project, 'new.txt'), 'x');
+  const changed = await ask();
+  assert.ok(changed.stdout.includes(`run: ${ok}`) && !changed.stdout.includes('skip'), changed.stdout);
+});
+
 test('--resume does not skip another selection of the same size at the same head', async t => {
   const script = fileURLToPath(new URL('../affected-tests.mjs', import.meta.url));
   const { NODE_TEST_CONTEXT, ...outside } = process.env;

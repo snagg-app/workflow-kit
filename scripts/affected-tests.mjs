@@ -4,10 +4,11 @@
 // The mapping is the plain table below: explicit, no import analysis. CI keeps running the whole suite.
 // A project adds its own map in .github/affected-tests.json (see README); its commands are printed after the kit's tests
 // (`--base REF` replaces origin/main as the merge base, for projects that target release branches).
-// `--resume FILE` (with `--run`) remembers the green steps per head in FILE and skips them on the next call; a red step names whether its test file is in the diff.
+// `--resume FILE` (with `--run`) remembers the green steps per head and working state in FILE and skips them on the next call; a red step names whether its test file is in the diff.
 // `--run` stays quiet when green (test counts, `ok: <command>`) and shows the failing output otherwise; `--verbose` shows it all.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -166,7 +167,14 @@ ${error.message}`);
   else if (!selected.length && !commands.length) console.log('no affected tests');
   else {
     // --resume FILE: the green steps of a head are kept in FILE (first line the head, then one step per line), so a call after a red step runs only what is still open.
-    const head = values.resume ? git(root, 'rev-parse', 'HEAD')[0] : undefined;
+    // The key is the head plus a hash of the working state (uncommitted diff, new files), so an edit without a commit runs the steps again.
+    const stateKey = () => {
+      const hash = createHash('sha256').update(gitText(root, 'diff', 'HEAD'));
+      for (const file of git(root, 'ls-files', '--others', '--exclude-standard').filter(file => resolve(root, file) !== resolve(values.resume)))
+        hash.update(file).update(readFileSync(resolve(root, file)));
+      return `${git(root, 'rev-parse', 'HEAD')[0]} ${hash.digest('hex')}`;
+    };
+    const head = values.resume ? stateKey() : undefined;
     const [saved, ...green] = values.resume && existsSync(values.resume) ? readFileSync(values.resume, 'utf8').split('\n') : [];
     const done = new Set(saved === head ? green : []);
     const step = (label, command, args, options, texts) => {
