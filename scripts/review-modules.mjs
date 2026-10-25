@@ -10,7 +10,8 @@ export const reviewModuleLimit = 3;
  */
 export function moduleReviewPaths(cwd, base, roots) {
   if (!roots.length) return [];
-  const prefixes = roots.map(root => root.trim().replace(/^\.?\/+|\/+$/g, '') + '/');
+  // Longest root first: with "backend" and "backend/adapters", a file in an adapter belongs to that adapter, not to the module "backend/adapters".
+  const prefixes = roots.map(root => root.trim().replace(/^\.?\/+|\/+$/g, '') + '/').sort((a, b) => b.length - a.length);
   const inModules = git(cwd, 'diff', '--name-only', '-z', '--no-renames', `${base}...HEAD`).split('\0').flatMap(path => {
     const prefix = prefixes.find(candidate => path.startsWith(candidate));
     const module = prefix && path.slice(prefix.length).split('/').length > 1 ? prefix + path.slice(prefix.length).split('/')[0] : null;
