@@ -1,8 +1,9 @@
 // Provider discovery files are ordinary, committable files. Replaced local content stays recoverable.
 import assert from 'node:assert/strict';
-import { cpSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { appendFileSync, cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { agents, sharedSkills } from './agents.mjs';
+import { gitResultIn } from './git-tool.mjs';
 import { ownSkills } from './provider-list.mjs';
 import { checkDirectory, isKept, localDirectory, moveAside } from './write-guard.mjs';
 
@@ -32,12 +33,29 @@ export function materialize(root, path, source, log) {
 
 const realpath = path => { try { return realpathSync.native(path); } catch { return ''; } };
 
+const git = gitResultIn();
+
+/** Keep the links out of `git status`: one line each in the checkout's `info/exclude` (worktree-safe, never committed). No Git checkout: nothing to do. */
+const escapeSegment = segment => segment.replace(/[\\*?[\]]/g, '\\$&').replace(/^[!#]/, '\\$&').replace(/ +$/, spaces => spaces.replaceAll(' ', '\\ '));
+
+function excludeLinks(root, paths) {
+  const found = git(root, 'rev-parse', '--git-path', 'info/exclude');
+  if (found.status !== 0 || !paths.length) return;
+  const file = resolve(root, found.stdout.trim());
+  let text = '';
+  try { text = readFileSync(file, 'utf8'); } catch { /* no exclude file yet */ }
+  const lines = paths.map(path => `/${relative(root, path).split(sep).map(escapeSegment).join('/')}`).filter(line => !text.split(/\r?\n/).includes(line));
+  if (!lines.length) return;
+  mkdirSync(dirname(file), { recursive: true });
+  appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}${lines.join('\n')}\n`);
+}
+
 /**
  * Link every shared skill into the folders of the agents that read it through links (not committed: a junction on Windows,
  * which needs no privilege, else a symlink). Own skills stay real copies. A copy equal to the shared one goes; a changed one is moved aside.
  */
 export function linkSkills(root, log) {
-  const shared = join(root, sharedSkills);
+  const shared = join(root, sharedSkills), linked = [];
   checkDirectory(root, shared);
   for (const { skills } of Object.values(agents).filter(agent => agent.linksShared)) {
     localDirectory(root, join(root, skills));
@@ -50,6 +68,8 @@ export function linkSkills(root, log) {
         else moveAside(root, path, log);
         symlinkSync(source, path, 'junction');
       }
+      if (!lstatSync(source).isFile() && present(path)?.isSymbolicLink()) linked.push(path);
     }
   }
+  excludeLinks(root, linked);
 }
