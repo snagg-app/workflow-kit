@@ -1,29 +1,36 @@
-// The review proof of `done` (#1036): the skill `code-review` runs `node scripts/review-marker.mjs` after its review and writes the reviewed head
-// into the git dir (no GraphQL, no comment). `done` reads it when the PR changes a database migration.
+// The review proof of `done` (#1036, #1042): the skill `code-review` runs `node scripts/review-marker.mjs` after its review and writes the reviewed head
+// into the git dir (no GraphQL, no comment). `done` reads it when the PR changes a path the project lists in `reviewRequiredPaths`.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gitIn } from './git-tool.mjs';
 
-const MIGRATION = /(^|\/)db\/migration\//;
+/** Without `reviewRequiredPaths` in the project profile: the database migrations of #1036. */
+export const defaultReviewPaths = ['**/db/migration/**'];
+
 const git = gitIn();
 const markerFile = cwd => resolve(cwd, git(cwd, 'rev-parse', '--git-path', 'board-code-review'));
+const escape = text => text.replace(/[.+^${}()|[\]\\?]/g, '\\$&');
+// `**/` is any directories (none included), `**` anything, `*` a name part.
+const glob = pattern => new RegExp('^' + pattern.split('**/').map(part => part.split('**').map(rest => rest.split('*').map(escape).join('[^/]*')).join('.*')).join('(.*/)?') + '$');
 
 /**
- * Null when the review is not required or proven, else the message for `done`. Required: the diff against the base changes a file under db/migration.
- * Proven: the marker names a commit that is an ancestor of HEAD and no migration file differs between it and HEAD (a later fix elsewhere needs no second review).
+ * Null when the review is not required or proven, else the message for `done`. Required: the diff against the base changes a file that matches one of `patterns`.
+ * Proven: the marker names a commit that is an ancestor of HEAD and no such file differs between it and HEAD (a later fix elsewhere needs no second review).
  */
-export function missingMigrationReview(cwd, base) {
-  const paths = (...range) => git(cwd, 'diff', '--name-only', '-z', '--no-renames', ...range).split('\0').filter(path => MIGRATION.test(path)); // -z: no quoted names
+export function missingReview(cwd, base, patterns) {
+  const matchers = patterns.map(pattern => glob(pattern.trim()));
+  const paths = (...range) => git(cwd, 'diff', '--name-only', '-z', '--no-renames', ...range).split('\0').filter(path => matchers.some(matcher => matcher.test(path))); // -z: no quoted names
   const changed = paths(`${base}...HEAD`);
   if (!changed.length) return null;
   const file = markerFile(cwd);
   const reviewed = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
   try {
     git(cwd, 'merge-base', '--is-ancestor', reviewed, 'HEAD');
-    if (!paths(reviewed, 'HEAD').length) return null;
+    // Only files the PR itself changed count: a base merged in after the review may touch such paths without the PR doing so.
+    if (!paths(reviewed, 'HEAD').some(path => changed.includes(path))) return null;
   } catch { /* no marker, or a commit this branch does not have */ }
-  return `the PR changes a database migration (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs\` for the head, then run done again`;
+  return `the PR changes a path that needs a review (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}; "reviewRequiredPaths" in .github/workflow-project.json) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs\` for the head, then run done again`;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
