@@ -166,10 +166,10 @@ function splitPair(text) {
 /** The words after the issue of `field` and `new` in one list: the `--field NAME=VALUE` pairs first, then the free `NAME VALUE` words. */
 const fieldWords = () => [...args.values('--field').flatMap(splitPair), ...args.rest];
 
-/** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing arguments. */
+/** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing issue numbers, any other word is a pair. */
 function fieldPairs() {
   const words = fieldWords();
-  if (words[0].toLowerCase() === 'status' && String(words[1]).toLowerCase() === statuses.automatedReview.toLowerCase()) return [words.slice(0, 2)];
+  if (words[0].toLowerCase() === 'status' && String(words[1]).toLowerCase() === statuses.automatedReview.toLowerCase() && words.slice(2).every(word => /^\d+$/.test(word))) return [words.slice(0, 2)];
   assert.ok(words.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
   return Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
 }

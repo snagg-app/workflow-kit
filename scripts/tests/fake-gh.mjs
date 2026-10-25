@@ -331,6 +331,15 @@ function api(argv, input, stdout, stderr, exit) {
     stderr('gh: API rate limit already exceeded for user ID 1.\n');
     exit(1);
   }
+  // graphql-flaky: the next N queries (N in the file) fail like a 502 of GitHub; with "4xx" in the file, like a missing PR.
+  if (fs.existsSync('graphql-flaky') && !query.startsWith('mutation')) {
+    const [count, kind] = fs.readFileSync('graphql-flaky', 'utf8').split(' ');
+    if (Number(count) > 0) {
+      fs.writeFileSync('graphql-flaky', `${Number(count) - 1} ${kind ?? ''}`);
+      stderr(kind === '4xx' ? 'gh: Could not resolve to a PullRequest with the number of 7. (HTTP 404)\n' : 'gh: Bad Gateway (HTTP 502)\n');
+      exit(1);
+    }
+  }
   // limited: GitHub refuses the next query, like its RATE_LIMIT error, and takes the file away: the quota is back after one wait.
   // "free" in the file: the refusal is stale, its own headers show 4000 points left and a reset three seconds away.
   if (fs.existsSync('limited') || fs.existsSync('limited-200')) {

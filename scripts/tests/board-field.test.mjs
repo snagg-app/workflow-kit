@@ -53,6 +53,15 @@ test('field sets several fields in one call: every pair is validated first, then
 });
 
 
+test('field after Status "Automated review" takes only issue numbers as extra words; other words are pairs (#1013)', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  writeIssue(issue());
+  const mutations = join(checkout, 'mutations');
+  const result = run('field', '1', 'Status', 'Automated review', 'Priority', 'Urgent');
+  assert.match(result.stdout, /^ERROR - .*Urgent/m, 'The Priority pair is validated, not swallowed: ' + result.stdout + result.stderr);
+  assert.equal(existsSync(mutations), false, 'and nothing is written');
+});
+
 test('field, status and priority report failures as one ERROR line, and issue failures name the repository', t => {
   const { checkout, run, writeIssue } = fixture(t);
   writeIssue(issue());

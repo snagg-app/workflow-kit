@@ -191,6 +191,21 @@ test('wait treats HTTP 200 GraphQL quota errors as a pause and keeps reading RES
   assert.ok(restReads() >= 2, 'REST was read during the quota pause');
 });
 
+test('wait survives single GitHub read failures, gives up after three in a row, and ends at once on a real error (#1013)', t => {
+  const { checkout, run, check, pr, show } = restFixture(t);
+  show(pr({ contexts: [check('COMPLETED')] }));
+  const flaky = text => writeFileSync(join(checkout, 'graphql-flaky'), text);
+  flaky('1');
+  const survived = run('wait', '7', '--interval', '0.2', '--max-minutes', '0.2');
+  assert.equal(survived.status, 0, 'One 502 is read again in the next round: ' + survived.stdout + survived.stderr);
+  flaky('3');
+  const repeated = run('wait', '7', '--interval', '0.2', '--max-minutes', '0.5');
+  assert.equal(repeated.status, 2, 'Three failures in a row end the wait: ' + repeated.stdout + repeated.stderr);
+  flaky('1 4xx');
+  const real = run('wait', '7', '--interval', '0.2', '--max-minutes', '0.2');
+  assert.equal(real.status, 2, 'A real error is not retried');
+});
+
 test('wait --interval 0 still pauses 10 seconds between looks, so it cannot burn the shared quota', t => {
   const { env, run, pr, show, restReads } = restFixture(t);
   show(pr());
