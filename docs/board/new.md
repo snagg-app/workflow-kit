@@ -7,6 +7,7 @@ Status | Priority | …`, of the values read back. Title, body file, an open mil
 `"requiredFields"` of `.github/workflow-project.json` (for example `["Size"]`) are required; `Status`
 and `Priority` are not `--field` values. Everything is validated against the Project and repository before
 the issue exists, so a missing or invalid value creates nothing (`ERROR - reason`, exit 2). The Status is Backlog, or the Project option given by `--status S` (e.g. `Ready`).
+A backtick value in the body that looks like a file path (a `/` and an extension, no URL or glob) but does not exist in the checkout `new` runs in prints a `WARNING` line with the path (wrong repository?); the issue is created anyway.
 A failure after the issue exists names its URL and the failed step: finish by hand, never create it again.
 - `new --from FILE`: create many issues at once. `FILE` is a JSON list (1 to 50 entries) of
 `{ "title", "bodyFile", "milestone", "priority", "labels": [..], "fields": { "Size": "XS" } }`: the values of

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, issue, test } from './board-fixture.mjs';
 
@@ -259,4 +259,22 @@ test('new refuses a title an open issue already has, so parallel sessions create
   refused(run('new', '--from', 'list.json'), /^ERROR - .*Zweimal/i);
   // A pull request with the same title is no issue.
   assert.equal(single('PR-Titel').status, 0);
+});
+
+test('new warns about a file path in backticks that the repository lacks, and still creates the issue (#1045)', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const write = (file, data) => writeFileSync(join(checkout, file), typeof data === 'string' ? data : JSON.stringify(data));
+  write('test-milestones.json', [{ number: 4, title: '0.1.1' }]);
+  write('test-labels.json', [{ name: 'enhancement' }]);
+  write('create-response.json', { number: 1, node_id: 'N1', html_url: 'https://github.com/test/example/issues/1' });
+  write('backlink-1.json', { number: 1, milestone: { title: '0.1.1' }, labels: [{ name: 'enhancement' }] });
+  writeIssue(issue('Backlog'));
+  mkdirSync(join(checkout, 'docs'), { recursive: true });
+  write('docs/vorhanden.md', 'da');
+  write('body.md', 'Siehe `docs/vorhanden.md`, `docs/fehlt-hier.md`, `https://example.com/a.html`, `git status` und `docs/*.md`.');
+  const result = run('new', '--title', 'Pfade', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--priority', 'low');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /fehlt-hier/);
+  assert.doesNotMatch(result.stdout, /vorhanden|example\.com|git status|\*\.md/);
+  assert.equal(existsSync(join(checkout, 'created.json')), true, 'the issue is created anyway');
 });

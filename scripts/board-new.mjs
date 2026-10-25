@@ -1,9 +1,10 @@
 // `new`: creates issues with everything the workflow requires.
 // Its functions run nothing when imported; run-time data comes from board-context.mjs, helpers of other commands by import.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { isAbsolute, join } from 'node:path';
 import { result } from './board-result.mjs';
-import { args, github, graphql, project, rest, restAll, specLabel, statuses, memory } from './board-context.mjs';
+import { args, github, graphql, project, projectDirectory, rest, restAll, specLabel, statuses, memory } from './board-context.mjs';
 import { named } from './board-common.mjs';
 import { dropFieldsCache, fieldWords, guardOption, planFields } from './board-fields.mjs';
 
@@ -26,6 +27,15 @@ function newOptions() {
   const fields = Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
   return { title: args.value('--title'), bodyFile: args.value('--body-file'), milestone: args.value('--milestone'), priority: args.value('--priority'), status: args.value('--status'),
     fields, labels: args.values('--label') };
+}
+
+/**
+ * Backtick values that look like a file path (a `/` and an extension, no URL, glob or placeholder) and do not exist in the project checkout:
+ * the issue may name the wrong repository (#1045). Only a warning; local, no network.
+ */
+function missingPaths(text, root) {
+  const paths = [...text.matchAll(/`([^`\s]+\/[^`\s]*\.[A-Za-z0-9]+)`/g)].map(([, path]) => path.replace(/^\.\//, ''));
+  return [...new Set(paths)].filter(path => !/[:*<>{}$?|]/.test(path) && !isAbsolute(path) && !existsSync(join(root, path)));
 }
 
 /**
@@ -62,7 +72,7 @@ function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields 
   // The REST API would silently create an unknown label.
   // A repeated label (any casing) is one label: GitHub stores it once, and the read-back compares exactly.
   const labels = [...new Set(wanted.map(label => exact(memory.repositoryLists.labels, label, 'name')?.name ?? assert.fail(`${project.repository} has no label "${label}"`)))];
-  return { title, text, plans, milestone: found, labels };
+  return { title, text, plans, milestone: found, labels, warnings: missingPaths(text, projectDirectory).map(path => `WARNING - "${title}" names \`${path}\`, which does not exist in this repository: right repository?`) };
 }
 
 /** The REST call that creates the issue (no GraphQL point). A lost or unreadable answer does not prove that nothing was created. */
@@ -199,7 +209,7 @@ function create() {
     readBackIssue(created, plan);
     step = 'setting the Project fields';
     setFields([{ id: created.node_id, number: created.number, plans: plan.plans }]);
-    return result('ok', 'NEW', { headline: newLine(created, plan), data: { issues: [created.html_url] } });
+    return result('ok', 'NEW', { headline: newLine(created, plan), notes: plan.warnings, data: { issues: [created.html_url] } });
   } catch (error) {
     throw new Error(`${created.html_url} was created, but ${step} failed: ${String(error.stderr || error.message).trim()}; finish by hand with board.mjs field, do not create it again`, { cause: error });
   }
@@ -243,7 +253,7 @@ function createMany(file) {
     step = 'setting the Project fields';
     setFields(made.map(({ created, plan }) => ({ id: created.node_id, number: created.number, plans: plan.plans })));
     const [headline, ...notes] = made.map(({ created, plan }) => newLine(created, plan));
-    return result('ok', 'NEW', { headline, notes, data: { issues: made.map(({ created }) => created.html_url) } });
+    return result('ok', 'NEW', { headline, notes: [...notes, ...made.flatMap(({ plan }) => plan.warnings)], data: { issues: made.map(({ created }) => created.html_url) } });
   } catch (error) {
     throw new Error(`${known()}, but ${step} failed: ${String(error.stderr || error.message).trim()}; finish by hand with board.mjs field/status, do not create them again`, { cause: error });
   }
