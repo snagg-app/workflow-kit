@@ -53,6 +53,20 @@ test('an optional reviewer is shown and never awaited', () => {
   assert.equal(judge(eyes, { optionalReviewers: ['coderabbitai'] }).done, true);
 });
 
+test('a pending status of an optional reviewer is awaited for ten minutes after the push, a missing one never (#1030)', () => {
+  const settings = { optionalReviewers: ['coderabbitai'] };
+  const rabbit = (state, description = 'Review in progress') => ({ __typename: 'StatusContext', context: 'CodeRabbit', state, description, creator: { login: 'coderabbitai' } });
+  const given = (minutes, ...extra) => {
+    const contexts = [job(1), ...extra], base = facts({ contexts });
+    const commit = { ...base.pr.commits.nodes[0].commit, committedDate: ago(minutes) };
+    return { ...base, pr: { ...base.pr, commits: { nodes: [{ commit }] } } };
+  };
+  assert.equal(judge(given(2, rabbit('PENDING')), settings).done, false, 'a fresh pending review is awaited');
+  assert.equal(judge(given(12, rabbit('PENDING')), settings).done, true, 'after the time limit it is shown only');
+  assert.equal(judge(given(2), settings).done, true, 'no review at all: nothing to wait for');
+  assert.equal(judge(given(2, rabbit('PENDING', 'Review rate limited')), settings).done, true, 'a rate limit is no running review');
+});
+
 test('a Draft skip of a check listed in ignoredChecks waits for nothing (#887)', () => {
   // A Backend run skipped while Draft (after the Draft conversion, before Ready) and no run since Ready.
   const draftSkip = { __typename: 'CheckRun', name: 'Backend', status: 'COMPLETED', conclusion: 'SKIPPED',

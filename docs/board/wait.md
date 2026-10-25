@@ -54,5 +54,7 @@ and security rows end separately: a security result comment never ends a running
 review), bot 👀 reactions and review requests. Free-text announcements of other bots are not
 detected; check such reviewers by hand. Reviewers in `"optionalReviewers"`
 ([setup](../../SETUP.md#3-board-and-labels)) are skipped for all of these: their checks, comments and
-reviews are listed and their 👀 reaction is shown as a note, but they never wait, stall or fail; their open threads and
+reviews are listed and their 👀 reaction is shown as a note, but they never stall or fail, and nothing is awaited that has not started. One exception: a
+check or status of such a reviewer that is already pending (and is no rate limit) is awaited until 10 minutes after the push, so `done` hands off only
+after its verdict; `wait` and `done` never request a review. Their open threads and
 change requests still block, and an analyzer such as SonarCloud listed there still reports open issues as a blocker.
