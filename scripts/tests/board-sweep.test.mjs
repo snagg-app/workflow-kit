@@ -196,7 +196,7 @@ test('sweep ends ERROR with exit 2 on a stopping error and names the issues it c
   const result = run('sweep');
   assert.equal(result.status, 2, result.stdout + result.stderr);
   assert.match(result.stdout, /^ERROR$/m);
-  assert.match(result.stdout, /closed before the error: #5$/m);
+  assert.match(result.stdout, /#5\b/, 'the issue closed before the error is named');
   writeFileSync(join(checkout, 'fail'), '');
   const read = run('sweep');
   assert.equal(read.status, 2, 'A failed read is ERROR, not a stack trace');

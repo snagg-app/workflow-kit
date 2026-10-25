@@ -45,7 +45,9 @@ test('next rejects null PRs before filtering and reads no feedback for closed PR
   assert.match(invalid.stdout, /PR feedback ids are unreadable/);
   queries();
   list([{ id: 'PRX', state: 'UNKNOWN' }]);
-  assert.match(run('next').stdout, /PR feedback states are unreadable/, 'Unknown state must not be silently treated as closed');
+  const unknown = run('next');
+  assert.equal(unknown.status, 2, 'An unreadable state is ERROR (exit 2)');
+  assert.match(unknown.stdout, /PR feedback states are unreadable/, 'Unknown state must not be silently treated as closed');
   queries();
   list(['CLOSED', 'MERGED'].map((state, index) => ({ id: `PR${index}`, number: index + 100, state, body: '', repository: { nameWithOwner: 'test/example' } })));
   writeFileSync(join(checkout, 'pr-feedback-unreadable'), '');
