@@ -42,6 +42,8 @@ if (isMain(import.meta.url)) { // real paths: a start through the .vendor link m
   }
   const cwd = process.cwd();
   try {
+    // The marker vouches for the head: uncommitted edits would be reviewed code that the head does not contain.
+    if (git(cwd, 'status', '--porcelain', '--untracked-files=no').trim()) throw new Error('uncommitted changes; commit the fixes first');
     writeFileSync(markerFile(cwd), git(cwd, 'rev-parse', 'HEAD'));
   } catch (error) {
     console.error(`review-marker: cannot record the review in ${cwd}: ${error.message}`);

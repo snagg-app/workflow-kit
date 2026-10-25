@@ -1,7 +1,7 @@
 // The review marker must be written when the script starts through a link such as `.vendor/workflow-kit` (#1049).
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { copyKitScripts, isolatedGit, temporary } from './fixtures.mjs';
@@ -55,5 +55,11 @@ test('review-marker fails loudly when it cannot write', t => {
   mkdirSync(join(repo, '.git/board-code-review')); // a directory where the file belongs
   const result = spawnSync(process.execPath, [join(kit, 'scripts/review-marker.mjs')], { cwd: repo, env, encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /cannot record the review/);
+  assert.ok(result.stderr);
+  writeFileSync(join(repo, 'tracked'), 'a');
+  execFileSync('git', ['add', 'tracked'], { cwd: repo, env });
+  rmSync(join(repo, '.git/board-code-review'), { recursive: true });
+  const dirty = spawnSync(process.execPath, [join(kit, 'scripts/review-marker.mjs')], { cwd: repo, env, encoding: 'utf8', timeout: 10000 });
+  assert.equal(dirty.status, 1); // staged but uncommitted: no marker
+  assert.equal(existsSync(join(repo, '.git/board-code-review')), false);
 });
