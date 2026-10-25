@@ -93,6 +93,11 @@ without the GitHub file-list cap. The setting is read from the current PR target
 branch, never the checkout; another value or an unreadable comparison fails closed.
 The conflict probe uses Git's `merge-tree --write-tree` (Git 2.38 or newer).
 Both modes keep the exact-head tests, CI/review gates and tested-head resume behavior.
+`"reviewRequiredPaths"` lists the path patterns for which `done` demands a `code-review` of the head
+(`*` stays within a name, `**` crosses directories), for example
+`["**/db/migration/**", "**/security/**"]`. It is read from the PR target branch like
+`doneBaseMerge`. Omitted, it is `["**/db/migration/**"]`; `[]` asks for no review. A PR without a
+matching file runs `done` as before.
 `board.mjs wait` and `done` also keep waiting a few minutes after Ready and after each push, because a
 review bot may start late (`"reviewerGraceMinutes"`, default 3). The wait ends sooner when a required bot has answered on
 the head, a limit notice included. A project whose bots do not start on their own sets

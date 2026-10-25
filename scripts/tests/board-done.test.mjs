@@ -137,6 +137,23 @@ test('done refuses a migration change without a code-review of the head, and goe
   assert.equal(text('stored'), 'Human review');
 });
 
+test('done asks for a code-review of the paths the project lists, and for no migration once the list leaves it out (#1042)', t => {
+  const { run, git, checkout, file, text, json } = delivery(t, handoffFixture);
+  writeFileSync(file('base-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), doneBaseMerge: 'overlap', reviewRequiredPaths: ['src/**/security/*.java'] }));
+  moveBase(git, checkout, {}, { 'backend/db/migration/V1__a.sql': 'select 1', 'src/app/security/Guard.java': 'class Guard {}' });
+  git('push', '-q', 'origin', 'work');
+  showPr(file, json, { headRefOid: git('rev-parse', 'HEAD') });
+  const refused = run('done', '1', 'result.md');
+  assert.equal(refused.status, 1);
+  assert.match(refused.stdout + refused.stderr, /Guard\.java/);
+  assert.doesNotMatch(refused.stdout + refused.stderr, /V1__a/);
+
+  execFileSync(process.execPath, [new URL('../review-marker.mjs', import.meta.url).pathname.replace(/^\/(\w:)/, '$1')], { cwd: checkout, env: isolatedGit(dirname(checkout)) });
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(text('stored'), 'Human review');
+});
+
 test('done does not ask for a code-review when no migration changes', t => {
   const { run, git, checkout, file, json } = delivery(t, handoffFixture);
   baseMergePolicy(file, json);

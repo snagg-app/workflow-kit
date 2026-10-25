@@ -22,7 +22,7 @@ export const codeReviewFailurePaths = [
   ['If the spec is missing, skip the Spec sub-agent', brief],
   ['Present the two reports under `## Standards` and `## Spec` headings', 'Present the three reports under `## Standards`, `## Spec` and `## Failure paths` headings'],
   ["Don't pick a single winner across axes: that's the reranking the separation exists to prevent.",
-    "Don't pick a single winner across axes: that's the reranking the separation exists to prevent.\n\nWhen the review ran against a PR base and its findings are fixed or justified, record it for `board.mjs done` (#1036; it refuses a PR that changes `db/migration` without it): commit the fixes, then run `node .vendor/workflow-kit/scripts/review-marker.mjs` from the worktree root. It writes the reviewed head into the git dir; a later change to a migration file asks for a new review."],
+    "Don't pick a single winner across axes: that's the reranking the separation exists to prevent.\n\nWhen the review ran against a PR base and its findings are fixed or justified, record it for `board.mjs done` (#1036, #1042; it refuses a PR that changes a path of the project's `reviewRequiredPaths` without it, by default `db/migration`): commit the fixes, then run `node .vendor/workflow-kit/scripts/review-marker.mjs` from the worktree root. It writes the reviewed head into the git dir; a later change to such a file asks for a new review."],
   ['the two axes are deliberately separate (see _Why two axes_)', 'the axes are deliberately separate (see _Why separate axes_)'],
   ['## Why two axes', '## Why separate axes'],
   ['→ **Spec pass, Standards fail.**\n',

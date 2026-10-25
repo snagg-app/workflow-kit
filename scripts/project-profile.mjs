@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { asking, gitIn } from './git-tool.mjs';
 import { featureProviders } from './provider-list.mjs';
+import { defaultReviewPaths } from './review-marker.mjs';
 
 const defaultStatuses = { backlog: 'Backlog', ready: 'Ready', inProgress: 'In progress', automatedReview: 'Automated review', humanReview: 'Human review', done: 'Done' };
 
@@ -147,7 +148,7 @@ function distance(a, b) {
 
 /** Refuses a top-level key the kit does not read: it would be ignored silently, a typo like "doneBaseMerges" included. */
 function assertKnownKeys(raw, where) {
-  const known = [...new Set([...otherKeys, ...Object.keys(lists), ...Object.keys(numbers), 'specLabel', 'doneBaseMerge', 'setup', ...featureProviders().map(({ name }) => name)])];
+  const known = [...new Set([...otherKeys, ...Object.keys(lists), ...Object.keys(numbers), 'specLabel', 'doneBaseMerge', 'reviewRequiredPaths', 'setup', ...featureProviders().map(({ name }) => name)])];
   for (const key of Object.keys(raw)) {
     if (known.includes(key)) continue;
     const near = known.map(name => [name, distance(key.toLowerCase(), name.toLowerCase())]).sort((a, b) => a[1] - b[1])[0];
@@ -180,6 +181,9 @@ export function parseProfile(source, where = profileFile) {
   assert.ok(typeof view.specLabel === 'string' && view.specLabel.trim(), `specLabel in ${profileFile} must be a label name; omit it for "spec"`);
   view.doneBaseMerge = raw.doneBaseMerge === undefined ? 'always' : raw.doneBaseMerge;
   assert.ok(['always', 'overlap'].includes(view.doneBaseMerge), `doneBaseMerge in ${profileFile} must be "always" or "overlap"; omit it for "always"`);
+  view.reviewRequiredPaths = raw.reviewRequiredPaths ?? defaultReviewPaths;
+  assert.ok(Array.isArray(view.reviewRequiredPaths) && view.reviewRequiredPaths.every(name => typeof name === 'string' && name.trim()),
+    `reviewRequiredPaths in ${profileFile} must be a list of path patterns such as "**/db/migration/**"; omit it for ${JSON.stringify(defaultReviewPaths)}, use [] for none`);
   view.setup = raw.setup === undefined ? '' : raw.setup;
   assert.ok(typeof view.setup === 'string', `setup in ${profileFile} must be a shell command; omit it for none`);
   for (const { name, feature } of featureProviders()) {
