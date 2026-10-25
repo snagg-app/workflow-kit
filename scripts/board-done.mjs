@@ -232,7 +232,7 @@ async function done() {
   }
   if (file && !findHandoffComment(polled.comments, issue.viewer, head)) {
     // #1052: tests that were red on the base too did not block; the comment lists them with their issue.
-    const baseRed = skipReason || !existsSync(steps) ? '' : baseRedHandoff(baseRedTests(readFileSync(steps, 'utf8')), `origin/${pull.base.ref}`);
+    const baseRed = (skipReason && !isTested()) || !existsSync(steps) ? '' : baseRedHandoff(baseRedTests(readFileSync(steps, 'utf8')), `origin/${pull.base.ref}`);
     const body = baseRed ? withBaseRed(lines(file), baseRed) : lines(file);
     github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\n${handoffHeadLine(head)}\n\n${body}\n` });
   }

@@ -297,6 +297,15 @@ test('done lists tests that are red on the base too in the handoff, before the R
   assert.equal(existsSync(file('creates')), false, 'an open issue names the class: nothing is created');
 });
 
+test('done keeps the base-red tests of a tested head when the final call skips the local tests (#1052)', t => {
+  const { run, file, json } = delivery(t, handoffFixture);
+  writeFileSync(file('affected-tests-base-red'), 'io.snagg.StashServiceTest.addsItem\n');
+  writeFileSync(file('test-issues.json'), JSON.stringify([{ number: 9, title: 'StashServiceTest', html_url: 'https://github.com/test/example/issues/9' }]));
+  assert.equal(run('done', '1').status, 0);
+  assert.equal(run('done', '1', 'result.md', '--skip-local-tests', 'tested above').status, 0);
+  assert.match(json('issues-comments.json').at(-1).body, /StashServiceTest\.addsItem`: .*issues\/9/);
+});
+
 test('done creates the issue of a test that is red on the base, from the milestone, labels and fields of its own issue, and still hands off (#1052)', t => {
   const { run, file, json, text } = delivery(t, handoffFixture);
   const write = (name, data) => writeFileSync(file(name), typeof data === 'string' ? data : JSON.stringify(data));
