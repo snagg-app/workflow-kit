@@ -77,7 +77,7 @@ test('a Draft skip of a check listed in ignoredChecks waits for nothing (#887)',
   assert.equal(judge(draft, { ignoredChecks: ['Lint'] }).done, false, 'A check not listed still waits');
 });
 
-test('open Sonar issues are red, an unreadable count is not clean, a failed read throws', () => {
+test('open Sonar issues are red, a failed read throws', () => {
   const withSonar = answer => facts({ contexts: [job(1), sonarCheck], sonar: new Map([[sonarCheck, answer]]) });
   assert.equal(judge(withSonar({ total: 0, lines: [] })).failed, false);
   const open = judge(withSonar({ total: 2, lines: ['sonar: rule A.java:1 m'] }));
@@ -85,7 +85,7 @@ test('open Sonar issues are red, an unreadable count is not clean, a failed read
   assert.throws(() => judge(withSonar({ error: new Error('Sonar API answered 401') })), /401/);
 });
 
-test('a cancelled Sonar analysis counts as done with 0 findings and stays red otherwise', () => {
+test('a cancelled Sonar analysis counts as done with 0 findings and stays red with findings', () => {
   const cancelled = { ...sonarCheck, conclusion: 'CANCELLED' };
   const withCancelled = answer => judge(facts({ contexts: [job(1), cancelled], sonar: new Map([[cancelled, answer]]) }));
   assert.equal(withCancelled({ total: 0, lines: [] }).failed, false);

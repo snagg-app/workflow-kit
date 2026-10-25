@@ -3,6 +3,7 @@
 // so no test patches fetch or starts a child process.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
 
 /** The SonarCloud check links the analysis of another PR (sync PRs with one head, #640). */
@@ -44,8 +45,8 @@ function requestInWorker(href, token) {
 
 /** The answer of `sonar list issues` in the shape of the API answer; a missing CLI or a missing login throws in one line. */
 function requestWithCli(key, prNumber) {
-  const run = spawnSync('sonar', ['list', 'issues', '-p', key, '--pull-request', String(prNumber), '--format', 'json', '--page-size', String(sonarListed)], { encoding: 'utf8', timeout: requestSeconds * 1000 });
-  const text = run.stdout?.slice(run.stdout.indexOf('{')) ?? '';
+  const run = spawnSync('sonar', ['list', 'issues', '-p', key, '--pull-request', String(prNumber), '--format', 'json', '--page-size', String(sonarListed)], { encoding: 'utf8', timeout: requestSeconds * 1000, maxBuffer: 16 << 20, cwd: tmpdir() }); // cwd: a program of the PR checkout must not shadow the CLI
+  const text = run.stdout?.slice(run.stdout.indexOf('{'), run.stdout.lastIndexOf('}') + 1) ?? ''; // the CLI may print a banner or an update notice around the JSON
   const reason = run.error?.message ?? String(run.stderr || run.stdout || `exit ${run.status}`).trim().split('\n')[0];
   assert.ok(run.status === 0 && text.startsWith('{'), `Sonar is unreachable: SONAR_TOKEN is not set and \`sonar list issues\` failed (${reason}); set SONAR_TOKEN (docs/board/wait.md) or run \`sonar auth login\``);
   return { ok: true, text };
