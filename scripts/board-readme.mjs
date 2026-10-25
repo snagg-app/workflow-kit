@@ -17,6 +17,13 @@ export function commandTable() {
   return ['| Command | Access | What it does |', '| --- | --- | --- |', ...rows].join('\n');
 }
 
+/** The README text with the command table written from the command descriptions; `done` in the kit compares it with the committed text (#1046). */
+export function renderReadme(readme) {
+  const from = readme.indexOf(start), to = readme.indexOf(end);
+  if (from < 0 || to < from) throw new Error(`README.md lacks the markers ${start} and ${end}`);
+  return `${readme.slice(0, from + start.length)}\n${commandTable()}\n${readme.slice(to)}`;
+}
+
 const usage = `Usage: node scripts/board-readme.mjs
 Rewrites the board command table in README.md from the command descriptions.`;
 
@@ -25,8 +32,6 @@ if (isMain(import.meta.url)) {
   if (option === '--help' || option === '-h') { console.log(usage); process.exit(0); }
   if (option) { console.error(`${usage}
 Unknown argument; README.md was not changed.`); process.exit(2); }
-  const file = fileURLToPath(new URL('../README.md', import.meta.url)), readme = readFileSync(file, 'utf8');
-  const from = readme.indexOf(start), to = readme.indexOf(end);
-  if (from < 0 || to < from) throw new Error(`README.md lacks the markers ${start} and ${end}`);
-  writeFileSync(file, `${readme.slice(0, from + start.length)}\n${commandTable()}\n${readme.slice(to)}`);
+  const file = fileURLToPath(new URL('../README.md', import.meta.url));
+  writeFileSync(file, renderReadme(readFileSync(file, 'utf8')));
 }

@@ -18,6 +18,7 @@ import { resolveOption, set } from './board-fields.mjs';
 import { findHandoffComment, handoff, ready } from './board-handoff.mjs';
 import { baseSettings, useBaseSettings } from './board-reviews.mjs';
 import { openFirstPr } from './board-start.mjs';
+import { kitSelfCheck } from './kit-self-check.mjs';
 import { missingReview } from './review-marker.mjs';
 import { poll, reviewOutcome, reviewsForHead } from './board-wait.mjs';
 
@@ -162,6 +163,11 @@ async function done() {
         return failed(`merging ${base} conflicts${files.length ? ` in ${files.join(', ')}` : `: ${failure(error)}`}; merge it yourself, push, then run done again`);
       }
     }
+    // #1046: in the kit itself, a stale README table or a new script without a row in affected-tests.mjs is found here, not in the kit CI after the push.
+    if (!partial) try {
+      const problem = kitSelfCheck(projectDirectory, base);
+      if (problem) return failed(problem);
+    } catch (error) { return failed(`cannot check the kit files: ${failure(error)}`); }
     // #659: new local commits (a correction after an earlier done) are pushed even when no base merge was needed.
     const plan = pushPlan({ stand: checkout.stand(), number, pr, mergeNeeded });
     if (plan.push) {
