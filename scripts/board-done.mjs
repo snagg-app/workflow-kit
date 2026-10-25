@@ -18,6 +18,7 @@ import { resolveOption, set } from './board-fields.mjs';
 import { findHandoffComment, handoff, ready } from './board-handoff.mjs';
 import { baseSettings, useBaseSettings } from './board-reviews.mjs';
 import { openFirstPr } from './board-start.mjs';
+import { missingMigrationReview } from './review-marker.mjs';
 import { poll, reviewOutcome, reviewsForHead } from './board-wait.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
@@ -168,6 +169,11 @@ async function done() {
     }
   }
   const sha = localHead();
+  // #1036: a PR that changes a migration needs a code-review for this head; the proof is a marker in the git dir.
+  if (!partial) try {
+    const missing = missingMigrationReview(projectDirectory, `origin/${pull.base.ref}`);
+    if (missing) return failed(missing);
+  } catch (error) { return failed(`cannot check the migration review: ${String(error.stderr || error.message).trim()}`); }
   // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.
   const ownHandoff = findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
   const prepare = !file && !ownHandoff;
