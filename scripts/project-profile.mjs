@@ -181,7 +181,7 @@ export function parseProfile(source, where = profileFile) {
   assert.ok(typeof view.specLabel === 'string' && view.specLabel.trim(), `specLabel in ${profileFile} must be a label name; omit it for "spec"`);
   view.doneBaseMerge = raw.doneBaseMerge === undefined ? 'always' : raw.doneBaseMerge;
   assert.ok(['always', 'overlap'].includes(view.doneBaseMerge), `doneBaseMerge in ${profileFile} must be "always" or "overlap"; omit it for "always"`);
-  view.reviewRequiredPaths = raw.reviewRequiredPaths ?? defaultReviewPaths;
+  view.reviewRequiredPaths = raw.reviewRequiredPaths === undefined ? defaultReviewPaths : raw.reviewRequiredPaths;
   assert.ok(Array.isArray(view.reviewRequiredPaths) && view.reviewRequiredPaths.every(name => typeof name === 'string' && name.trim()),
     `reviewRequiredPaths in ${profileFile} must be a list of path patterns such as "**/db/migration/**"; omit it for ${JSON.stringify(defaultReviewPaths)}, use [] for none`);
   view.setup = raw.setup === undefined ? '' : raw.setup;
