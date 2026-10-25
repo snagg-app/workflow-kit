@@ -98,6 +98,9 @@ Both modes keep the exact-head tests, CI/review gates and tested-head resume beh
 `["**/db/migration/**", "**/security/**"]`. It is read from the PR target branch like
 `doneBaseMerge`. Omitted, it is `["**/db/migration/**"]`; `[]` asks for no review. A PR without a
 matching file runs `done` as before.
+`"reviewModuleRoots"` lists folders whose subfolders are modules or adapters, for example
+`["backend", "backend/importer/adapters"]`. When the diff changes files in at least 3 such modules, `done` demands the same
+`code-review` (a shared contract plus its adapters). Read from the PR target branch; omitted or `[]`, no PR needs it for this reason.
 `board.mjs wait` and `done` also keep waiting a few minutes after Ready and after each push, because a
 review bot may start late (`"reviewerGraceMinutes"`, default 3). The wait ends sooner when a required bot has answered on
 the head, a limit notice included. A project whose bots do not start on their own sets

@@ -2,6 +2,8 @@
 // Two variants, like github.mjs: the real request, and a test variant a test sets with useSonarAdapter (board-worker.mjs hands in fake-sonar.mjs),
 // so no test patches fetch or starts a child process.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
 import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
 
 /** The SonarCloud check links the analysis of another PR (sync PRs with one head, #640). */
@@ -41,26 +43,30 @@ function requestInWorker(href, token) {
   }
 }
 
+/** The answer of `sonar list issues` in the shape of the API answer; a missing CLI or a missing login throws in one line. */
+function requestWithCli(key, prNumber) {
+  const run = spawnSync('sonar', ['list', 'issues', '-p', key, '--pull-request', String(prNumber), '--format', 'json', '--page-size', String(sonarListed)], { encoding: 'utf8', timeout: requestSeconds * 1000, maxBuffer: 16 << 20, cwd: tmpdir() }); // cwd: a program of the PR checkout must not shadow the CLI
+  const text = run.stdout?.slice(run.stdout.indexOf('{'), run.stdout.lastIndexOf('}') + 1) ?? ''; // the CLI may print a banner or an update notice around the JSON
+  const reason = run.error?.message ?? String(run.stderr || run.stdout || `exit ${run.status}`).trim().split('\n')[0];
+  assert.ok(run.status === 0 && text.startsWith('{'), `Sonar is unreachable: SONAR_TOKEN is not set and \`sonar list issues\` failed (${reason}); set SONAR_TOKEN (docs/board/wait.md) or run \`sonar auth login\``);
+  return { ok: true, text };
+}
+
 /**
  * OPEN and CONFIRMED issues of the pull request analysis a SonarCloud check run points at. The anonymous API reports 0
- * for private projects, so a failed read throws (never "clean"). Without a token the count comes from the check
- * run's summary instead (total null when unreadable).
+ * for private projects, so a failed read throws (never "clean"). Without a token the `sonar` CLI reads them.
  */
-export function sonarIssues(detailsUrl, prNumber, summary, token) {
+export function sonarIssues(detailsUrl, prNumber, token) {
   const target = new URL(detailsUrl ?? 'invalid:');
   const key = target.searchParams.get('id');
   const unlinked = `The SonarCloud check does not link PR #${prNumber}'s analysis (${detailsUrl}); open issues are unreadable`;
   assert.ok(sonarHosts.includes(target.origin) && key && target.searchParams.get('pullRequest'), unlinked);
   // Sync PRs with the same head share one analysis, and it links one of them (#640): `merge` answers with a branch update.
   if (target.searchParams.get('pullRequest') !== String(prNumber)) throw new SonarOtherPr(unlinked);
-  if (!token) {
-    // The check run's own summary names the count ("[0 New issues](…)"); only that is a readable number, else total is null.
-    const count = /\[(\d+) New issues?\]/.exec(summary ?? '')?.[1];
-    return { total: count === undefined ? null : Number(count), lines: count > 0 ? [`sonar: list them with SONAR_TOKEN set, or at ${target.href}`] : [] };
-  }
   const api = new URL('/api/issues/search', target.origin);
   api.search = new URLSearchParams({ componentKeys: key, pullRequest: String(prNumber), issueStatuses: 'OPEN,CONFIRMED', ps: String(sonarListed) });
-  const answer = (adapter ?? requestInWorker)(api.href, token);
+  // #1055: the check summary counts new-code issues only ("0 New issues" behind 5 open ones), so without a token the logged-in `sonar` CLI lists them.
+  const answer = adapter ? adapter(api.href, token) : token ? requestInWorker(api.href, token) : requestWithCli(key, prNumber);
   if (!answer.ok) throw new Error(`Sonar API answered ${answer.status}`);
   const { total, issues } = JSON.parse(answer.text);
   assert.ok(Number.isSafeInteger(total) && total >= 0 && Array.isArray(issues), 'Sonar issue count is unreadable');
