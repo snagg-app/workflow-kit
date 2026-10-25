@@ -23,6 +23,20 @@ test('new permits initial Backlog for a spec but refuses any other initial statu
   assert.equal(run(...args).status, 0, 'creating a spec in Backlog stays supported');
 });
 
+test('new --blocked sets the label "blocked" on top of the given labels (#1056)', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  const write = (file, data) => writeFileSync(join(checkout, file), typeof data === 'string' ? data : JSON.stringify(data));
+  write('body.md', 'Text\n\nVoraussetzung: PR #5302 ist gemergt.');
+  write('test-milestones.json', [{ number: 4, title: '0.1.1' }]);
+  write('test-labels.json', [{ name: 'enhancement' }, { name: 'blocked' }]);
+  write('create-response.json', { number: 1, node_id: 'N1', html_url: 'https://github.com/test/example/issues/1' });
+  write('backlink-1.json', { number: 1, milestone: { title: '0.1.1' }, labels: [{ name: 'enhancement' }, { name: 'blocked' }] });
+  writeIssue(issue('Backlog'));
+  const result = run('new', '--title', 'Titel', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--blocked', '--priority', 'low');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(join(checkout, 'created.json'), 'utf8')).labels, ['enhancement', 'blocked']);
+});
+
 test('new applies the Status guard of field before creating: Ready with an open decision wait is refused (#944)', t => {
   const { checkout, run, writeIssue } = fixture(t);
   const write = (file, data) => writeFileSync(join(checkout, file), typeof data === 'string' ? data : JSON.stringify(data));
