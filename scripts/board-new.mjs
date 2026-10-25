@@ -22,7 +22,7 @@ export const specs = [
 /** The values of one `new` call; unknown or repeated flags were refused by the parser. The extra fields are `--field NAME=VALUE` and free `NAME VALUE` words alike. */
 function newOptions() {
   const words = fieldWords();
-  assert.ok(words.length % 2 === 0, 'new takes NAME VALUE pairs after its flags');
+  assert.ok(words.length % 2 === 0, `new takes NAME VALUE pairs after its flags; the first argument without a partner is #${words.length} "${words.at(-1)}" (arguments: ${words.map(word => `"${word}"`).join(' ')}; a title split by the shell?)`);
   const fields = Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
   return { title: args.value('--title'), bodyFile: args.value('--body-file'), milestone: args.value('--milestone'), priority: args.value('--priority'), status: args.value('--status'),
     fields, labels: args.values('--label') };
