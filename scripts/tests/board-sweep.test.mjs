@@ -160,6 +160,18 @@ test('sweep comments again when the same PR conflicts a second time with a new h
   assert.equal(comments(), 2, 'a second conflict with another head is told again');
 });
 
+test('sweep reads all pages before it closes anything, so a close on page 1 skips no issue (#1016)', t => {
+  const { checkout, run } = fixture(t);
+  const delivered = number => ({ ...issue('Done'), number, id: `I${number}`, closedByPullRequestsReferences: { totalCount: 1,
+    nodes: [{ number: 70, url: 'u', state: 'MERGED', merged: true, mergedAt: '2026-10-09T10:00:00Z', baseRefName: 'release/1.0', repository: { nameWithOwner: 'test/example' } }] } });
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([delivered(5), delivered(6), delivered(7)]));
+  for (const number of [5, 6, 7]) writeFileSync(join(checkout, `backlink-comments-${number}.json`), '[]');
+  writeFileSync(join(checkout, 'search-page'), '2');
+  const result = run('sweep');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  for (const number of [5, 6, 7]) assert.match(result.stdout, new RegExp(`^#${number} closed: delivered`, 'm'));
+});
+
 test('sweep stops at the first used-up quota instead of failing every issue (#986)', t => {
   const { checkout, run } = fixture(t);
   const delivered = number => ({ ...issue('Done'), number, id: `I${number}`, closedByPullRequestsReferences: { totalCount: 1,

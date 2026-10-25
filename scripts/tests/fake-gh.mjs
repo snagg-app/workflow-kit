@@ -376,6 +376,7 @@ function api(argv, input, stdout, stderr, exit) {
     fs.appendFileSync('mutations', query + '\n');
     // The item or issue each mutation wrote to, one line per mutation.
     fs.appendFileSync('mutation-targets', argv.filter(arg => /^(item|issue)=/.test(arg)).join(' ') + '\n');
+    if (query.includes('closeIssue')) fs.appendFileSync('closed-ids', argv.find(arg => arg.startsWith('issue=')).slice(6) + '\n');
     // threads.json ([{ pr, id, isResolved, isOutdated, path, line, databaseId, url, body, author }]): replies and resolutions change it like GitHub does.
     if (query.includes('resolveReviewThread') || query.includes('addPullRequestReviewThreadReply')) {
       const stored = JSON.parse(fs.readFileSync('threads.json'));
@@ -560,7 +561,13 @@ function api(argv, input, stdout, stderr, exit) {
       pr.id ??= `PR-${issue.number}-${index}`;
       if (!query.includes('reviews(last:5)')) { delete pr.comments; delete pr.reviews; }
     }
-    data = answerFrom(query, { viewer: { login: 'worker' }, search: { issueCount: nodes.length + Number(fs.existsSync('truncate')), pageInfo: { hasNextPage: false }, nodes } });
+    // 'search-page' (a size) pages the open issues by offset like GitHub's cursor; an issue closed meanwhile (closed-ids) leaves the result.
+    const closedIds = fs.existsSync('closed-ids') ? fs.readFileSync('closed-ids', 'utf8').split('\n') : [];
+    const open = fs.existsSync('search-page') ? nodes.filter(issue => !closedIds.includes(issue.id)) : nodes;
+    const size = fs.existsSync('search-page') ? Number(fs.readFileSync('search-page', 'utf8')) : open.length;
+    const start = Number(argv.find(arg => arg.startsWith('after='))?.slice(6) ?? 0);
+    data = answerFrom(query, { viewer: { login: 'worker' }, search: { issueCount: open.length + Number(fs.existsSync('truncate')),
+      pageInfo: { hasNextPage: start + size < open.length, endCursor: String(start + size) }, nodes: open.slice(start, start + size) } });
   }
   else {
     const issue = JSON.parse(fs.readFileSync('issue.json'));
