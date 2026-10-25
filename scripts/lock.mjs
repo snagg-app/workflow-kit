@@ -2,14 +2,19 @@
 // Nutzen: Nur ein abgestuerzter Halter (Prozess weg) wird abgeloest, ein lebender nie, auch nicht nach langer Zeit. Nur ein Ordner ohne lesbare PID (Halter starb zwischen Anlegen und Schreiben) gilt nach `stale` ms als verlassen. Freigeben loescht nur die eigene Sperre (eigene PID drin).
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { uptime } from 'node:os';
 import { join } from 'node:path';
 
 const sleep = ms => new Promise(done => setTimeout(done, ms));
+
+const bootTime = () => Date.now() - uptime() * 1000;
 
 const abandoned = (lock, stale) => {
   let pid;
   try { pid = Number.parseInt(readFileSync(join(lock, 'pid'), 'utf8'), 10); } catch { /* no pid (yet) */ }
   if (pid > 0) {
+    // A lock from before the last reboot is dead, whatever process holds its PID now (#1024). The uptime clock drifts a little, hence the minute of slack.
+    try { if (Math.abs(bootTime() - Number(readFileSync(join(lock, 'boot'), 'utf8'))) > 60_000) return true; } catch { /* no boot marker (yet): fall back to the PID check */ }
     try { process.kill(pid, 0); return false; } catch (error) { return error.code === 'ESRCH'; }
   }
   try { return Date.now() - statSync(lock).mtimeMs > stale; } catch { return true; }
@@ -38,6 +43,7 @@ function acquire(lock, stale) {
       try { renameSync(lock, `${lock}.dead-${process.pid}`); rmSync(`${lock}.dead-${process.pid}`, { recursive: true, force: true }); } catch { /* another run took it first */ }
       continue;
     }
+    writeFileSync(join(lock, 'boot'), String(Math.round(bootTime())));
     writeFileSync(join(lock, 'pid'), String(process.pid));
     return true;
   }
