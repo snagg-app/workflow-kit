@@ -51,6 +51,9 @@ that apply before step 1. `board.mjs` is the kit's `scripts/board.mjs`.
    A match, open or closed, is linked with `board.mjs sub SPEC N` instead of creating the issue. When `new` refuses because an open issue has the same title, link that
    issue instead (`board.mjs sub SPEC N`). No ticket carries an open decision; `needs-human-input` is only for
    work a human must do. Architecture candidates never get a ticket here.
+   Tickets that wait on each other (steps 5 and 8): create the predecessor first and write its real number
+   ("Blocked by #123") into the dependent ticket's body and blocked-by link; no draft labels like K1 or K2 in any
+   issue text. Check with `gh issue view` that none remain.
    A ticket or acceptance point about a provider interface names the capability in general terms ("a source may create
    variants", an adapter contract capability) and the provider only as the first source or adapter, never as the subject.
 
