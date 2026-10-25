@@ -4,6 +4,8 @@
 
 - **`affected-tests --resume` überspringt keine grünen Schritte mehr, wenn sich Dateien geändert haben (#1018).** Der Merkzettel gilt jetzt nur für denselben Commit und denselben Arbeitsstand (nicht committete und neue Dateien). Wer nach einem roten Schritt etwas ändert, ohne zu committen, bekommt alle Schritte neu geprüft.
 
+- **`done` nennt nicht committete Dateien, wenn noch kein PR existiert (#1012).** Bisher hieß es nur „kein PR“. Jetzt zählt die Meldung bis zu fünf nicht committete Dateien auf (und wie viele weitere es gibt) und sagt, dass zuerst committet werden muss. Ohne offene Änderungen bleibt die Meldung wie vorher.
+
 - **`kit setup` schreibt die eingecheckte Hook-Einstiegsdatei nicht mehr über (#985).** `.agents/workflow-kit-hook.mjs` bleibt, wie das Projekt sie eingecheckt hat, und `setup` meldet das einmal in einer Zeile. Neu schreiben lässt sie sich mit `setup --refresh`. So findet kein Treiber nach `bootstrap` oder `start` mehr eine fremde Änderung im Arbeitsbaum.
 
 - **`setup-github` legt aus dem falschen Ordner kein zweites Board mehr an (#920).** Das Skript nutzt jetzt die Projektwurzel (auch aus einem Unterordner wie `docs/`) und akzeptiert `--cwd`. Außerhalb eines Git-Checkouts endet es mit Exit 2, ohne bei GitHub etwas zu schreiben. `--help` zeigt die Hilfe (Exit 0), unbekannte Optionen enden mit Exit 2. Wird das Skript nur eingebunden, passiert nichts.
