@@ -42,6 +42,14 @@ test('new applies the Status guard of field before creating: Ready with an open 
   assert.equal(run(...args).status, 0, 'without the wait, Ready is created');
 });
 
+test('new names the loose argument when the shell split the title (#1031)', t => {
+  const { checkout, run, writeIssue } = fixture(t);
+  writeFileSync(join(checkout, 'body.md'), 'Text');
+  writeIssue(issue('Backlog'));
+  const result = run('new', '--title', 'Ein', 'zerlegter', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--priority', 'low');
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /zerlegter/);
+});
 
 test('new checks every required value before creating, reads all values back and starts the issue on request', t => {
   const { checkout, run, writeIssue } = fixture(t);
