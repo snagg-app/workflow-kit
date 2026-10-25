@@ -1,7 +1,7 @@
 // The review marker must be written when the script starts through a link such as `.vendor/workflow-kit` (#1049).
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, symlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { copyKitScripts, isolatedGit, temporary } from './fixtures.mjs';
@@ -16,7 +16,7 @@ test('review-marker started through a directory link writes the marker', t => {
   git('init', '-q');
   git('commit', '-q', '--allow-empty', '-m', 'first');
   symlinkSync(kit, link, 'junction');
-  const result = spawnSync(process.execPath, [join(link, 'scripts/review-marker.mjs')], { cwd: repo, env, encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [join(link, 'scripts/review-marker.mjs')], { cwd: repo, env, encoding: 'utf8', timeout: 10000 });
   assert.equal(result.status, 0, result.stderr);
-  assert.ok(existsSync(join(repo, '.git/board-code-review')), 'marker file missing');
+  assert.equal(readFileSync(join(repo, '.git/board-code-review'), 'utf8'), git('rev-parse', 'HEAD').trim());
 });
