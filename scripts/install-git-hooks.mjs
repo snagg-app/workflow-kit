@@ -24,7 +24,8 @@ function moveIn(from, to) {
   }
 }
 
-/** Copies the project's .githooks into the clone's Git directory and points core.hooksPath there; `check` only reports. Prints what it did. */
+/** Copies the project's .githooks into the clone's Git directory and points core.hooksPath there; `check` only reports. Prints what it did.
+ * Returns { ready, reason }: not ready (with the reason) when a foreign core.hooksPath keeps the hooks from running. */
 export function installGitHooks({ root, check = false, log = console.log }) {
   // Inherited repository selection (e.g. when called from a Git hook) would redirect Git away from root.
   const git = gitResultIn({ env: { GIT_DIR: undefined, GIT_WORK_TREE: undefined, GIT_COMMON_DIR: undefined } }, root);
@@ -42,7 +43,7 @@ export function installGitHooks({ root, check = false, log = console.log }) {
 
   if (!statSync(join(root, '.githooks'), { throwIfNoEntry: false })?.isDirectory()) {
     report('no .githooks directory, nothing to do');
-    return;
+    return { ready: true };
   }
 
   // Every worktree's .githooks counts as ours, so an absolute path into another worktree is migrated too.
@@ -122,21 +123,24 @@ export function installGitHooks({ root, check = false, log = console.log }) {
     scan(file, false);
   const foreignConditional = conditional.filter(entry => !isOurs(entry.value));
   if (foreignConditional.length) {
-    report(`kept as is: includeIf may set ${describe(foreignConditional)}; integrate .githooks there by hand`);
-    return;
+    const reason = `includeIf may set ${describe(foreignConditional)}; integrate .githooks there by hand`;
+    report(`kept as is: ${reason}`);
+    return { ready: false, reason };
   }
 
   // Local config wins over global and system; an unset local must not shadow someone's global hooks.
   const local = entries('--file', localFile);
   const inherited = local.length ? [] : [...entries('--global'), ...entries('--system')];
-  let ready = false;
+  let ready = false, reason;
   if (inherited.some(entry => !isOurs(entry.value))) {
-    report(`kept foreign ${describe(inherited)}; integrate .githooks there by hand`);
+    reason = `foreign core.hooksPath ${describe(inherited)}; integrate .githooks there by hand`;
+    report(`kept ${reason}`);
   } else if (local.length && local.every(entry => isAbsolute(entry.value) && fold(entry.value) === fold(hooksDir))) {
     ready = true;
     report(hooksValue);
   } else if (local.length && !owned(localFile, local)) {
-    report(`kept ${describe(local)}; integrate .githooks there by hand`);
+    reason = `core.hooksPath ${describe(local)}; integrate .githooks there by hand`;
+    report(`kept ${reason}`);
   } else {
     if (!check) out('config', '--file', localFile, '--replace-all', 'core.hooksPath', hooksValue);
     ready = true;
@@ -150,6 +154,7 @@ export function installGitHooks({ root, check = false, log = console.log }) {
       if (!check) out('config', '--file', file, '--unset-all', 'core.hooksPath');
       report(`${check ? 'would remove' : 'removed'} worktree override ${describe(list)}`);
     } else {
+      reason ??= `worktree override core.hooksPath ${describe(list)}; integrate .githooks there by hand`;
       report(`kept worktree override ${describe(list)}`);
     }
   }
@@ -185,6 +190,7 @@ export function installGitHooks({ root, check = false, log = console.log }) {
       log(`hooks: copied .githooks into ${hooksValue}; rerun after changing a hook`);
     }
   }
+  return { ready: ready && !reason, reason };
 }
 
 if (isMain(import.meta.url)) {

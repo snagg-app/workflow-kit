@@ -68,7 +68,7 @@ export async function kitSetup(root, { onStep = () => {}, refresh = false } = {}
     return ok();
   });
   step(`skills for ${agentLabels()}`, true, async log => { await setupSkills({ log, profile: current(), refresh }); return ok(); });
-  step('git hooks (.githooks)', true, log => { installGitHooks({ root, log }); return ok(); });
+  step('git hooks (.githooks)', true, log => { const { ready, reason } = installGitHooks({ root, log }); return ready ? ok() : open(reason); });
   // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
   for (const provider of featureProviders().filter(provider => provider.install))
     step(`${provider.label} hooks`, false, async log => {
