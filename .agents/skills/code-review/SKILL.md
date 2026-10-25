@@ -90,7 +90,7 @@ Present the three reports under `## Standards`, `## Spec` and `## Failure paths`
 
 End with a one-line summary: total findings per axis, and the worst issue _within each axis_ (if any). Don't pick a single winner across axes: that's the reranking the separation exists to prevent.
 
-When the review ran against a PR base and its findings are fixed or justified, record it for `board.mjs done` (#1036, #1042; it refuses a PR that changes a path of the project's `reviewRequiredPaths` without it, by default `db/migration`): commit the fixes, then run `node .vendor/workflow-kit/scripts/review-marker.mjs` from the worktree root. It writes the reviewed head into the git dir; a later change to such a file asks for a new review.
+Last step of every review against a PR base, once its findings are fixed or justified (#1036, #1042, #1054): record the head yourself, do not leave it to the caller or wait to be asked. `board.mjs done` refuses a PR that changes a path of the project's `reviewRequiredPaths` (default `db/migration`) without it. Commit the fixes, then run `node .vendor/workflow-kit/scripts/review-marker.mjs --cwd <worktree root>` (absolute path of the worktree you reviewed; without `--cwd` it uses the current directory). It writes the reviewed head into that worktree's git dir and prints the path, or exits non-zero with the reason. Report that line. A later change to such a file asks for a new review.
 
 ## Why separate axes
 

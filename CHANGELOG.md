@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **Der `code-review`-Skill schreibt den Review-Nachweis als letzten Schritt selbst, `review-marker.mjs` kennt `--cwd` (#1054).** `node scripts/review-marker.mjs --cwd WORKTREE` schreibt in genau diesen Worktree, auch beim Aufruf über `.vendor/workflow-kit`. Das Skript meldet einen Fehler (Exit 1), wenn es nichts schreiben kann, lehnt unbekannte Optionen ab (Exit 2) und schreibt nichts, solange der Worktree ungespeicherte Änderungen an verfolgten Dateien hat.
+
 - **`done` bleibt nicht mehr an Tests hängen, die schon auf der Basis rot sind (#1052).** Meldet ein Projekt-Testbefehl nur solche Tests (Exit 3 und `RED ON BASE:`-Zeilen, siehe README), zählt der Schritt als grün. Der Übergabe-Kommentar führt die Tests dann unter „Schon auf der Basis rot“ mit ihrem offenen Issue auf; gibt es keines, legt `done` eines auf Ready an (scheitert das, steht der Grund im Kommentar). Scheitert ein Test nur im PR, bricht `done` wie bisher ab. Außerdem warnt `board.mjs new` bei Zweignamen wie `release/0.1.2` nicht mehr vor einem fehlenden Pfad. Die Gate-Skripte stehen jetzt in `reviewRequiredPaths`: `done` verlangt für ihre Änderung selbst einen Review.
 
 - **`affected-tests --resume` überspringt keine grünen Schritte mehr, wenn sich Dateien geändert haben (#1018).** Der Merkzettel gilt jetzt nur für denselben Commit und denselben Arbeitsstand (nicht committete und neue Dateien). Wer nach einem roten Schritt etwas ändert, ohne zu committen, bekommt alle Schritte neu geprüft.
