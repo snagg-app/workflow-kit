@@ -37,6 +37,14 @@ export const specs = [
  * Without HANDOFF_FILE (and without a comment for the head) it stops after the automated review with `PREPARED` (exit 0): the final proof runs, then `done ISSUE FILE`.
  * `--refs`: a PR that only names the issue (a part for another base): its gate runs, the issue status stays.
  */
+// #1012: uncommitted changes are the usual reason for "no PR"; name them (shortened) so the driver commits first.
+function uncommittedHint() {
+  try {
+    const files = [...git('diff', '--name-only', 'HEAD').split('\n'), ...git('ls-files', '--others', '--exclude-standard').split('\n')].filter(Boolean);
+    return files.length ? ` Uncommitted changes (commit them first): ${files.slice(0, 5).join(', ')}${files.length > 5 ? ` and ${files.length - 5} more` : ''}.` : '';
+  } catch { return ''; }
+}
+
 async function done() {
   const skipReason = args.value('--skip-local-tests')?.trim();
   assert.ok(!args.flag('--skip-local-tests') || skipReason, '--skip-local-tests needs a non-empty reason');
@@ -50,9 +58,9 @@ async function done() {
   const early = prNumber === undefined ? {} : pushPlan({ stand: checkout.stand(), number });
   if (early.refuse) return failed(early.refuse);
   // A claim without a commit of its own (#907): `start` is done, the first commit opens the PR. Only a missing claim still points at `start`.
-  if (prNumber === undefined && !file && !found.unknown && commentClaims(issue).length) return failed(`no PR closes #${number} yet: commit your work first, then run done ${number} again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
+  if (prNumber === undefined && !file && !found.unknown && commentClaims(issue).length) return failed(`no PR closes #${number} yet:${uncommittedHint()} commit your work first, then run done ${number} again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
   // No open PR but a FILE: a check task whose PR is already closed (or never opened) takes the way of the PR without a change.
-  if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}: run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
+  if (prNumber === undefined) assert.ok(file && !found.unknown, found.unknown ?? `no open PR closes #${number}:${uncommittedHint()} run board.mjs start ${number}, name the PR (done ${number} PR), or name the FILE with the result for the issue`);
   const pull = prNumber === undefined ? undefined : rest(`repos/${project.repository}/pulls/${prNumber}`);
   const partial = prNumber !== undefined && (args.flag('--refs') || isPartialPr(issue, prNumber));
   assert.ok(partial || !isSpec(issue), specRefusal(number, 'done is refused; agents leave specs untouched (use --refs for a partial PR)'));
@@ -94,7 +102,7 @@ async function done() {
       assert.equal(linked.number, prNumber, 'the open issue-linked PR changed; run done again');
     } catch (error) { return failed(`cannot confirm issue closure for #${number}: ${String(error.stderr || error.message).trim()}; no changes`); }
     // #646: no PR delivers nothing for review; only an exploration that says so (--no-pr) gets Human review, otherwise nothing changes.
-    if (!pull && !args.flag('--no-pr')) return failed(`no PR for #${number}, so the status stays. Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
+    if (!pull && !args.flag('--no-pr')) return failed(`no PR for #${number}, so the status stays.${uncommittedHint()} Commit your work and run done again (it opens the Draft PR), or for an exploration without a code change: done ${number} FILE --no-pr`);
     // #993: a run again after a later step failed finds its own result comment (no head to name here: the same text by the same user).
     const resultBody = `## ${texts.handoff}\n\n${lines(file)}\n`;
     const posted = restAll(`repos/${issueProject.repository}/issues/${number}/comments`).some(comment => comment.user?.login?.toLowerCase() === issue.viewer.login.toLowerCase() && comment.body?.trim() === resultBody.trim());
