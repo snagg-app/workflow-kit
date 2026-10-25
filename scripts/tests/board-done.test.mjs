@@ -284,7 +284,17 @@ test('done takes the pushed work to Human review: tests, ready, ticked boxes, Au
   assert.equal(run('done', '1').status, 0);
 });
 
-test('done without a handoff file prepares: tests, ready, Automated review, then PREPARED without comment, ticking or Human review; the final done takes the same head', t => {
+test('done lists tests that are red on the base too in the handoff, before the Retro, and names their open issue (#1052)', t => {
+  const { run, file, json } = delivery(t, handoffFixture);
+  writeFileSync(file('affected-tests-base-red'), 'io.snagg.StashServiceTest.addsItem\n');
+  writeFileSync(file('test-issues.json'), JSON.stringify([{ number: 9, title: 'Test schon rot: StashServiceTest', body: '', html_url: 'https://github.com/test/example/issues/9' }]));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const posted = json('issues-comments.json').at(-1).body;
+  assert.match(posted, /Alles geliefert\.\n\n### Schon auf der Basis rot\n\n.*origin\/release\/0\.1\.1.*\n\n- `io\.snagg\.StashServiceTest\.addsItem`: Issue https:\/\/github\.com\/test\/example\/issues\/9\n\n### Retro/);
+});
+
+test('done without a handoff file prepares:tests, ready, Automated review, then PREPARED without comment, ticking or Human review; the final done takes the same head', t => {
   const { run, head, text, json, git, file } = delivery(t, handoffFixture);
   const result = run('done', '1');
   assert.equal(result.status, 0, result.stdout + result.stderr);

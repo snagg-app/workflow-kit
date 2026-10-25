@@ -241,6 +241,7 @@ command once after the kit's tests; `--run` runs them in the project root and st
 Without the file nothing changes. The changed files are those against the merge base with `origin/main`, or with
 `--base origin/release/1.2` for projects that target release branches; files listed as arguments replace them.
 `--run` hands that base to the project commands as `AFFECTED_BASE`, for checks that compare against the PR's base.
+A project command that runs its tests against the base too (Snagg: `test-vs-base.mjs`) can exit `3` after printing one `RED ON BASE: <test>` line per test that is red on the base as well and no other red one: `--run` counts that step as green, and `done` lists those tests in the handoff comment ("Schon auf der Basis rot") with the open issue that names their class, or a new one (status Ready, milestone, labels and fields of the issue at hand). Exit `3` without such lines stays red (#1052).
 Run it from the project root: the working directory decides which project it reads.
 
 ```json

@@ -38,6 +38,8 @@ function echoingFakeGh(args, options) {
 // A file affected-tests-seconds makes them take that long (the clock of `done` starts before them).
 const noteAffectedTests = args => {
   appendFileSync('affected-tests-calls', `${args.slice(1).join(' ')}\n`);
+  // A file affected-tests-base-red (one test name per line) is what a project command that found tests red on the base leaves in the steps file (#1052).
+  if (existsSync('affected-tests-base-red')) appendFileSync(args[args.indexOf('--resume') + 1], readFileSync('affected-tests-base-red', 'utf8').split('\n').filter(Boolean).map(name => `base-red: ${name}\n`).join(''));
   if (existsSync('affected-tests-seconds')) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(readFileSync('affected-tests-seconds', 'utf8')) * 1000);
 };
 // Every `gh` call of board.mjs goes through github.mjs, which takes the fake as its test variant.

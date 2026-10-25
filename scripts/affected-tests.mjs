@@ -13,6 +13,7 @@ import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } fr
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { BASE_RED_EXIT, BASE_RED_PREFIX } from './base-red.mjs';
 import { enterCwd, projectRoot } from './checkout-root.mjs';
 import { gitIn } from './git-tool.mjs';
 import { isMain } from './is-main.mjs';
@@ -27,7 +28,8 @@ const NOT_BOARD = /^(?!board-).*\.test\.mjs$/;
 // Source path pattern -> test files (names inside scripts/tests, or a pattern over those names).
 // A changed test file always runs itself; a file that matches no row is reported on stderr.
 export const TABLE = [
-  [/^scripts\/(board(-[a-z]+)?|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
+  [/^scripts\/(board(-[a-z]+)*|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
+  [/^scripts\/base-red\.mjs$/, [BOARD, 'base-red.test.mjs', 'affected-tests.test.mjs']],
   [/^scripts\/claim\.mjs$|^scripts\/tests\/claim\.test\.mjs$/, [BOARD, 'claim.test.mjs']],
   [/^scripts\/(review-facts|review-verdict|sonar)\.mjs$|^scripts\/tests\/fake-sonar\.mjs$/, [BOARD, 'review-verdict.test.mjs']],
   [/^scripts\/review-marker\.mjs$/, [BOARD, 'git-tool.test.mjs', 'review-marker.test.mjs']], // it starts git through git-tool.mjs
@@ -184,7 +186,9 @@ ${error.message}`);
       const key = `${label} ${args.join(' ')}`; // the chosen files are part of the step: another selection of the same size is another step
       if (done.has(key)) return console.log(`skip (green for this head): ${label}`);
       const status = quiet(values.verbose, command, args, options, { ...texts, label });
-      if (status === 0) { done.add(key); if (values.resume) writeFileSync(values.resume, [head, ...done].join('\n')); }
+      // A command that finds only tests red on the base too (test-vs-base) exits BASE_RED_EXIT and names them as `RED ON BASE: <test>` lines: green for the gate, remembered for `done`.
+      const baseRed = status === BASE_RED_EXIT ? [...lastOutput.matchAll(/^RED ON BASE: (.+?)\s*$/gm)].map(match => `${BASE_RED_PREFIX}${match[1]}`) : [];
+      if (status === 0 || baseRed.length) { done.add(key); for (const line of baseRed) done.add(line); if (values.resume) writeFileSync(values.resume, [head, ...done].join('\n')); }
       else process.exitCode = status;
     };
     if (selected.length) step(`node --test (${selected.length} files)`, process.execPath, ['--test', ...selected], { cwd: kit }, { summary: /^ℹ (tests|pass|fail) /, noise: /^(start: |✔ )/ });

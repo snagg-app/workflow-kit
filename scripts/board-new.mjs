@@ -34,7 +34,7 @@ function newOptions() {
  * the issue may name the wrong repository (#1045). Only a warning; local, no network.
  */
 function missingPaths(text, root) {
-  const paths = [...text.matchAll(/`([^`\s]+\/[^`\s]*\.[A-Za-z0-9]+)`/g)].map(([, path]) => path.replace(/^\.\//, ''));
+  const paths = [...text.matchAll(/`([^`\s]+\/[^`\s]*\.[A-Za-z0-9]*[A-Za-z][A-Za-z0-9]*)`/g)].map(([, path]) => path.replace(/^\.\//, ''));
   return [...new Set(paths)].filter(path => !/[:*<>{}$?|]/.test(path) && !isAbsolute(path) && !existsSync(join(root, path)));
 }
 
@@ -198,10 +198,16 @@ const readBlock = miss => rows => {
  * finished by hand, never created twice. `--from FILE` creates a whole list instead (createMany).
  */
 function create() {
-  dropFieldsCache(); // the issue is created before its fields are written: a stale cached id would leave it half done
   if (args.flag('--from')) return createMany(args.value('--from'));
   const options = newOptions();
-  // Status is set by the command: Backlog or --status (checked against the Project options by planFields).
+  const { created, plan } = createOne(options);
+  return result('ok', 'NEW', { headline: newLine(created, plan), notes: plan.warnings, data: { issues: [created.html_url] } });
+}
+
+/** One issue from the options of `new` (`bodyFile` set); `done` creates the issue for a test that is red on the base the same way (#1052). */
+export function createOne(options) {
+  dropFieldsCache(); // the issue is created before its fields are written: a stale cached id would leave it half done
+  // Status is set by the command: Backlog or the given one (checked against the Project options by planFields).
   const plan = named('new', () => planNew(options, options.status ?? statuses.backlog));
   const created = post(plan);
   let step = 'reading it back';
@@ -209,7 +215,7 @@ function create() {
     readBackIssue(created, plan);
     step = 'setting the Project fields';
     setFields([{ id: created.node_id, number: created.number, plans: plan.plans }]);
-    return result('ok', 'NEW', { headline: newLine(created, plan), notes: plan.warnings, data: { issues: [created.html_url] } });
+    return { created, plan };
   } catch (error) {
     throw new Error(`${created.html_url} was created, but ${step} failed: ${String(error.stderr || error.message).trim()}; finish by hand with board.mjs field, do not create it again`, { cause: error });
   }
