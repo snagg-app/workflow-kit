@@ -53,8 +53,8 @@ test('new checks every required value before creating, reads all values back and
   write('test-labels.json', [{ name: 'enhancement' }, { name: 'ci' }]);
   write('create-response.json', { number: 1, node_id: 'N1', html_url: 'https://github.com/test/example/issues/1' });
   write('backlink-comments-1.json', []);
-  write('body.md', '﻿Text\r\n'); // a BOM from PowerShell 5 is not part of the text
-  write('bom-only.md', '﻿');
+  write('body.md', '\uFEFFText\r\n'); // a BOM from PowerShell 5 is not part of the text
+  write('bom-only.md', '\uFEFF');
   stored();
   writeIssue(issue('Backlog'));
   const base = ['new', '--title', 'Titel', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'Enhancement', '--priority', 'low', '--field', 'Size=xs'];
@@ -147,6 +147,8 @@ test('new --from checks every entry before creating, then costs few GraphQL requ
     assert.ok(gone('creates') && gone('mutations'), `${reason}: nothing may be created or written`);
   }
   assert.match(create({ not: 'a list' }).stdout, /JSON list/);
+  const withBom = create(`\uFEFF${JSON.stringify([entry('A', 'XS')])}`, 1); // a BOM from PowerShell 5 does not break the list
+  assert.equal(withBom.status, 0, withBom.stdout + withBom.stderr);
 
   // Three issues: created over REST, then four GraphQL requests in all (field definitions, add to Project, write values, read back).
   let result = create([entry('A', 'XS'), entry('B', 'S'), entry('C', 'XS')]);
