@@ -378,7 +378,9 @@ function api(argv, input, stdout, stderr, exit) {
     // mutation-fails: GitHub refuses every write.
     // status-fails: only the status write is refused. mutation-limited: every write meets the used-up quota, and stays so.
     if (fs.existsSync('mutation-fails') || (fs.existsSync('close-fails') && query.includes('closeIssue')) || (fs.existsSync('status-fails') && query.includes('updateProjectV2ItemFieldValue'))) exit(1);
-    if (fs.existsSync('mutation-limited')) {
+    // limited-after N: the first N writes still go through.
+    const readOr = (file, fallback) => { try { return fs.readFileSync(file, 'utf8'); } catch { return fallback; } };
+    if (fs.existsSync('mutation-limited') && readOr('mutations', '').split('\n').filter(Boolean).length >= Number(readOr('limited-after', '0'))) {
       fs.appendFileSync('limited-hits', 'x\n');
       answer(JSON.stringify({ errors: [{ type: 'RATE_LIMIT', message: 'API rate limit already exceeded for user ID 1.' }] }), [0, Math.floor(Date.now() / 1000) + 1]);
       stderr('gh: API rate limit already exceeded for user ID 1.\n');

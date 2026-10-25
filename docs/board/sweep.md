@@ -4,3 +4,5 @@
 To run it without a person, copy [docs/board-sweep.yml](../board-sweep.yml) to `.github/workflows/board-sweep.yml`: it runs `sweep` on every push to
 the PR bases (`main`, `release/**`; adjust) and hourly. It needs the secret `BOARD_TOKEN` (a token that may write the Project and issues; `GITHUB_TOKEN` cannot).
 The reset issues then show up in `next` as stale work (below).
+
+A stopping error (used-up quota, unreadable read) ends `ERROR` with exit 2, like in `next`, `block` and `sub` (`check` says `UNKNOWN`); `sweep` then names the issues it had already closed. Exit 1 stays for skipped issues.

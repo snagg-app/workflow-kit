@@ -115,7 +115,7 @@ test('reviews reads Codex rows, blockers and threads, and wait ends with the ver
   assert.equal(reviews(pr({ suites: [suite('COMPLETED', 1, 1), appSuite] }), {}, '--grace', '0'), 0, 'Idle suites of other apps are no trace');
   const blocked = look({ ...pr(), mergeStateStatus: 'BLOCKED', reviewDecision: 'CHANGES_REQUESTED',
     latestOpinionatedReviews: { totalCount: 1, nodes: [{ state: 'CHANGES_REQUESTED', author: { login: 'coderabbitai' } }] } });
-  assert.equal(blocked.status, 0, 'Blockers are for the handoff; the wait itself is over');
+  assert.equal(blocked.status, 1, 'A finished look with a blocker is FAILED, never DONE (#1028)');
   assert.match(blocked.stdout, /^blocker: changes requested by coderabbitai$/m, 'A standing change request is named as a blocker');
   assert.match(look({ ...pr(), mergeStateStatus: 'DIRTY' }).stdout, /^blocker: merge conflicts$/m);
   assert.equal(reviews({ ...pr(), latestOpinionatedReviews: { totalCount: 101, nodes: [] } }), 2, 'Cut-off review decisions are never read as no blocker');
@@ -198,7 +198,7 @@ test('reviews reads Codex rows, blockers and threads, and wait ends with the ver
   assert.equal(reviews(pr(), { reactions: [reaction('eyes', 0.5)], inline: [inlineReply] }), 0, 'An inline review comment is the result');
   assert.match(look(pr(), { inline: [inlineReply] }).stdout, /^inline chatgpt-codex-connector i$/m, 'Inline findings are listed');
   const bigReview = look(pr({ threadPages: [Array(100).fill(true), [false]] }));
-  assert.equal(bigReview.status, 0, 'More than 100 threads still get a verdict');
+  assert.equal(bigReview.status, 1, 'More than 100 threads still get a verdict: an open thread is FAILED, never DONE (#1028)');
   assert.match(bigReview.stdout, /^unresolved threads: 1$/m, 'Threads on every page are counted');
   assert.match(bigReview.stdout, /^thread thread-1$/m, 'Every unresolved thread is linked, whatever head it is on');
 

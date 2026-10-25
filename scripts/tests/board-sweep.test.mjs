@@ -185,6 +185,24 @@ test('sweep stops at the first used-up quota instead of failing every issue (#98
   assert.equal(readFileSync(join(checkout, 'limited-hits'), 'utf8').trim().split('\n').length, 1, 'only the first issue met the quota');
 });
 
+test('sweep ends ERROR with exit 2 on a stopping error and names the issues it closed before (#1028)', t => {
+  const { checkout, run } = fixture(t);
+  const delivered = number => ({ ...issue('Done'), number, id: `I${number}`, closedByPullRequestsReferences: { totalCount: 1,
+    nodes: [{ number: 70, url: 'u', state: 'MERGED', merged: true, mergedAt: '2026-10-09T10:00:00Z', baseRefName: 'release/1.0', repository: { nameWithOwner: 'test/example' } }] } });
+  writeFileSync(join(checkout, 'search.json'), JSON.stringify([delivered(5), delivered(6)]));
+  for (const number of [5, 6]) writeFileSync(join(checkout, `backlink-comments-${number}.json`), '[]');
+  writeFileSync(join(checkout, 'mutation-limited'), '');
+  writeFileSync(join(checkout, 'limited-after'), '2');
+  const result = run('sweep');
+  assert.equal(result.status, 2, result.stdout + result.stderr);
+  assert.match(result.stdout, /^ERROR$/m);
+  assert.match(result.stdout, /#5\b/, 'the issue closed before the error is named');
+  writeFileSync(join(checkout, 'fail'), '');
+  const read = run('sweep');
+  assert.equal(read.status, 2, 'A failed read is ERROR, not a stack trace');
+  assert.doesNotMatch(read.stderr, /\n\s+at /, 'no stack trace');
+});
+
 test('sweep writes the delivered comment once when closing failed before (#949)', t => {
   const { checkout, run } = fixture(t);
   const delivered = { number: 70, url: 'u', state: 'MERGED', merged: true, mergedAt: '2026-10-09T10:00:00Z', baseRefName: 'release/1.0', repository: { nameWithOwner: 'test/example' } };
