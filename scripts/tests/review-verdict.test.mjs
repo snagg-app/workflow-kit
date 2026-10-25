@@ -85,10 +85,11 @@ test('open Sonar issues are red, a failed read throws', () => {
   assert.throws(() => judge(withSonar({ error: new Error('Sonar API answered 401') })), /401/);
 });
 
-test('a cancelled Sonar analysis counts as done with 0 findings and stays red with findings', () => {
+test('a cancelled Sonar analysis stays red, with 0 findings too (#1060)', () => {
   const cancelled = { ...sonarCheck, conclusion: 'CANCELLED' };
   const withCancelled = answer => judge(facts({ contexts: [job(1), cancelled], sonar: new Map([[cancelled, answer]]) }));
-  assert.equal(withCancelled({ total: 0, lines: [] }).failed, false);
+  assert.equal(withCancelled({ total: 0, lines: [] }).failed, true);
+  assert.match(withCancelled({ total: 0, lines: [] }).reasons.join('\n'), /re-run the Sonar check/);
   assert.equal(withCancelled({ total: 1, lines: ['sonar: r A.java:1 m'] }).failed, true);
   assert.equal(judge(facts({ contexts: [job(1), job(2, 'CANCELLED')] })).failed, true);
 });

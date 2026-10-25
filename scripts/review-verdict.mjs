@@ -107,12 +107,12 @@ function judgeChecks(ctx, s) {
     // CI never stalls: a running check is not success however long it takes.
     if (pending) { waiting.push({ text: `check ${label}`, since: Infinity }); continue; }
     const result = check.conclusion ?? check.state;
-    // A cancelled SonarCloud analysis proves nothing itself (#847): judgeSonar then decides by the open findings of the PR, and a read it cannot make blocks.
+    // A cancelled SonarCloud analysis is no proof, even when the API reads 0 (#1060): it fails like any cancelled check, with the way out.
     const sonarCancelled = result === 'CANCELLED' && check.checkSuite?.app?.slug === 'sonarqubecloud';
-    if (!passed.has(result) && !sonarCancelled) {
+    if (!passed.has(result)) {
       s.failed = true;
       const asks = baseChecks.has(label);
-      reasons.push(`check ${label} ${result}${asks ? ` asks for the base: run board.mjs merge ${pr.number} or merge the base and push` : ''}`);
+      reasons.push(`check ${label} ${result}${asks ? ` asks for the base: run board.mjs merge ${pr.number} or merge the base and push` : ''}${sonarCancelled ? ': the analysis was cancelled and a read of 0 proves nothing; push a commit or re-run the Sonar check' : ''}`);
       if (asks) baseReasons.add(reasons.at(-1));
     }
     // Descriptions carry results such as "Review rate limited" behind a green state.

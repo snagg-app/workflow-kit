@@ -31,7 +31,7 @@ export function missingReview(cwd, base, patterns) {
     // Only files the PR itself changed count: a base merged in after the review may touch such paths without the PR doing so.
     if (!paths(reviewed, 'HEAD').some(path => changed.includes(path))) return null;
   } catch { /* no marker, or a commit this branch does not have */ }
-  return `the PR changes a path that needs a review (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}; "reviewRequiredPaths" in .github/workflow-project.json) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs --cwd <worktree>\` for the head, then run done again`;
+  return `the PR changes a path that needs a review (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}; "reviewRequiredPaths" or "reviewModuleRoots" in .github/workflow-project.json) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs --cwd <worktree>\` for the head, then run done again`;
 }
 
 if (isMain(import.meta.url)) { // real paths: a start through the .vendor link must match too (#1049)
