@@ -124,7 +124,7 @@ test('done overlap policy from the remote target base keeps unrelated moves off 
 test('done refuses a migration change without a code-review of the head, and goes on once the review is recorded (#1036)', t => {
   const { run, git, checkout, file, text, json } = delivery(t, handoffFixture);
   baseMergePolicy(file, json);
-  moveBase(git, checkout, {}, { 'backend/db/migration/V1__x.sql': 'select 1' });
+  moveBase(git, checkout, {}, { 'backend/db/migration/V1__ä.sql': 'select 1' });
   git('push', '-q', 'origin', 'work');
   const own = git('rev-parse', 'HEAD');
   showPr(file, json, { headRefOid: own });

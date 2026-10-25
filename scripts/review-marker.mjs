@@ -14,13 +14,14 @@ const markerFile = cwd => resolve(cwd, git(cwd, 'rev-parse', '--git-path', 'boar
  * Proven: the marker names a commit that is an ancestor of HEAD and no migration file differs between it and HEAD (a later fix elsewhere needs no second review).
  */
 export function missingMigrationReview(cwd, base) {
-  const changed = git(cwd, 'diff', '--name-only', '--no-renames', `${base}...HEAD`).split('\n').filter(path => MIGRATION.test(path));
+  const paths = (...range) => git(cwd, 'diff', '--name-only', '-z', '--no-renames', ...range).split('\0').filter(path => MIGRATION.test(path)); // -z: no quoted names
+  const changed = paths(`${base}...HEAD`);
   if (!changed.length) return null;
   const file = markerFile(cwd);
   const reviewed = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
   try {
     git(cwd, 'merge-base', '--is-ancestor', reviewed, 'HEAD');
-    if (!git(cwd, 'diff', '--name-only', reviewed, 'HEAD').split('\n').some(path => MIGRATION.test(path))) return null;
+    if (!paths(reviewed, 'HEAD').length) return null;
   } catch { /* no marker, or a commit this branch does not have */ }
   return `the PR changes a database migration (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs\` for the head, then run done again`;
 }
