@@ -53,7 +53,8 @@ test('new checks every required value before creating, reads all values back and
   write('test-labels.json', [{ name: 'enhancement' }, { name: 'ci' }]);
   write('create-response.json', { number: 1, node_id: 'N1', html_url: 'https://github.com/test/example/issues/1' });
   write('backlink-comments-1.json', []);
-  write('body.md', 'Text\r\n');
+  write('body.md', '﻿Text\r\n'); // a BOM from PowerShell 5 is not part of the text
+  write('bom-only.md', '﻿');
   stored();
   writeIssue(issue('Backlog'));
   const base = ['new', '--title', 'Titel', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'Enhancement', '--priority', 'low', '--field', 'Size=xs'];
@@ -74,6 +75,7 @@ test('new checks every required value before creating, reads all values back and
   refused('unknown milestone', ...base.map(arg => arg === '0.1.1' ? '9.9' : arg));
   assert.match(refused('unknown option', ...base.map(arg => arg === 'Size=xs' ? 'Size=XXL' : arg)), /XS.*S/);
   refused('Status is no --field', ...base, '--field', 'Status=Done');
+  assert.match(refused('a file with only a BOM is empty', ...base.map(arg => arg === 'body.md' ? 'bom-only.md' : arg)), /empty/);
   refused('a Status the Project does not have', ...base, '--status', 'Nonsense');
   writeFileSync(join(checkout, '.github/workflow-project.json'), JSON.stringify({ repository: 'test/example', id: 'P1', requiredFields: ['Zielrelease'] }));
   assert.match(refused('a field the project requires', ...base), /Zielrelease/);

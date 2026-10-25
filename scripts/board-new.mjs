@@ -36,7 +36,7 @@ const sameTitle = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields }, status = statuses.backlog) {
   for (const [what, text] of [['title', title], ['body file', bodyFile], ['milestone', milestone], ['priority', priority]]) assert.ok(text, `${what} is required`);
   assert.ok(wanted.length, 'at least one label is required');
-  const text = readFileSync(bodyFile, 'utf8').replaceAll('\r\n', '\n').trimEnd();
+  const text = readFileSync(bodyFile, 'utf8').replace(/^﻿/, '').replaceAll('\r\n', '\n').trimEnd();
   assert.ok(text, `${bodyFile} is empty`);
   assert.ok(!fields.some(([fieldName]) => ['status', 'priority'].includes(fieldName.toLowerCase())), 'Status and Priority are not field values (give the priority; the command sets Status)');
   const pairs = [['Status', status], ['Priority', priority], ...fields];
@@ -216,7 +216,7 @@ const entryKeys = ['title', 'bodyFile', 'milestone', 'priority', 'labels', 'fiel
  * (setFields), and one line per issue is printed after everything was read back. Later failures name every issue that exists.
  */
 function createMany(file) {
-  const list = named(`new --from: ${file}`, () => JSON.parse(readFileSync(file, 'utf8')));
+  const list = named(`new --from: ${file}`, () => JSON.parse(readFileSync(file, 'utf8').replace(/^﻿/, '')));
   assert.ok(Array.isArray(list) && list.length && list.length <= manyLimit, `new --from: ${file} must hold a JSON list of 1 to ${manyLimit} issues`);
   const plans = list.map((entry, index) => named(`new --from: entry ${index + 1}${typeof entry?.title === 'string' ? ` "${entry.title}"` : ''}`, () => {
     assert.ok(entry && typeof entry === 'object' && !Array.isArray(entry), 'an entry is an object');
