@@ -17,7 +17,7 @@ export function blockedReason(body = '') {
 export function relatedTerms(body = '') {
   const found = [...body.matchAll(/`([^`\s]{4,120})`/g)].map(([, text]) => text.replace(/^\.\//, ''))
     .filter(text => !/^https?:/.test(text) && !/[*<>{}$?|"]/.test(text))
-    .filter(text => /\/[^/]*\.[A-Za-z]{1,6}$/.test(text) || /^[A-Z][a-z0-9]+(?:[A-Z][A-Za-z0-9]*)+(?:\.[a-z]\w*)?$/.test(text) || /^[a-z]+(?:_[a-z0-9]+){2,}$/.test(text));
+    .filter(text => (text.includes('/') && /\.[A-Za-z]{1,6}$/.test(text)) || /^[A-Z][a-z0-9]+[A-Z][A-Za-z0-9]*$/.test(text) || /^[a-z]+_[a-z0-9]+_[a-z0-9_]+$/.test(text));
   return [...new Set(found)].slice(0, MAX_TERMS);
 }
 
