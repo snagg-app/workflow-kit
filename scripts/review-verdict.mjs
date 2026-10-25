@@ -15,6 +15,8 @@ export const updateBranchChecks = settings => new Set(settings.updateBranchCheck
 export const filesText = files => files.slice(0, 10).join(', ') + (files.length > 10 ? `, and ${files.length - 10} more` : '');
 
 const passed = new Set(['SUCCESS', 'NEUTRAL', 'SKIPPED']);
+const limitNotice = /usage limit|rate.?limit/i;
+const optionalWaitMinutes = 10;
 
 /** When the head's CI started. CI starts on push, so the first check suite dates the push. Before that the commit date is a
  * conservative lower bound: it can only add traces, never hide one. A bot sees the head through the same push event that opens the suites, so no trace predates them. */
@@ -89,8 +91,11 @@ function judgeChecks(ctx, s) {
   for (const check of live) {
     const label = check.name ?? check.context;
     const pending = check.__typename === 'CheckRun' ? check.status !== 'COMPLETED' : ['PENDING', 'EXPECTED'].includes(check.state);
-    // An optional reviewer's check is shown and never decides: not awaited, not red.
+    // An optional reviewer's check is shown and never decides: not red. A review that is already running (pending, no rate limit) is awaited
+    // for optionalWaitMinutes after the push, so a change request it is about to make does not arrive after the handoff (#1030). Nothing is ever requested or awaited if none runs.
     if (isOptionalCheck(check)) {
+      const running = pending && !limitNotice.test(`${check.title ?? ''} ${check.description ?? ''}`) && ctx.now - ctx.pushed < optionalWaitMinutes * 60_000;
+      if (running) waiting.push({ text: `check ${label} (optional reviewer, at most ${optionalWaitMinutes} minutes after the push)`, since: Infinity });
       lines.push(`check ${label}: ${pending ? 'pending' : check.conclusion ?? check.state}${check.title || check.description ? ` (${check.title || check.description})` : ''} [optional reviewer, not awaited]`);
       continue;
     }
@@ -351,7 +356,6 @@ function judgeBotTraces({ pr, facts, live, now, graceMinutes, pushed, after, isO
   // for good on this head (a review, a comment other than an unfinished Running summary, a final reaction, or a limit notice
   // such as "usage limit" or "rate limited" in a comment or check): it has started, so more waiting for a silent one is guesswork.
   // ponytail: any one answering bot ends the grace for all of them, and github-actions comments (coverage reports) are no review; replace with a per-bot expectation when one exists.
-  const limitNotice = /usage limit|rate.?limit/i;
   const answeredBot = [
     ...[...comments, ...inline].filter(comment => after(comment.updated_at)
       && !(comment.body ?? '').split('\n').some(row => row.includes('Running') && row.includes(short))).map(comment => comment.user),

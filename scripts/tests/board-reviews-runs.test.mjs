@@ -138,7 +138,8 @@ test('reviews reads Codex rows, blockers and threads, and wait ends with the ver
   const waitingFor = [3, 1, 3, 3, 3, 3];
   rabbitTraces.forEach(([data, traces], index) => assert.equal(reviews(data, traces), waitingFor[index], `Precondition: unlisted trace ${index} decides`));
   writeFileSync(config, JSON.stringify({ ...JSON.parse(plain), optionalReviewers: [' CodeRabbitAI[bot] '] }));
-  rabbitTraces.forEach(([data, traces], index) => assert.equal(reviews(data, traces), 0, `Optional reviewer trace ${index} never waits or fails`));
+  // #1030: a review that runs (trace 2, pending without a rate limit) is awaited for ten minutes after the push; the others never wait or fail.
+  rabbitTraces.forEach(([data, traces], index) => assert.equal(reviews(data, traces), index === 2 ? 3 : 0, `Optional reviewer trace ${index}`));
   assert.equal(reviews(pr({ pushed: 60, contexts: [check('IN_PROGRESS')] })), 3, 'Other checks still wait');
   assert.equal(reviews(pr({ contexts: [check('COMPLETED', 'FAILURE'), rabbitStatus('SUCCESS')] })), 1, 'A listed reviewer does not hide red CI');
   assert.equal(reviews(pr({ requests: ['maintainer'] })), 3, 'Other review requests still wait');
