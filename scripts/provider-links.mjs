@@ -1,6 +1,6 @@
 // Provider discovery files are ordinary, committable files. Replaced local content stays recoverable.
 import assert from 'node:assert/strict';
-import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { appendFileSync, cpSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { agents, sharedSkills } from './agents.mjs';
 import { gitResultIn } from './git-tool.mjs';
@@ -39,7 +39,9 @@ const git = gitResultIn();
 function excludeLinks(root, paths) {
   const found = git(root, 'rev-parse', '--git-path', 'info/exclude');
   if (found.status !== 0 || !paths.length) return;
-  const file = resolve(root, found.stdout.trim()), text = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  const file = resolve(root, found.stdout.trim());
+  let text = '';
+  try { text = readFileSync(file, 'utf8'); } catch { /* no exclude file yet */ }
   const lines = paths.map(path => `/${relative(root, path).split(sep).join('/')}`).filter(line => !text.split(/\r?\n/).includes(line));
   if (!lines.length) return;
   mkdirSync(dirname(file), { recursive: true });
