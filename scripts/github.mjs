@@ -57,6 +57,16 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
    * One GraphQL request. `tolerate` is a pattern for a failure whose partial answer is still wanted (one of several aliased mutations
    * failed): gh then exits non-zero, but the data of the others is in its output. `beforeSend` runs after pauses, on every attempt.
    */
+  /** A header quota is up to 4400 points too high (#625): in the window of a known quota it never raises it. */
+  const cautious = fromHeaders => {
+    const known = github.quota;
+    if (!fromHeaders || !known || Date.parse(known.resetAt) <= Date.now() || Math.abs(Date.parse(known.resetAt) - Date.parse(fromHeaders.resetAt)) > 60_000) return fromHeaders;
+    return { ...fromHeaders, remaining: Math.min(known.remaining, fromHeaders.remaining) };
+  };
+  const errorMessages = body => {
+    try { return (JSON.parse(body).errors ?? []).map(({ type, message }) => `${type ?? ''} ${message ?? ''}`).join('\n'); } catch { return ''; }
+  };
+
   github.graphql = (query, variables = {}, tolerate, beforeSend) => {
     // Organization-linked Priority fields live on the issue and need this preview header.
     const args = ['api', 'graphql', '-i', '-H', 'GraphQL-Features: issue_fields', '-f',
@@ -73,7 +83,7 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
         const { data, errors } = JSON.parse(body);
         // The body's rateLimit is what a real `{rateLimit{remaining}}` query returns (#625); the headers were seen 4400 points too high.
         const { remaining, resetAt } = data?.rateLimit ?? {};
-        github.quota = (Number.isFinite(remaining) && resetAt ? { remaining, resetAt } : quotaOf(headers)) ?? github.quota;
+        github.quota = (Number.isFinite(remaining) && resetAt ? { remaining, resetAt } : cautious(quotaOf(headers))) ?? github.quota;
         github.spent += data?.rateLimit?.cost ?? (query.startsWith('mutation') ? 1 : 0);
         if (env.BOARD_TRACE) say(`gql ${data?.rateLimit?.cost ?? (query.startsWith('mutation') ? '~1' : 0)} ${query.replace(/\s+/g, ' ').slice(0, 90)}`);
         if (errors?.length) {
@@ -82,8 +92,10 @@ export function createGithub({ tool, reserve, pauses = false, projectDirectory, 
         }
         return data;
       } catch (error) {
-        const text = `${error.stderr}${error.stdout}`, { headers, body } = splitResponse(error.stdout);
-        if (tolerate?.test(text)) {
+        const { headers, body } = splitResponse(error.stdout);
+        // Only gh's own stderr and the answer's errors[] say what failed; the echoed content (comment texts) must not.
+        const text = `${error.stderr}\n${errorMessages(body)}`;
+        if (tolerate?.test(`${error.stderr}${error.stdout}`)) {
           let partial;
           try { partial = JSON.parse(body).data; } catch { /* no usable answer: the error below */ }
           if (partial) return partial;
