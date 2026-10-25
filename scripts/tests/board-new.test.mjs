@@ -46,7 +46,7 @@ test('new names the loose argument when the shell split the title (#1031)', t =>
   const { checkout, run, writeIssue } = fixture(t);
   writeFileSync(join(checkout, 'body.md'), 'Text');
   writeIssue(issue('Backlog'));
-  const result = run('new', '--title', 'Ein', 'zerlegter', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--priority', 'low');
+  const result = run('new', '--title', 'Ein', 'Size', 'xs', 'zerlegter', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--priority', 'low');
   assert.equal(result.status, 2, result.stdout + result.stderr);
   assert.match(result.stdout, /zerlegter/);
 });
