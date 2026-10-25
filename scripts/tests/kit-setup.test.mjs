@@ -100,6 +100,17 @@ test('kit setup keeps the own hooks, settings and AGENTS.md of an existing proje
   assert.equal(readFileSync(join(project, 'AGENTS.md'), 'utf8'), 'my rules\n');
   assert.equal(existsSync(join(project, 'CONTRIBUTING.md')), false, 'an existing project gets no starter files');});
 
+test('kit setup lists the git hooks as open when a foreign core.hooksPath blocks them (#1026)', { skip: skipWithoutSubmodules() }, t => {
+  const { project, run } = setup(t);
+  mkdirSync(join(project, '.githooks'));
+  writeFileSync(join(project, '.githooks/pre-push'), '#!/bin/sh\n');
+  execFileSync('git', ['-C', project, 'config', '--local', 'core.hooksPath', '.husky']);
+  const result = run();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /open {2}git hooks \(\.githooks\)/, result.stdout);
+  assert.match(result.stdout, /Only you can do:[\s\S]*Fix "git hooks \(\.githooks\)"/, result.stdout);
+});
+
 test('kit setup leaves a committed hook entry file as it is and says so once (#985)', { skip: skipWithoutSubmodules() }, t => {
   const { project, run } = setup(t);
   mkdirSync(join(project, '.agents'));
