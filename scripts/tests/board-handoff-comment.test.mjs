@@ -157,22 +157,16 @@ test('handoff blocks on open Sonar issues behind a passed quality gate and never
   result = run('handoff', '1', '7');
   assert.equal(result.status, 2, 'A refused read is UNKNOWN, not green: ' + result.stdout + result.stderr);
   env.SONAR_TOKEN = ''; // overrides a token of the developer's own environment
-  answer(200, 0);
-  // Without a token the count is read from the check run's own summary; only an unambiguous number counts.
+  // #1055: without a token the issues are listed anyway (the `sonar` CLI, here the same fake door); a green summary ("0 New issues") counts for nothing.
   const summarized = summary => writeFileSync(join(checkout, 'pr.json'), JSON.stringify({ ...base, commits: { nodes: [{ commit: { ...commit,
     statusCheckRollup: { contexts: { totalCount: 2, nodes: [...commit.statusCheckRollup.contexts.nodes, { ...sonar, summary }] } } } }] } }));
-  for (const summary of [undefined, 'Quality Gate passed', '[x New issues](https://sonarcloud.io)']) {
-    summarized(summary);
-    result = run('handoff', '1', '7');
-    assert.equal(result.status, 1, 'An unreadable count is never clean: ' + result.stdout + result.stderr);
-    assert.match(result.stdout, /^blocker: .*SONAR_TOKEN/m);
-  }
-  summarized('![](x.svg) [2 New issues](https://sonarcloud.io/project/issues?id=test_example)');
+  summarized('![](x.svg) [0 New issues](https://sonarcloud.io/project/issues?id=test_example)');
+  answer(200, 2);
   result = run('handoff', '1', '7');
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^blocker: 2 open Sonar issues/m);
   assert.equal(existsSync(mutations), false);
-  summarized('![](x.svg) [0 New issues](https://sonarcloud.io/project/issues?id=test_example)');
+  answer(200, 0);
   result = run('handoff', '1', '7');
   assert.equal(result.status, 0, 'A readable 0 hands off without a token: ' + result.stdout + result.stderr);
   rmSync(join(checkout, 'stored'));

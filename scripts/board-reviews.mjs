@@ -12,7 +12,7 @@ import { baseMovement, readFacts, readPr, unresolvedThreads } from './review-fac
 function useBaseSettings(pr) {
   assert.ok(pr.baseRefName, 'The PR base is not readable');
   const base = readProfileAt(github.rest, project.repository, pr.baseRefName);
-  memory.gate = { ...project, ...Object.fromEntries(['awaitApps', 'optionalReviewers', 'updateBranchChecks', 'ignoredChecks', 'doneBaseMerge', 'reviewRequiredPaths'].map(key => [key, base[key]])) };
+  memory.gate = { ...project, ...Object.fromEntries(['awaitApps', 'optionalReviewers', 'updateBranchChecks', 'ignoredChecks', 'doneBaseMerge', 'reviewRequiredPaths', 'reviewModuleRoots'].map(key => [key, base[key]])) };
   memory.optional = undefined;
 }
 const isOptional = name => (memory.optional ??= optionalReviewers(memory.gate)).has(reviewerKey(name));

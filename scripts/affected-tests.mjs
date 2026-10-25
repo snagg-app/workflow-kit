@@ -32,6 +32,7 @@ export const TABLE = [
   [/^scripts\/base-red\.mjs$/, [BOARD, 'base-red.test.mjs', 'affected-tests.test.mjs']],
   [/^scripts\/claim\.mjs$|^scripts\/tests\/claim\.test\.mjs$/, [BOARD, 'claim.test.mjs']],
   [/^scripts\/(review-facts|review-verdict|sonar)\.mjs$|^scripts\/tests\/fake-sonar\.mjs$/, [BOARD, 'review-verdict.test.mjs']],
+  [/^scripts\/review-modules\.mjs$/, [BOARD]], // board-done.mjs imports it
   [/^scripts\/review-marker\.mjs$/, [BOARD, 'git-tool.test.mjs', 'review-marker.test.mjs']], // it starts git through git-tool.mjs
   [/^scripts\/kit-self-check\.mjs$/, [BOARD, 'kit-self-check.test.mjs']],
   [/^scripts\/tests\/(gh-shapes\.mjs$|gh-shapes\/)/, [BOARD, 'gh-shapes.test.mjs']],

@@ -275,11 +275,6 @@ function judgeSonar({ pr, facts, live, after }, s) {
     const found = facts.sonar.get(check);
     if (found.error) throw found.error;
     const { total: open, lines: findings } = found;
-    if (open === null) {
-      lines.push('blocker: the Sonar issue count is unreadable: SONAR_TOKEN is not set and the SonarCloud check summary has no "N New issues"; set SONAR_TOKEN (docs/board/wait.md) and run done again');
-      if (check.conclusion === 'CANCELLED') { s.failed = true; reasons.push('check Sonar CANCELLED and its findings are unreadable'); }
-      continue;
-    }
     lines.push(`sonar: ${open} open issue${open === 1 ? '' : 's'}`, ...findings);
     if (open) {
       s.failed = true;

@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **`done` verlangt einen Review bei Änderungen über mehrere Module, und die Sonar-Zahl kommt nicht mehr aus der Check-Zusammenfassung (#1055).** Neues Profilfeld `reviewModuleRoots` (Ordner, deren Unterordner Module oder Adapter sind): Berührt der Diff mindestens 3 solche Module, verlangt `done` wie bei `reviewRequiredPaths` einen `code-review`. Ohne `SONAR_TOKEN` liest das Kit die offenen Sonar-Issues jetzt mit `sonar list issues` statt aus „0 New issues“ (das zählt nur neuen Code und hat dreimal offene Issues verdeckt). Fehlen Token und Anmeldung, steht eine Zeile mit der Ursache und `done` setzt kein Human review.
+
 - **`done` bleibt nicht mehr an Tests hängen, die schon auf der Basis rot sind (#1052).** Meldet ein Projekt-Testbefehl nur solche Tests (Exit 3 und `RED ON BASE:`-Zeilen, siehe README), zählt der Schritt als grün. Der Übergabe-Kommentar führt die Tests dann unter „Schon auf der Basis rot“ mit ihrem offenen Issue auf; gibt es keines, legt `done` eines auf Ready an (scheitert das, steht der Grund im Kommentar). Scheitert ein Test nur im PR, bricht `done` wie bisher ab. Außerdem warnt `board.mjs new` bei Zweignamen wie `release/0.1.2` nicht mehr vor einem fehlenden Pfad. Die Gate-Skripte stehen jetzt in `reviewRequiredPaths`: `done` verlangt für ihre Änderung selbst einen Review.
 
 - **`affected-tests --resume` überspringt keine grünen Schritte mehr, wenn sich Dateien geändert haben (#1018).** Der Merkzettel gilt jetzt nur für denselben Commit und denselben Arbeitsstand (nicht committete und neue Dateien). Wer nach einem roten Schritt etwas ändert, ohne zu committen, bekommt alle Schritte neu geprüft.

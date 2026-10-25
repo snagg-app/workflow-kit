@@ -22,6 +22,7 @@ import { baseSettings, useBaseSettings } from './board-reviews.mjs';
 import { openFirstPr } from './board-start.mjs';
 import { kitSelfCheck } from './kit-self-check.mjs';
 import { missingReview } from './review-marker.mjs';
+import { moduleReviewPaths } from './review-modules.mjs';
 import { poll, reviewOutcome, reviewsForHead } from './board-wait.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
@@ -179,7 +180,9 @@ async function done() {
   const sha = localHead();
   // #1036, #1042: a PR that changes a path of the project's reviewRequiredPaths needs a code-review for this head; the proof is a marker in the git dir.
   if (!partial) try {
-    const missing = missingReview(projectDirectory, `origin/${pull.base.ref}`, gate.reviewRequiredPaths);
+    const reviewBase = `origin/${pull.base.ref}`;
+    // #1055: a diff across modules needs the review too (the profile's reviewModuleRoots).
+    const missing = missingReview(projectDirectory, reviewBase, [...gate.reviewRequiredPaths, ...moduleReviewPaths(projectDirectory, reviewBase, gate.reviewModuleRoots)]);
     if (missing) return failed(missing);
   } catch (error) { return failed(`cannot check the review: ${String(error.stderr || error.message).trim()}`); }
   // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.

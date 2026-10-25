@@ -164,6 +164,22 @@ test('done asks for no code-review of a migration when the project lists no path
   assert.equal(run('done', '1', 'result.md').status, 0);
 });
 
+test('done asks for a code-review once the diff reaches 3 modules of reviewModuleRoots, and for none at 2 (#1055)', t => {
+  for (const [files, refusedAt] of [[{ 'backend/domain/A.java': 'a', 'backend/api/B.java': 'b', 'backend/README.md': 'not in a module', 'docs/x.md': 'x' }, null],
+    [{ 'backend/domain/A.java': 'a', 'backend/api/B.java': 'b', 'backend/importer/C.java': 'c' }, /C\.java/]]) {
+    const { run, git, checkout, file, json } = delivery(t, handoffFixture);
+    writeFileSync(file('base-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), doneBaseMerge: 'overlap', reviewRequiredPaths: [], reviewModuleRoots: ['backend'] }));
+    moveBase(git, checkout, {}, files);
+    git('push', '-q', 'origin', 'work');
+    showPr(file, json, { headRefOid: git('rev-parse', 'HEAD') });
+    const result = run('done', '1', 'result.md');
+    if (refusedAt) {
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout + result.stderr, refusedAt);
+    } else assert.equal(result.status, 0, 'two modules and files outside modules need no review: ' + result.stdout + result.stderr);
+  }
+});
+
 test('done in the kit refuses a new script without an affected-tests row before the push (#1046)', t => {
   const { run, git, checkout, file, text, json } = delivery(t, handoffFixture);
   baseMergePolicy(file, json);
@@ -368,10 +384,11 @@ test('done without a handoff file prepares: tests, ready, Automated review, then
 test('done rejects four Sonar issues before preparation or handoff, and accepts zero (#598)', t => {
   for (const count of [4, 0]) for (const handoff of [false, true]) {
     const { run, file, text, json, env } = delivery(t, handoffFixture);
-    env.SONAR_TOKEN = ''; // Use the fake check summary, never a developer's token.
+    env.SONAR_TOKEN = ''; // Never a developer's token; the fake Sonar door answers from sonar.json, a green summary ("0 New issues") counts for nothing (#1055).
+    writeFileSync(file('sonar.json'), JSON.stringify({ status: 200, total: count, issues: [] }));
     const data = json('pr.json'), contexts = data.commits.nodes[0].commit.statusCheckRollup.contexts;
     contexts.nodes.push({ __typename: 'CheckRun', name: 'SonarCloud Code Analysis', status: 'COMPLETED', conclusion: 'SUCCESS',
-      summary: `[${count} New issues]`, detailsUrl: 'https://sonarcloud.io/dashboard?id=test_example&pullRequest=7',
+      summary: '[0 New issues]', detailsUrl: 'https://sonarcloud.io/dashboard?id=test_example&pullRequest=7',
       checkSuite: { app: { slug: 'sonarqubecloud' } } });
     contexts.totalCount = contexts.nodes.length;
     writeFileSync(file('pr.json'), JSON.stringify(data));

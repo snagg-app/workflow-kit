@@ -82,7 +82,6 @@ test('open Sonar issues are red, an unreadable count is not clean, a failed read
   assert.equal(judge(withSonar({ total: 0, lines: [] })).failed, false);
   const open = judge(withSonar({ total: 2, lines: ['sonar: rule A.java:1 m'] }));
   assert.deepEqual([open.failed, open.reasons], [true, ['2 open Sonar issues']]);
-  assert.match(judge(withSonar({ total: null, lines: [] })).lines.join('\n'), /^blocker: the Sonar issue count is unreadable/m);
   assert.throws(() => judge(withSonar({ error: new Error('Sonar API answered 401') })), /401/);
 });
 
@@ -91,7 +90,6 @@ test('a cancelled Sonar analysis counts as done with 0 findings and stays red ot
   const withCancelled = answer => judge(facts({ contexts: [job(1), cancelled], sonar: new Map([[cancelled, answer]]) }));
   assert.equal(withCancelled({ total: 0, lines: [] }).failed, false);
   assert.equal(withCancelled({ total: 1, lines: ['sonar: r A.java:1 m'] }).failed, true);
-  assert.equal(withCancelled({ total: null, lines: [] }).failed, true);
   assert.equal(judge(facts({ contexts: [job(1), job(2, 'CANCELLED')] })).failed, true);
 });
 
@@ -118,8 +116,11 @@ test('the Sonar door reads only the linked analysis and never reads an unreadabl
   t.after(() => { if (token === undefined) delete process.env.SONAR_TOKEN; else process.env.SONAR_TOKEN = token; });
   assert.throws(() => sonarIssues('http://127.0.0.1/d?id=k&pullRequest=7', 7), /does not link PR #7/);
   assert.throws(() => sonarIssues('https://sonarcloud.io/d?id=k&pullRequest=8', 7), SonarOtherPr);
-  assert.deepEqual(sonarIssues('https://sonarcloud.io/d?id=k&pullRequest=7', 7, '[0 New issues]'), { total: 0, lines: [] });
-  assert.equal(sonarIssues('https://sonarcloud.io/d?id=k&pullRequest=7', 7, 'passed').total, null);
+  // #1055: without a token the `sonar` CLI lists the issues; a missing CLI is one line, never "0 New issues" of a check summary.
+  const path = process.env.PATH;
+  process.env.PATH = '';
+  t.after(() => { process.env.PATH = path; });
+  assert.throws(() => sonarIssues('https://sonarcloud.io/d?id=k&pullRequest=7', 7), /Sonar is unreachable: SONAR_TOKEN is not set/);
 });
 
 test('an open thread line names the number that `board.mjs threads` takes', () => {
