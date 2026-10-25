@@ -1,12 +1,12 @@
 // The review proof of `done` (#1036): the skill `code-review` runs `node scripts/review-marker.mjs` after its review and writes the reviewed head
 // into the git dir (no GraphQL, no comment). `done` reads it when the PR changes a database migration.
-import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gitIn } from './git-tool.mjs';
 
 const MIGRATION = /(^|\/)db\/migration\//;
-const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+const git = gitIn();
 const markerFile = cwd => resolve(cwd, git(cwd, 'rev-parse', '--git-path', 'board-code-review'));
 
 /**
