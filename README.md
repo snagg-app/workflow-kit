@@ -165,7 +165,7 @@ the long text of a command is in [docs/board](docs/board).
 <!-- board-commands:start -->
 | Command | Access | What it does |
 | --- | --- | --- |
-| `start ISSUE [--session ID] [--takeover] [--issue-repo OWNER/NAME]` | writes | Claims a Ready issue. Runs the execution check, then assignment, In progress and the claim comment, each write read back. A repeated call resumes. [Details](docs/board/start.md) |
+| `start ISSUE [--session ID] [--takeover] [--base BRANCH] [--issue-repo OWNER/NAME]` | writes | Claims a Ready issue. Runs the execution check, then assignment, In progress and the claim comment, each write read back. A repeated call resumes. [Details](docs/board/start.md) |
 | `done ISSUE [PR] [HANDOFF_FILE] [--refs] [--no-pr] [--max-minutes N] [--skip-local-tests REASON] [--issue-repo OWNER/NAME]` | writes | Everything from the last push to Human review. Steps: tests, PR ready, acceptance boxes, Automated review, wait for CI and reviewers, handoff comment, gate. A repeated call does what is still open; without HANDOFF_FILE it only prepares. [Details](docs/board/done.md) |
 | `next [--session ID]` | reads | Lists what to do next. In this order: feedback on your issues, your unfinished work, stale work, the Ready issues. [Details](docs/board/next.md) |
 | `sweep` | writes | Cleans up the board. Human-review issues whose PR has merge conflicts go back to Automated review; issues whose PR merged into release/** are closed. [Details](docs/board/sweep.md) |
