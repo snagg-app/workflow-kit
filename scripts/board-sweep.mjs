@@ -19,7 +19,8 @@ export const specs = [
  */
 function sweep() {
   let plan, resets = 0, read = 0;
-  const closed = [], reset = [], skipped = [];
+  const closed = [], reset = [], skipped = [], issues = [];
+  // Read every page before the first write: a close on page 1 would shift the cursor of the open-issue search and skip issues (#1016).
   for (let after; ;) {
     const { search } = graphql(`query($q:String!,$after:String){search(query:$q,type:ISSUE_ADVANCED,first:100,after:$after){
     issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{id number
@@ -27,7 +28,16 @@ function sweep() {
     labels(first:20){totalCount nodes{name}}
     closedByPullRequestsReferences(first:10,includeClosedPrs:true){totalCount nodes{number url state merged mergedAt baseRefName mergeStateStatus headRefOid headRefName repository{nameWithOwner}}}}}}}`,
     { q: `repo:${project.repository} is:issue is:open`, ...(after && { after }) });
-    for (const issue of search.nodes) try {
+    issues.push(...search.nodes);
+    read += search.nodes.length;
+    if (!search.pageInfo.hasNextPage) {
+      assert.ok(read >= search.issueCount, `Search returned ${read} of ${search.issueCount} open issues; the sweep would be incomplete`);
+      break;
+    }
+    assert.ok(search.pageInfo.endCursor && search.pageInfo.endCursor !== after, 'Search pagination did not advance');
+    after = search.pageInfo.endCursor;
+  }
+  for (const issue of issues) try {
       if (isSpec(issue)) continue;
       const linked = issue.closedByPullRequestsReferences;
       const own = linked.nodes.filter(node => node.repository.nameWithOwner.toLowerCase() === project.repository.toLowerCase());
@@ -74,14 +84,6 @@ function sweep() {
       // One issue sweep cannot judge or write must not stop the others; the run reports it and ends red.
       skipped.push(`#${issue.number} skipped: ${String(error?.message ?? error).split('\n')[0]}`);
     }
-    read += search.nodes.length;
-    if (!search.pageInfo.hasNextPage) {
-      assert.ok(read >= search.issueCount, `Search returned ${read} of ${search.issueCount} open issues; the sweep would be incomplete`);
-      break;
-    }
-    assert.ok(search.pageInfo.endCursor && search.pageInfo.endCursor !== after, 'Search pagination did not advance');
-    after = search.pageInfo.endCursor;
-  }
   const data = { closed, reset, skipped };
   if (skipped.length) return result('failed', 'FAILED', { headline: null, blockers: skipped, data });
   return resets ? result('ok', 'SWEPT', { headline: null, data }) : result('ok', 'CLEAN', { headline: 'clean', data });
