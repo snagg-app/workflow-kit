@@ -17,12 +17,13 @@ import { baseOf, check, mayStart } from './board-check.mjs';
 import { branchWork, foreignAssignees, isOwn, openPr, ownPr, refsPr, startReasons, workBranches } from './board-claims.mjs';
 import { defaultBranchName, isSpec,projectItem, readIssue, refOf, sameLogin, specRefusal } from './board-common.mjs';
 import { set } from './board-fields.mjs';
+import { blockedLabel, blockedReason, isBlocked, relatedLines } from './board-related.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
   { name: 'start', run: 'start', writes: true, doc: 'docs/board/start.md', words: [{ name: 'ISSUE', kind: 'number' }],
     summary: 'Claims a Ready issue. Runs the execution check, then assignment, In progress and the claim comment, each write read back. A repeated call resumes.',
-    flags: { '--session': shared.session, '--takeover': { help: 'Take over a fresh PR of another session.' }, '--base': { help: 'Branch to start from instead of the base the Project names (tooling work on main, #1039).', value: 'BRANCH' }, '--issue-repo': shared.issueRepo } },
+    flags: { '--session': shared.session, '--takeover': { help: 'Take over a fresh PR of another session.' }, '--force': { help: 'Start an issue that carries the label "blocked" anyway.' }, '--base': { help: 'Branch to start from instead of the base the Project names (tooling work on main, #1039).', value: 'BRANCH' }, '--issue-repo': shared.issueRepo } },
 ];
 
 /** A branch name is taken when the issue, this clone or the remote already has it. */
@@ -95,6 +96,10 @@ function start() {
   if (existsSync(modules)) for (const [key, want] of [['submodule.recurse', 'true'], ['push.recurseSubmodules', 'no']]) setCloneSetting(key, want);
   const issue = readIssue();
   assert.ok(!isSpec(issue), specRefusal(number, 'start is refused; agents leave specs untouched'));
+  // #1056: a blocked issue waits for something; --force starts it anyway. A resume of the own claim is not refused.
+  assert.ok(!isBlocked(issue) || isOwn(issue, session) || args.flag('--force'), `BLOCKED: #${number} carries the label "${blockedLabel}": ${blockedReason(issue.body)}; nothing was written. Pass --force to start it anyway`);
+  // #1056: a hint only (never a verdict) for a new start; a resume knows its work.
+  if (!isOwn(issue, session)) relatedLines(issue, issueProject.repository).forEach(progress);
   // `upstream` would send a push to the base branch of a worktree made from origin/<base> (#3822); `simple` pushes to the branch's own name.
   setCloneSetting('push.default', 'simple');
   const takeover = args.flag('--takeover');

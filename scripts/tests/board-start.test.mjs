@@ -15,6 +15,37 @@ test('start refuses a spec before assignment or claim writes', t => {
   for (const name of ['mutations', 'created-pr', 'develops']) assert.equal(existsSync(join(checkout, name)), false, name);
 });
 
+test('start refuses a blocked issue with the reason from its text, and --force starts it (#1056)', t => {
+  const { run, writeIssue, file } = startFixture(t);
+  writeIssue({ ...issue('Ready'), body: 'Text\n\nVoraussetzung: PR #5302 ist gemergt.', labels: { nodes: [{ name: 'blocked' }] } });
+  const refused = run('start', '1', '--session', 'S1');
+  assert.equal(refused.status, 2, refused.stdout + refused.stderr);
+  assert.match(refused.stdout + refused.stderr, /label "blocked".*Voraussetzung: PR #5302 ist gemergt/);
+  assert.equal(existsSync(file('mutations')), false, 'nothing was written');
+  const forced = run('start', '1', '--session', 'S1', '--force');
+  assert.equal(forced.status, 0, forced.stdout + forced.stderr);
+});
+
+test('start lists related work of the last 48 hours as a hint, with one search (#1056)', t => {
+  const { run, writeIssue, text, file } = startFixture(t);
+  const hour = hours => new Date(Date.now() - hours * 3600000).toISOString();
+  writeIssue({ ...issue('Ready'), body: 'Betrifft `backend/importer/RunService.java` und `ImportBatchStep`.' });
+  writeFileSync(file('related-search.json'), JSON.stringify([
+    { number: 1, title: 'self', state: 'open', updated_at: hour(1) },
+    { number: 20, title: 'merged fix', state: 'closed', updated_at: hour(2), pull_request: { merged_at: hour(2) } },
+    { number: 21, title: 'abandoned', state: 'closed', updated_at: hour(2), pull_request: { merged_at: null } },
+    { number: 22, title: 'old', state: 'open', updated_at: hour(60) },
+    { number: 23, title: 'same bug', state: 'open', updated_at: hour(3) }]));
+  const result = run('start', '1', '--session', 'S1');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const out = result.stdout + result.stderr;
+  assert.match(out, /#20 PR merged: merged fix/);
+  assert.match(out, /#23 issue open: same bug/);
+  assert.doesNotMatch(out, /#21 |#22 |self/);
+  assert.equal(text('related-queries').trim().split('\n').length, 1, 'one search');
+  assert.match(text('related-queries'), /repo:test\/example updated:>=\d{4}-\d\d-\d\d \("backend\/importer\/RunService\.java" OR "ImportBatchStep"\)/);
+});
+
 // A checkout with an origin that already holds the branch of issue 1, and the files the fake gh answers from.
 function startFixture(t) {
   const { checkout, run, writeIssue, env } = fixture(t);
