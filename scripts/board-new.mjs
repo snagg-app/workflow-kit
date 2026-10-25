@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { result } from './board-result.mjs';
+import { blockedLabel } from './board-related.mjs';
 import { args, github, graphql, project, projectDirectory, rest, restAll, specLabel, statuses, memory } from './board-context.mjs';
 import { named } from './board-common.mjs';
 import { dropFieldsCache, fieldWords, guardOption, planFields } from './board-fields.mjs';
@@ -11,10 +12,11 @@ import { dropFieldsCache, fieldWords, guardOption, planFields } from './board-fi
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
   { name: 'new', run: 'create', writes: true, oneLine: true, doc: 'docs/board/new.md', rest: { usage: '[NAME VALUE ...]', kind: 'printable' },
-    usage: 'new --title T --body-file FILE --milestone M --label L [--label L ...] --priority P [--status S] [--field NAME=VALUE ...] [NAME VALUE ...] | new --from FILE',
+    usage: 'new --title T --body-file FILE --milestone M --label L [--label L ...] [--blocked] --priority P [--status S] [--field NAME=VALUE ...] [NAME VALUE ...] | new --from FILE',
     summary: 'Creates an issue with its required metadata in one call, or many with --from. Everything is checked first and read back. Extra fields: NAME VALUE or --field NAME=VALUE.',
     flags: { '--title': { value: 'T', help: 'Issue title (an open issue with that title is refused).' }, '--body-file': { value: 'FILE', help: 'File with the body.' }, '--milestone': { value: 'M', help: 'An open milestone.' },
       '--label': { value: 'L', many: true, help: 'An existing label, repeatable.' }, '--priority': { value: 'P', help: 'Priority option.' }, '--status': { value: 'S', help: 'Status option (default Backlog).' },
+      '--blocked': { help: 'Also sets the label "blocked": `start` refuses the issue until a human or `--force` lifts it. Name the reason in the body.' },
       '--field': { value: 'NAME=VALUE', kind: 'printable', many: true, help: 'Another Project field, repeatable (not Status or Priority).' },
       '--from': { value: 'FILE', help: 'A JSON list of 1 to 50 issues; takes no other option.' } },
     check: args => args.flag('--from') && (args.names().length > 1 || args.rest.length) ? 'new --from takes one FILE and no other option' : undefined },
@@ -26,7 +28,7 @@ function newOptions() {
   assert.ok(words.length % 2 === 0, `new takes NAME VALUE pairs after its flags; the first argument without a partner is #${words.length} "${words.at(-1)}" (arguments: ${words.map(word => `"${word}"`).join(' ')}; a title split by the shell?)`);
   const fields = Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
   return { title: args.value('--title'), bodyFile: args.value('--body-file'), milestone: args.value('--milestone'), priority: args.value('--priority'), status: args.value('--status'),
-    fields, labels: args.values('--label') };
+    fields, labels: [...args.values('--label'), ...args.flag('--blocked') ? [blockedLabel] : []] };
 }
 
 /**

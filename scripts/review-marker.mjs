@@ -2,6 +2,7 @@
 // into the git dir (no GraphQL, no comment). `done` reads it when the PR changes a path the project lists in `reviewRequiredPaths`.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { enterCwd } from './checkout-root.mjs';
 import { gitIn } from './git-tool.mjs';
 import { isMain } from './is-main.mjs';
 
@@ -30,11 +31,23 @@ export function missingReview(cwd, base, patterns) {
     // Only files the PR itself changed count: a base merged in after the review may touch such paths without the PR doing so.
     if (!paths(reviewed, 'HEAD').some(path => changed.includes(path))) return null;
   } catch { /* no marker, or a commit this branch does not have */ }
-  return `the PR changes a path that needs a review (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}; "reviewRequiredPaths" in .github/workflow-project.json) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs\` for the head, then run done again`;
+  return `the PR changes a path that needs a review (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}; "reviewRequiredPaths" in .github/workflow-project.json) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs --cwd <worktree>\` for the head, then run done again`;
 }
 
 if (isMain(import.meta.url)) { // real paths: a start through the .vendor link must match too (#1049)
+  enterCwd(); // `--cwd WORKTREE`: the marker goes into that worktree, not the caller's (#1054)
+  if (process.argv.length > 2) { // e.g. `--help` must not record a review
+    console.error('usage: node review-marker.mjs [--cwd WORKTREE]');
+    process.exit(2);
+  }
   const cwd = process.cwd();
-  writeFileSync(markerFile(cwd), git(cwd, 'rev-parse', 'HEAD'));
-  console.log(`code-review recorded for ${git(cwd, 'rev-parse', '--short', 'HEAD')}`);
+  try {
+    // The marker vouches for the head: uncommitted edits would be reviewed code that the head does not contain.
+    if (git(cwd, 'status', '--porcelain', '--untracked-files=no').trim()) throw new Error('uncommitted changes; commit the fixes first');
+    writeFileSync(markerFile(cwd), git(cwd, 'rev-parse', 'HEAD'));
+  } catch (error) {
+    console.error(`review-marker: cannot record the review in ${cwd}: ${error.message}`);
+    process.exit(1);
+  }
+  console.log(`code-review recorded for ${git(cwd, 'rev-parse', '--short', 'HEAD')} in ${cwd}`);
 }

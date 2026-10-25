@@ -37,6 +37,12 @@ function api(argv, input, stdout, stderr, exit) {
     // REST lists (comments, reviews, reactions) come in pages of 100, like GitHub.
     const parts = path.split('?')[0].split('/');
     const backlink = 'backlink-' + parts[4] + '.json';
+    // The REST search of `start` for related work (related-search.json: the items, the default is none; the query is kept).
+    if (parts[0] === 'search' && parts[1] === 'issues') {
+      fs.appendFileSync('related-queries', decodeURIComponent(new URLSearchParams(path.split('?')[1]).get('q')) + '\n');
+      stdout(JSON.stringify({ items: fs.existsSync('related-search.json') ? JSON.parse(fs.readFileSync('related-search.json')) : [] }));
+      exit(0);
+    }
     if (parts[3] === 'contents') {
       // The project settings on the PR base: base-project.json (a branch ahead of the checkout), else the checkout's own file; base-missing: not there.
       // Not hit by fail-rest, so the tests of the reads after the settings keep their verdict. The ref asked for is kept.
