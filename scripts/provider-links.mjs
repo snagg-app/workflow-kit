@@ -36,13 +36,15 @@ const realpath = path => { try { return realpathSync.native(path); } catch { ret
 const git = gitResultIn();
 
 /** Keep the links out of `git status`: one line each in the checkout's `info/exclude` (worktree-safe, never committed). No Git checkout: nothing to do. */
+const escapeSegment = segment => segment.replace(/[\\*?[\]]/g, '\\$&').replace(/^[!#]/, '\\$&').replace(/ +$/, spaces => spaces.replaceAll(' ', '\\ '));
+
 function excludeLinks(root, paths) {
   const found = git(root, 'rev-parse', '--git-path', 'info/exclude');
   if (found.status !== 0 || !paths.length) return;
   const file = resolve(root, found.stdout.trim());
   let text = '';
   try { text = readFileSync(file, 'utf8'); } catch { /* no exclude file yet */ }
-  const lines = paths.map(path => `/${relative(root, path).split(sep).join('/')}`).filter(line => !text.split(/\r?\n/).includes(line));
+  const lines = paths.map(path => `/${relative(root, path).split(sep).map(escapeSegment).join('/')}`).filter(line => !text.split(/\r?\n/).includes(line));
   if (!lines.length) return;
   mkdirSync(dirname(file), { recursive: true });
   appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}${lines.join('\n')}\n`);
