@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { kitCheck } from '../kit-check.mjs';
@@ -64,4 +64,18 @@ test('start tells a held kit lock (retry, with path and PID) from a changed kit 
   writeFileSync(join(kit, 'AGENT_RULES.md'), 'changed');
   const dirty = kitCheck(project, { kit, update: true, force: true, fresh: 0, wait: 0 });
   assert.deepEqual([dirty.stuck, dirty.retry], [true, false]);
+});
+
+// #1022: a hard-killed git (Windows timeout) leaves its lock file; the update runs under kit-update.lock, so no other run writes and the leftover goes.
+test('a leftover git lock in the kit checkout is removed during the update and the pull runs', t => {
+  const { temp, kit, project } = fixture(t);
+  const upstream = join(temp, 'upstream');
+  writeFileSync(join(upstream, 'AGENT_RULES.md'), 'newer');
+  execFileSync('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-am', 'newer'], { cwd: upstream, env: process.env });
+  writeFileSync(join(kit, '.git/index.lock'), '');
+  const result = kitCheck(project, { kit, update: true, force: true, fresh: 0, wait: 0 });
+  assert.equal(result.stuck, false, result.messages.join('\n'));
+  assert.equal(readFileSync(join(kit, 'AGENT_RULES.md'), 'utf8'), 'newer');
+  assert.equal(existsSync(join(kit, '.git/index.lock')), false);
+  assert.match(result.messages.join(), /index\.lock/);
 });

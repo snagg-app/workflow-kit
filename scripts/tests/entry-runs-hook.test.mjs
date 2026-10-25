@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -27,6 +27,20 @@ test('the real entry file runs the real hook; a plain import runs nothing (#895)
   const imported =spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(hook)})`], { cwd: project, env, input: '{}', encoding: 'utf8' });
   assert.equal(imported.status, 0, imported.stderr);
   assert.equal(imported.stdout, '');
+});
+
+// #1022: a hook file that fails to load (half-updated kit) must say so, not end silently.
+test('the entry file reports a hook that fails to load as a session message', t => {
+  const project = realpathSync(mkdtempSync(join(tmpdir(), 'entry-broken ')));
+  t.after(() => rmSync(project, { recursive: true, force: true }));
+  mkdirSync(join(project, '.agents'));
+  mkdirSync(join(project, 'scripts'));
+  writeFileSync(join(project, 'scripts/kit-hook.mjs'), "import './missing-half-updated-file.mjs';\n");
+  copyFileSync(join(kit, 'scripts/kit-entry.mjs'), join(project, entryFile));
+  const env = { ...process.env, CLAUDE_PROJECT_DIR: project, HOME: project, USERPROFILE: project };
+  const run = spawnSync(process.execPath, [join(project, entryFile), 'SessionStart', '--agent', 'claude'], { cwd: project, env, input: '{}', encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(JSON.parse(run.stdout).systemMessage, /could not be loaded.*start the session again/s);
 });
 
 test('the real entry file links the kit in a fresh worktree without .vendor (#896)', t => {

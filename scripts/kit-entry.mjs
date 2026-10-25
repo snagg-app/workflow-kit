@@ -79,7 +79,11 @@ function main() {
     }
     if (link) return linkNow(project, kit);
   }
-  return import(pathToFileURL(file).href);
+  // #1022: a kit being updated by another session can be half old, half new; say so instead of ending without a word.
+  return import(pathToFileURL(file).href).catch(error => {
+    if (start) console.log(JSON.stringify({ systemMessage: `The Workflow Kit hook could not be loaded (${error.message.split('\n')[0]}). The kit may be updating in another session; start the session again.` }));
+    else throw error;
+  });
 }
 
 // Run only as the entry (the copy in the project), not when kit-check imports sharedKit.
