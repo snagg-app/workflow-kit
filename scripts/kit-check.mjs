@@ -58,8 +58,11 @@ function updateKit(git, kit, say, root, wait = 0, speak = false) {
     return say(textsAt(root).kitDirty(kit), true);
   // Never prompt, never run hooks of the checkout (the runner carries the timeout and the no-prompt environment, see `hookGit`).
   const step = (...args) => git(kit, ...unattended, ...args).ok;
-  const lock = path.join(git(kit, 'rev-parse', '--absolute-git-dir').out, 'kit-update.lock');
+  const gitDir = git(kit, 'rev-parse', '--absolute-git-dir').out, lock = path.join(gitDir, 'kit-update.lock');
   const work = () => {
+    // #1022: under kit-update.lock no other kit run writes, so a git lock file here is the leftover of a git killed by the timeout (Windows).
+    for (const name of ['index.lock', 'HEAD.lock'])
+      if (existsSync(path.join(gitDir, name))) { rmSync(path.join(gitDir, name), { force: true }); say(textsAt(root).kitLeftoverRemoved(name)); }
     if (!step('pull', '--ff-only', '--quiet') || (existsSync(path.join(kit, '.gitmodules')) && !step('submodule', 'update', '--init', '--quiet')))
       say(textsAt(root).kitNotUpdated(kit), true);
   };
