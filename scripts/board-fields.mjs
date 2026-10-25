@@ -169,7 +169,7 @@ const fieldWords = () => [...args.values('--field').flatMap(splitPair), ...args.
 /** NAME VALUE pairs after the issue; `Status "Automated review" PR [OTHER_ISSUE...]` keeps its own trailing issue numbers, any other word is a pair. */
 function fieldPairs() {
   const words = fieldWords();
-  if (words[0].toLowerCase() === 'status' && String(words[1]).toLowerCase() === statuses.automatedReview.toLowerCase() && words.slice(2).every(word => /^\d+$/.test(word))) return [words.slice(0, 2)];
+  if (words[0].toLowerCase() === 'status' && String(words[1]).toLowerCase() === statuses.automatedReview.toLowerCase() && words.slice(2).every(word => /^(?:[\w.-]+\/[\w.-]+#)?#?\d+$/.test(word))) return [words.slice(0, 2)];
   assert.ok(words.length % 2 === 0, 'field takes NAME VALUE pairs: field ISSUE NAME VALUE [NAME VALUE ...]');
   return Array.from({ length: words.length / 2 }, (_, index) => words.slice(index * 2, index * 2 + 2));
 }
