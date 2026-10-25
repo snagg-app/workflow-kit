@@ -2,8 +2,8 @@
 // into the git dir (no GraphQL, no comment). `done` reads it when the PR changes a path the project lists in `reviewRequiredPaths`.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { gitIn } from './git-tool.mjs';
+import { isMain } from './is-main.mjs';
 
 /** Without `reviewRequiredPaths` in the project profile: the database migrations of #1036. */
 export const defaultReviewPaths = ['**/db/migration/**'];
@@ -33,7 +33,7 @@ export function missingReview(cwd, base, patterns) {
   return `the PR changes a path that needs a review (${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}; "reviewRequiredPaths" in .github/workflow-project.json) and no code-review covers this head: run the skill code-review against ${base} (Standards, Spec, Failure paths), fix or justify each finding, let it run \`node <kit>/scripts/review-marker.mjs\` for the head, then run done again`;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) { // real paths: a start through the .vendor link must match too (#1049)
   const cwd = process.cwd();
   writeFileSync(markerFile(cwd), git(cwd, 'rev-parse', 'HEAD'));
   console.log(`code-review recorded for ${git(cwd, 'rev-parse', '--short', 'HEAD')}`);

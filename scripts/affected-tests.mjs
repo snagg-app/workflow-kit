@@ -30,7 +30,7 @@ export const TABLE = [
   [/^scripts\/(board(-[a-z]+)?|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
   [/^scripts\/claim\.mjs$|^scripts\/tests\/claim\.test\.mjs$/, [BOARD, 'claim.test.mjs']],
   [/^scripts\/(review-facts|review-verdict|sonar)\.mjs$|^scripts\/tests\/fake-sonar\.mjs$/, [BOARD, 'review-verdict.test.mjs']],
-  [/^scripts\/review-marker\.mjs$/, [BOARD, 'git-tool.test.mjs']], // it starts git through git-tool.mjs
+  [/^scripts\/review-marker\.mjs$/, [BOARD, 'git-tool.test.mjs', 'review-marker.test.mjs']], // it starts git through git-tool.mjs
   [/^scripts\/tests\/(gh-shapes\.mjs$|gh-shapes\/)/, [BOARD, 'gh-shapes.test.mjs']],
   [/^scripts\/record-gh-shapes\.mjs$/, ['gh-shapes.test.mjs']],
   [/^scripts\/quota-sample\.mjs$/, ['quota-sample.test.mjs']],
