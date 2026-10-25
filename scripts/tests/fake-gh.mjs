@@ -332,8 +332,10 @@ function api(argv, input, stdout, stderr, exit) {
     exit(1);
   }
   // graphql-flaky: the next N queries (N in the file) fail like a 502 of GitHub; with "4xx" in the file, like a missing PR.
-  if (fs.existsSync('graphql-flaky') && !query.startsWith('mutation')) {
-    const [count, kind] = fs.readFileSync('graphql-flaky', 'utf8').split(' ');
+  let flaky = '';
+  try { flaky = fs.readFileSync('graphql-flaky', 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; } // no existsSync first: file system race
+  if (flaky && !query.startsWith('mutation')) {
+    const [count, kind] = flaky.split(' ');
     if (Number(count) > 0) {
       fs.writeFileSync('graphql-flaky', `${Number(count) - 1} ${kind ?? ''}`);
       stderr(kind === '4xx' ? 'gh: Could not resolve to a PullRequest with the number of 7. (HTTP 404)\n' : 'gh: Bad Gateway (HTTP 502)\n');
