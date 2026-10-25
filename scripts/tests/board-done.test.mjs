@@ -121,6 +121,31 @@ test('done overlap policy from the remote target base keeps unrelated moves off 
   assert.equal(text('stored'), 'Human review');
 });
 
+test('done refuses a migration change without a code-review of the head, and goes on once the review is recorded (#1036)', t => {
+  const { run, git, checkout, file, text, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  moveBase(git, checkout, {}, { 'backend/db/migration/V1__x.sql': 'select 1' });
+  git('push', '-q', 'origin', 'work');
+  const own = git('rev-parse', 'HEAD');
+  showPr(file, json, { headRefOid: own });
+  assert.equal(run('done', '1', 'result.md').status, 1);
+  assert.equal(text('affected-tests-calls'), '', 'refused before the tests');
+
+  execFileSync(process.execPath, [new URL('../review-marker.mjs', import.meta.url).pathname.replace(/^\/(\w:)/, '$1')], { cwd: checkout, env: isolatedGit(dirname(checkout)) });
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(text('stored'), 'Human review');
+});
+
+test('done does not ask for a code-review when no migration changes', t => {
+  const { run, git, checkout, file, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  moveBase(git, checkout, {}, { 'fix.txt': 'fix' });
+  git('push', '-q', 'origin', 'work');
+  showPr(file, json, { headRefOid: git('rev-parse', 'HEAD') });
+  assert.equal(run('done', '1', 'result.md').status, 0);
+});
+
 test('done pushes a new local commit even when the overlap policy needs no base merge (#659)', t => {
   const { run, git, checkout, file, json } = delivery(t, handoffFixture);
   baseMergePolicy(file, json);
