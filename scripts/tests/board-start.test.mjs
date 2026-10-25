@@ -368,6 +368,22 @@ test('start branches from origin/<base> of the Zielrelease and refuses an empty 
   assert.equal(git(checkout, 'rev-parse', 'HEAD'), git(checkout, 'rev-parse', 'origin/release/0.1.2'));
 });
 
+test('start --base branches from that branch and names it as the base, whatever the Zielrelease says (#1039)', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  const project = JSON.parse(text('.github/workflow-project.json'));
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...project, baseBranch: { field: 'Zielrelease', pattern: 'release/{value}' } }));
+  git(checkout, 'commit', '--allow-empty', '-q', '-m', 'release only');
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/release/0.1.2');
+  git(checkout, 'reset', '-q', '--hard', 'HEAD~1');
+  writeIssue({ ...issue('Ready'), projectItems: { nodes: [{ ...issue().projectItems.nodes[0], base: { name: '0.1.2' } }] } });
+
+  const result = run('start', '1', '--session', 'S1', '--base', 'main');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^START #1 session S1 branch claude\/1-fixture base main /m);
+  assert.equal(git(checkout, 'rev-parse', 'HEAD'), git(checkout, 'rev-parse', 'origin/main'));
+  assert.notEqual(git(checkout, 'rev-parse', 'HEAD'), git(checkout, 'rev-parse', 'origin/release/0.1.2'));
+});
+
 test('start with a failing setup ends with an error and shows its output, claim and PR stay (#567)', t => {
   const { run, writeIssue, file, text } = startFixture(t);
   const project = JSON.parse(text('.github/workflow-project.json'));

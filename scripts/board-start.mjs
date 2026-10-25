@@ -22,7 +22,7 @@ import { set } from './board-fields.mjs';
 export const specs = [
   { name: 'start', run: 'start', writes: true, doc: 'docs/board/start.md', words: [{ name: 'ISSUE', kind: 'number' }],
     summary: 'Claims a Ready issue. Runs the execution check, then assignment, In progress and the claim comment, each write read back. A repeated call resumes.',
-    flags: { '--session': shared.session, '--takeover': { help: 'Take over a fresh PR of another session.' }, '--issue-repo': shared.issueRepo } },
+    flags: { '--session': shared.session, '--takeover': { help: 'Take over a fresh PR of another session.' }, '--base': { help: 'Branch to start from instead of the base the Project names (tooling work on main, #1039).', value: 'BRANCH' }, '--issue-repo': shared.issueRepo } },
 ];
 
 /** A branch name is taken when the issue, this clone or the remote already has it. */
@@ -117,10 +117,12 @@ function start() {
   const fresh = { ...readIssue(), comments: { nodes: listed } }, raced = startReasons(fresh, session, takeover).blocked;
   if (raced.length) assert.fail(`${raced.join('; ')}; changed while starting, nothing was written`);
   // #657: an empty base field must not fall back to the default branch silently (a tooling issue says `main` in the field).
+  const override = args.value('--base')?.trim() || undefined;
+  assert.ok(!override || !stacked, '--base and a stack (a base PR) exclude each other: the stack names its base');
   const unset = baseOf(issue);
-  if (unset.setting && !unset.value && !stacked && !openPr(issue)) assert.fail(`the Project field ${unset.setting.field} of #${number} is empty; set it (main for tooling issues) and start again, nothing was written`);
-  const base = stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
-    : baseOf(issue).branch || defaultBranchName();
+  if (unset.setting && !unset.value && !override && !stacked && !openPr(issue)) assert.fail(`the Project field ${unset.setting.field} of #${number} is empty; set it (main for tooling issues) and start again, nothing was written`);
+  const base = override ?? (stacked ? (stacked.state === 'MERGED' ? stacked.baseRefName : stacked.headRefName)
+    : baseOf(issue).branch || defaultBranchName());
   const line = claimLine(session, agent);
   const current = openPr(issue);
   let branch = git('branch', '--show-current'), handedBranch;
