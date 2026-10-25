@@ -154,6 +154,15 @@ test('done asks for a code-review of the paths the project lists, and for no mig
   assert.equal(text('stored'), 'Human review');
 });
 
+test('done asks for no code-review of a migration when the project lists no path (#1042)', t => {
+  const { run, git, checkout, file, json } = delivery(t, handoffFixture);
+  writeFileSync(file('base-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), doneBaseMerge: 'overlap', reviewRequiredPaths: [] }));
+  moveBase(git, checkout, {}, { 'backend/db/migration/V1__a.sql': 'select 1' });
+  git('push', '-q', 'origin', 'work');
+  showPr(file, json, { headRefOid: git('rev-parse', 'HEAD') });
+  assert.equal(run('done', '1', 'result.md').status, 0);
+});
+
 test('done does not ask for a code-review when no migration changes', t => {
   const { run, git, checkout, file, json } = delivery(t, handoffFixture);
   baseMergePolicy(file, json);
