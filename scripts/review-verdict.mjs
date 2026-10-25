@@ -271,7 +271,7 @@ function judgeSonar({ pr, facts, live, after }, s) {
   const { lines, reasons } = s;
   const { comments } = facts;
   const short = pr.headRefOid.slice(0, 7);
-  for (const check of live.filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && check.conclusion !== 'SKIPPED')) {
+  for (const check of live.filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && !['SKIPPED', 'CANCELLED'].includes(check.conclusion))) { // a cancelled analysis is red already (#1060) and needs no read
     const found = facts.sonar.get(check);
     if (found.error) throw found.error;
     const { total: open, lines: findings } = found;

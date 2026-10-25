@@ -90,7 +90,8 @@ test('a cancelled Sonar analysis stays red, with 0 findings too (#1060)', () => 
   const withCancelled = answer => judge(facts({ contexts: [job(1), cancelled], sonar: new Map([[cancelled, answer]]) }));
   assert.equal(withCancelled({ total: 0, lines: [] }).failed, true);
   assert.match(withCancelled({ total: 0, lines: [] }).reasons.join('\n'), /re-run the Sonar check/);
-  assert.equal(withCancelled({ total: 1, lines: ['sonar: r A.java:1 m'] }).failed, true);
+  const unreadable = withCancelled({ error: new Error('Sonar API answered 404') }); // no read is made, so no throw hides the hint
+  assert.deepEqual(unreadable.reasons.filter(reason => /Sonar/.test(reason)), [unreadable.reasons.find(reason => /re-run the Sonar check/.test(reason))]);
   assert.equal(judge(facts({ contexts: [job(1), job(2, 'CANCELLED')] })).failed, true);
 });
 
