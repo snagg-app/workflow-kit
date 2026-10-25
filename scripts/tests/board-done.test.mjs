@@ -284,6 +284,58 @@ test('done takes the pushed work to Human review: tests, ready, ticked boxes, Au
   assert.equal(run('done', '1').status, 0);
 });
 
+test('done lists tests that are red on the base too in the handoff, before the Retro, and names their open issue (#1052)', t => {
+  const { run, file, json } = delivery(t, handoffFixture);
+  writeFileSync(file('affected-tests-base-red'), 'io.snagg.StashServiceTest.addsItem\n');
+  writeFileSync(file('test-issues.json'), JSON.stringify([{ number: 9, title: 'Test schon rot: StashServiceTest', body: '', html_url: 'https://github.com/test/example/issues/9' }]));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const posted = json('issues-comments.json').at(-1).body;
+  assert.match(posted, /`io\.snagg\.StashServiceTest\.addsItem`: .*https:\/\/github\.com\/test\/example\/issues\/9/);
+  assert.ok(posted.indexOf('issues/9') < posted.indexOf('### Retro'), 'the section comes before the Retro list');
+  assert.equal(json('issues-comments.json').length, 1);
+  assert.equal(existsSync(file('creates')), false, 'an open issue names the class: nothing is created');
+});
+
+test('done keeps the base-red tests of a tested head when the final call skips the local tests (#1052)', t => {
+  const { run, file, json } = delivery(t, handoffFixture);
+  writeFileSync(file('affected-tests-base-red'), 'io.snagg.StashServiceTest.addsItem\n');
+  writeFileSync(file('test-issues.json'), JSON.stringify([{ number: 9, title: 'StashServiceTest', html_url: 'https://github.com/test/example/issues/9' }]));
+  assert.equal(run('done', '1').status, 0);
+  assert.equal(run('done', '1', 'result.md', '--skip-local-tests', 'tested above').status, 0);
+  assert.match(json('issues-comments.json').at(-1).body, /StashServiceTest\.addsItem`: .*issues\/9/);
+});
+
+test('done creates the issue of a test that is red on the base, from the milestone, labels and fields of its own issue, and still hands off (#1052)', t => {
+  const { run, file, json, text } = delivery(t, handoffFixture);
+  const write = (name, data) => writeFileSync(file(name), typeof data === 'string' ? data : JSON.stringify(data));
+  write('affected-tests-base-red', 'io.snagg.StashServiceTest.addsItem\n');
+  write('test-issues.json', []);
+  write('test-milestones.json', [{ number: 4, title: '0.1.1' }]);
+  write('test-labels.json', [{ name: 'enhancement' }]);
+  write('backlink-1.json', { number: 1, state: 'open', comments: 1, body: '- [ ] first', milestone: { title: '0.1.1' }, labels: [{ name: 'enhancement' }] });
+  write('create-response.json', { number: 12, node_id: 'N12', html_url: 'https://github.com/test/example/issues/12' });
+  write('backlink-12.json', { number: 12, state: 'open', comments: 0, milestone: { title: '0.1.1' }, labels: [{ name: 'enhancement' }], assignees: [] });
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const created = JSON.parse(text('created.json'));
+  assert.deepEqual([created.milestone, created.labels], [4, ['enhancement']]);
+  assert.match(text('stored-items.json'), /"PI-N12":\{"F1":"Ready"/, 'the new issue starts on Ready');
+  const posted = json('issues-comments.json').at(-1).body;
+  assert.match(posted, /`io\.snagg\.StashServiceTest\.addsItem`: .*https:\/\/github\.com\/test\/example\/issues\/12/);
+});
+
+test('done hands off even when the issue for a base-red test cannot be created (#1052)', t => {
+  const { run, file, json } = delivery(t, handoffFixture);
+  writeFileSync(file('affected-tests-base-red'), 'io.snagg.StashServiceTest.addsItem\n');
+  writeFileSync(file('test-issues.json'), '[]');
+  writeFileSync(file('test-milestones.json'), '[]'); // the milestone of the issue at hand is not open: the creation is refused
+  writeFileSync(file('test-labels.json'), '[]');
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(json('issues-comments.json').at(-1).body, /`io\.snagg\.StashServiceTest\.addsItem`: .*milestone/);
+});
+
 test('done without a handoff file prepares: tests, ready, Automated review, then PREPARED without comment, ticking or Human review; the final done takes the same head', t => {
   const { run, head, text, json, git, file } = delivery(t, handoffFixture);
   const result = run('done', '1');

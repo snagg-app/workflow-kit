@@ -271,10 +271,10 @@ test('new warns about a file path in backticks that the repository lacks, and st
   writeIssue(issue('Backlog'));
   mkdirSync(join(checkout, 'docs'), { recursive: true });
   write('docs/vorhanden.md', 'da');
-  write('body.md', 'Siehe `docs/vorhanden.md`, `docs/fehlt-hier.md`, `https://example.com/a.html`, `git status` und `docs/*.md`.');
+  write('body.md', 'Siehe `docs/vorhanden.md`, `docs/fehlt-hier.md`, `https://example.com/a.html`, `git status` und `docs/*.md` und der Zweig `release/0.1.2` (#1052).');
   const result = run('new', '--title', 'Pfade', '--body-file', 'body.md', '--milestone', '0.1.1', '--label', 'enhancement', '--priority', 'low');
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /fehlt-hier/);
-  assert.doesNotMatch(result.stdout, /vorhanden|example\.com|git status|\*\.md/);
+  assert.doesNotMatch(result.stdout, /vorhanden|example\.com|git status|\*\.md|release\/0\.1\.2/);
   assert.equal(existsSync(join(checkout, 'created.json')), true, 'the issue is created anyway');
 });

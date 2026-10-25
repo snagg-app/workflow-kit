@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -175,4 +175,21 @@ test('an unknown option is refused with exit 2 and a usage text, --help exits 0'
   assert.equal(unknown.status, 2);
   assert.doesNotMatch(unknown.stderr, /ERR_PARSE_ARGS/, 'no Node error code');
   assert.equal(help.status, 0);
+});
+
+test('a command that exits 3 with RED ON BASE lines is green and remembered; exit 3 without them stays red (#1052)', async t => {
+  const script = fileURLToPath(new URL('../affected-tests.mjs', import.meta.url));
+  const { NODE_TEST_CONTEXT, ...outside } = process.env;
+  const project = temporary(t, 'affected-tests-');
+  await run('git', ['init', '-q'], { cwd: project });
+  await run('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x'], { cwd: project });
+  mkdirSync(join(project, '.github'));
+  writeFileSync(join(project, '.github/affected-tests.json'), JSON.stringify({ 'a/**': 'node -e "if (process.env.NAMES) console.log(process.env.NAMES); process.exit(3)"' }));
+  const steps = join(project, 'steps');
+  const ask = NAMES => run(process.execPath, [script, '--run', '--resume', steps, 'a/B.java'], { cwd: project, env: { ...outside, NAMES } });
+  const bare = await ask('');
+  assert.equal(bare.status, 3, 'no test named: still red');
+  const named = await ask('RED ON BASE: io.A.one\nRED ON BASE: io.A.two');
+  assert.equal(named.status, 0, named.stdout + named.stderr);
+  assert.match(readFileSync(steps, 'utf8'), /\nbase-red: io\.A\.one\nbase-red: io\.A\.two$/);
 });

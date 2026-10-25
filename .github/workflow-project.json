@@ -8,6 +8,15 @@
     "coderabbitai"
   ],
   "reviewerGraceMinutes": 0,
+  "reviewRequiredPaths": [
+    "scripts/board-done.mjs",
+    "scripts/board-merge*.mjs",
+    "scripts/board-handoff.mjs",
+    "scripts/board-wait.mjs",
+    "scripts/affected-tests.mjs",
+    "scripts/base-red.mjs",
+    "scripts/board-base-red.mjs"
+  ],
   "language": "de",
   "skills": "all",
   "impeccable": true

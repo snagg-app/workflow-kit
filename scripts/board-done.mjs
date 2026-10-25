@@ -10,6 +10,8 @@ import { shared } from './board-args.mjs';
 import { failed, isResult, result } from './board-result.mjs';
 import { pushPlan } from './board-checkout.mjs';
 import { args, checkout, git, github, graphql, issueName, issueOwner, issueProject, localHead, number, progress, project, projectDirectory, rest, restAll, state, statuses, step, texts } from './board-context.mjs';
+import { baseRedTests, withBaseRed } from './base-red.mjs';
+import { baseRedHandoff } from './board-base-red.mjs';
 import { postBacklink, tickAcceptance, writeBody } from './board-body.mjs';
 import { commentClaims, handoffHeadLine } from './claim.mjs';
 import { currentIssuePr, isPartialPr } from './board-claims.mjs';
@@ -183,12 +185,12 @@ async function done() {
   // Without a file and without a comment for this head (a repeated call after exit 4 has one) `done` only prepares (#576): it runs to the end of the automated review, then stops before comment, ticking and Human review.
   const ownHandoff = findHandoffComment(restAll(`repos/${project.repository}/issues/${prNumber}/comments`), issue.viewer, sha);
   const prepare = !file && !ownHandoff;
+  // The green steps of this head are kept (--resume): after a red step the next call runs only the open ones.
+  const steps = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-steps'));
   if (skipReason) {
     progress(`LOCAL TESTS SKIPPED ${sha}: ${skipReason}`);
     writeFileSync(skipped, sha);
   } else if (!isTested()) {
-    // The green steps of this head are kept (--resume): after a red step the next call runs only the open ones.
-    const steps = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-steps'));
     try {
       runProgram(process.execPath, [fileURLToPath(new URL('affected-tests.mjs', import.meta.url)), '--cwd', projectDirectory, '--run', '--resume', steps, '--base', `origin/${pull.base.ref}`], { stdio: 'inherit' });
     } catch { return failed('the targeted tests of the changed files failed (output above; green steps of this head are kept); fix the cause, then run done again (a push starts all steps anew)'); }
@@ -229,7 +231,10 @@ async function done() {
     step(written);
   }
   if (file && !findHandoffComment(polled.comments, issue.viewer, head)) {
-    github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\n${handoffHeadLine(head)}\n\n${lines(file)}\n` });
+    // #1052: tests that were red on the base too did not block; the comment lists them with their issue.
+    const baseRed = (skipReason && !isTested()) || !existsSync(steps) ? '' : baseRedHandoff(baseRedTests(readFileSync(steps, 'utf8')), `origin/${pull.base.ref}`);
+    const body = baseRed ? withBaseRed(lines(file), baseRed) : lines(file);
+    github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\n${handoffHeadLine(head)}\n\n${body}\n` });
   }
   return handoff();
 }
