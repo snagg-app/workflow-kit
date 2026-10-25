@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { renderReadme } from '../board-readme.mjs';
 import { fixture, handoffFixture, handoffPr, issue, test } from './board-fixture.mjs';
 import { isolatedGit } from './fixtures.mjs';
 
@@ -161,6 +162,19 @@ test('done asks for no code-review of a migration when the project lists no path
   git('push', '-q', 'origin', 'work');
   showPr(file, json, { headRefOid: git('rev-parse', 'HEAD') });
   assert.equal(run('done', '1', 'result.md').status, 0);
+});
+
+test('done in the kit refuses a new script without an affected-tests row before the push (#1046)', t => {
+  const { run, git, checkout, file, text, json } = delivery(t, handoffFixture);
+  baseMergePolicy(file, json);
+  moveBase(git, checkout, {}, { 'scripts/board-readme.mjs': '', 'README.md': renderReadme('<!-- board-commands:start -->\n<!-- board-commands:end -->\n'), 'scripts/brand-new-tool.mjs': '' });
+  const remote = git('ls-remote', 'origin', 'refs/heads/work');
+  showPr(file, json, { headRefOid: git('rev-parse', 'HEAD') });
+  const refused = run('done', '1', 'result.md');
+  assert.equal(refused.status, 1);
+  assert.match(refused.stdout + refused.stderr, /brand-new-tool\.mjs/);
+  assert.equal(git('ls-remote', 'origin', 'refs/heads/work'), remote, 'nothing was pushed');
+  assert.equal(text('affected-tests-calls'), '', 'refused before the tests');
 });
 
 test('done does not ask for a code-review when no migration changes', t => {
