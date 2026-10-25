@@ -154,6 +154,7 @@ export function installGitHooks({ root, check = false, log = console.log }) {
       if (!check) out('config', '--file', file, '--unset-all', 'core.hooksPath');
       report(`${check ? 'would remove' : 'removed'} worktree override ${describe(list)}`);
     } else {
+      reason ??= `worktree override core.hooksPath ${describe(list)}; integrate .githooks there by hand`;
       report(`kept worktree override ${describe(list)}`);
     }
   }
@@ -189,7 +190,7 @@ export function installGitHooks({ root, check = false, log = console.log }) {
       log(`hooks: copied .githooks into ${hooksValue}; rerun after changing a hook`);
     }
   }
-  return { ready, reason };
+  return { ready: ready && !reason, reason };
 }
 
 if (isMain(import.meta.url)) {
