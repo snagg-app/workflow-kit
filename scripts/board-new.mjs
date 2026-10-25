@@ -198,6 +198,7 @@ const readBlock = miss => rows => {
  * finished by hand, never created twice. `--from FILE` creates a whole list instead (createMany).
  */
 function create() {
+  dropFieldsCache(); // the issue is created before its fields are written: a stale cached id would leave it half done
   if (args.flag('--from')) return createMany(args.value('--from'));
   const options = newOptions();
   const { created, plan } = createOne(options);

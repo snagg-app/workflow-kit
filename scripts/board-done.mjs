@@ -10,7 +10,7 @@ import { shared } from './board-args.mjs';
 import { failed, isResult, result } from './board-result.mjs';
 import { pushPlan } from './board-checkout.mjs';
 import { args, checkout, git, github, graphql, issueName, issueOwner, issueProject, localHead, number, progress, project, projectDirectory, rest, restAll, state, statuses, step, texts } from './board-context.mjs';
-import { baseRedTests } from './base-red.mjs';
+import { baseRedTests, withBaseRed } from './base-red.mjs';
 import { baseRedHandoff } from './board-base-red.mjs';
 import { postBacklink, tickAcceptance, writeBody } from './board-body.mjs';
 import { commentClaims, handoffHeadLine } from './claim.mjs';
@@ -233,8 +233,7 @@ async function done() {
   if (file && !findHandoffComment(polled.comments, issue.viewer, head)) {
     // #1052: tests that were red on the base too did not block; the comment lists them with their issue.
     const baseRed = skipReason || !existsSync(steps) ? '' : baseRedHandoff(baseRedTests(readFileSync(steps, 'utf8')), `origin/${pull.base.ref}`);
-    const written = lines(file), retro = written.indexOf('### Retro'); // the section goes before the Retro list, which stays last
-    const body = baseRed ? `${written.slice(0, retro < 0 ? written.length : retro).trimEnd()}\n\n${baseRed}\n\n${retro < 0 ? '' : written.slice(retro)}` : written;
+    const body = baseRed ? withBaseRed(lines(file), baseRed) : lines(file);
     github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\n${handoffHeadLine(head)}\n\n${body}\n` });
   }
   return handoff();

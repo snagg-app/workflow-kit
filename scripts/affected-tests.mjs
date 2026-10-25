@@ -9,7 +9,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -168,7 +168,10 @@ ${error.message}`);
   const { tests: selected, unmapped } = affectedTests(kitFiles);
   for (const file of unmapped) console.error(`no test mapped for ${file}; add a row to scripts/affected-tests.mjs or run the suite`);
   if (!values.run) { if (selected.length || commands.length) console.log([...selected, ...commands].join('\n')); }
-  else if (!selected.length && !commands.length) console.log('no affected tests');
+  else if (!selected.length && !commands.length) {
+    console.log('no affected tests');
+    if (values.resume) rmSync(values.resume, { force: true }); // no step of an older head may report its base-red tests (#1052)
+  }
   else {
     // --resume FILE: the green steps of a head are kept in FILE (first line the head, then one step per line), so a call after a red step runs only what is still open.
     // The key is the head plus a hash of the working state (uncommitted diff, new files), so an edit without a commit runs the steps again.
@@ -187,7 +190,7 @@ ${error.message}`);
       if (done.has(key)) return console.log(`skip (green for this head): ${label}`);
       const status = quiet(values.verbose, command, args, options, { ...texts, label });
       // A command that finds only tests red on the base too (test-vs-base) exits BASE_RED_EXIT and names them as `RED ON BASE: <test>` lines: green for the gate, remembered for `done`.
-      const baseRed = status === BASE_RED_EXIT ? [...lastOutput.matchAll(/^RED ON BASE: (.+?)\s*$/gm)].map(match => `${BASE_RED_PREFIX}${match[1]}`) : [];
+      const baseRed = status === BASE_RED_EXIT && !values.verbose ? [...lastOutput.matchAll(/^RED ON BASE: (.+?)\s*$/gm)].map(match => `${BASE_RED_PREFIX}${match[1]}`) : [];
       if (status === 0 || baseRed.length) { done.add(key); for (const line of baseRed) done.add(line); if (values.resume) writeFileSync(values.resume, [head, ...done].join('\n')); }
       else process.exitCode = status;
     };

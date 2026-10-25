@@ -5,9 +5,9 @@ import { resolve } from 'node:path';
 import { baseRedLines, baseRedSection } from './base-red.mjs';
 import { projectItem } from './board-common.mjs';
 import { createOne } from './board-new.mjs';
-import { git, graphql, issueName, issueOwner, number, project, projectDirectory, rest, restAll } from './board-context.mjs';
+import { git, graphql, issueName, issueOwner, number, project, projectDirectory, rest, restAll, texts } from './board-context.mjs';
 
-/** The Project field values and Priority of the issue `done` works on; a base-red issue starts with the same ones (Size, target release). */
+/** The Project field values (name, option) of the issue `done` works on; a base-red issue starts with the same ones (Size, target release). */
 function parentValues() {
   const { repository } = graphql(`query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){
   issue(number:$number){projectItems(first:100){nodes{project{id} fieldValues(first:100){nodes{
@@ -17,19 +17,23 @@ function parentValues() {
     .map(entry => [entry.field.name, entry.name]);
 }
 
-/** The section for the handoff comment, or '' when no test was red on the base. Creates the missing issues (status Ready, milestone, labels and fields of the issue at hand). */
+/**
+ * The section for the handoff comment, or '' when no test was red on the base. Creates the missing issues (status Ready; milestone, labels and
+ * fields of the issue at hand, read once). An issue that cannot be created is named in the section; it never stops the handoff.
+ */
 export function baseRedHandoff(names, base) {
   if (!names.length) return '';
-  const issues = restAll(`repos/${project.repository}/issues`).filter(item => !item.pull_request);
+  // shortcut: the check for an open issue and its creation are not atomic; two parallel `done` runs for one head could both create it.
+  const issues = restAll(`repos/${project.repository}/issues`).filter(item => !item.pull_request && item.number !== number);
+  let parent;
   const lines = baseRedLines(names, issues, (className, tests) => {
-    const parent = rest(`repos/${issueOwner}/${issueName}/issues/${number}`);
-    const values = parentValues(), priority = values.find(([field]) => field === 'Priority')?.[1];
-    const fields = values.filter(([field]) => !['Status', 'Priority'].includes(field));
+    parent ??= { issue: rest(`repos/${issueOwner}/${issueName}/issues/${number}`), values: parentValues() };
     const bodyFile = resolve(projectDirectory, git('rev-parse', '--git-path', 'board-done-base-red.md'));
-    writeFileSync(bodyFile, `${tests.map(name => `- \`${name}\``).join('\n')}\n\nDiese Tests scheitern schon auf \`${base}\`, ohne dass ein PR etwas geändert hat. Gefunden bei \`board.mjs done\` für #${number}: ${className} blockiert dort keine Übergabe, solange dieses Issue offen ist.\n`);
-    const { created } = createOne({ title: `Test schon auf der Basis rot: ${className}`, bodyFile, milestone: parent.milestone?.title, priority: priority ?? 'High', status: 'Ready',
-      labels: parent.labels.map(label => label.name).filter(name => name !== 'spec'), fields });
+    writeFileSync(bodyFile, texts.baseRedBody(base, number, tests));
+    const { created } = createOne({ title: texts.baseRedTitle(className), bodyFile, milestone: parent.issue.milestone?.title, status: 'Ready',
+      priority: parent.values.find(([field]) => field === 'Priority')?.[1] ?? 'High', labels: parent.issue.labels.map(label => label.name).filter(name => name !== 'spec'),
+      fields: parent.values.filter(([field]) => !['Status', 'Priority'].includes(field)) });
     return created.html_url;
-  });
-  return baseRedSection(base, lines);
+  }, texts);
+  return baseRedSection(base, lines, texts);
 }

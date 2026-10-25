@@ -59,6 +59,13 @@ export function projectLabels(project) {
 const texts = {
   en: {
     handoff: 'Handoff',
+    baseRedHeading: 'Already red on the base',
+    baseRedIntro: base => `These tests fail on \`${base}\` too, not because of this PR; they did not block the handoff.`,
+    baseRedKnown: url => `issue ${url}`,
+    baseRedNew: url => `new issue ${url}`,
+    baseRedFailed: why => `no issue created (${why}); file one`,
+    baseRedTitle: className => `Test already red on the base: ${className}`,
+    baseRedBody: (base, number, tests) => `${tests.map(name => `- \`${name}\``).join('\n')}\n\nThese tests already fail on \`${base}\`, without a PR changing anything. Found by \`board.mjs done\` for #${number}.\n`,
     claimed: 'Claimed.',
     base: 'Base',
     feedback: 'Feedback',
@@ -88,6 +95,13 @@ const texts = {
   },
   de: {
     handoff: 'Übergabe',
+    baseRedHeading: 'Schon auf der Basis rot',
+    baseRedIntro: base => `Diese Tests scheitern auch auf \`${base}\`, nicht wegen dieses PR; sie haben die Übergabe nicht blockiert.`,
+    baseRedKnown: url => `Issue ${url}`,
+    baseRedNew: url => `neues Issue ${url}`,
+    baseRedFailed: why => `kein Issue angelegt (${why}); bitte eines anlegen`,
+    baseRedTitle: className => `Test schon auf der Basis rot: ${className}`,
+    baseRedBody: (base, number, tests) => `${tests.map(name => `- \`${name}\``).join('\n')}\n\nDiese Tests scheitern schon auf \`${base}\`, ohne dass ein PR etwas geändert hat. Gefunden bei \`board.mjs done\` für #${number}.\n`,
     claimed: 'Beansprucht.',
     base: 'Basis',
     feedback: 'Rückmeldungen',

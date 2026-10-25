@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **`done` bleibt nicht mehr an Tests hängen, die schon auf der Basis rot sind (#1052).** Meldet ein Projekt-Testbefehl nur solche Tests (Exit 3 und `RED ON BASE:`-Zeilen, siehe README), zählt der Schritt als grün. Der Übergabe-Kommentar führt die Tests dann unter „Schon auf der Basis rot“ mit ihrem offenen Issue auf; gibt es keines, legt `done` eines auf Ready an (scheitert das, steht der Grund im Kommentar). Scheitert ein Test nur im PR, bricht `done` wie bisher ab. Außerdem warnt `board.mjs new` bei Zweignamen wie `release/0.1.2` nicht mehr vor einem fehlenden Pfad. Die Gate-Skripte stehen jetzt in `reviewRequiredPaths`: `done` verlangt für ihre Änderung selbst einen Review.
+
 - **`affected-tests --resume` überspringt keine grünen Schritte mehr, wenn sich Dateien geändert haben (#1018).** Der Merkzettel gilt jetzt nur für denselben Commit und denselben Arbeitsstand (nicht committete und neue Dateien). Wer nach einem roten Schritt etwas ändert, ohne zu committen, bekommt alle Schritte neu geprüft.
 
 - **`done` nennt nicht committete Dateien, wenn noch kein PR existiert (#1012).** Bisher hieß es nur „kein PR“. Jetzt zählt die Meldung bis zu fünf nicht committete Dateien auf (und wie viele weitere es gibt) und sagt, dass zuerst committet werden muss. Ohne offene Änderungen bleibt die Meldung wie vorher.
