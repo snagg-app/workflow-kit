@@ -105,7 +105,19 @@ async function poll(look) {
   const maxMinutes = numberOption('--max-minutes', 9);
   // One deadline per run, counted from its start (`done` runs the targeted tests first; `merge` polls twice): everything must fit the one tool call.
   if (maxMinutes > 0 && github.deadline === Infinity) github.deadline = startedAt + maxMinutes * 60_000;
-  let shown, quiet = 0;
+  let shown, quiet = 0, failures = 0;
+  // A single short GitHub failure (502, timeout, no network) is read again next round; the third in a row, or any other error, ends the wait.
+  const transient = /HTTP 5\d\d|Bad Gateway|Service Unavailable|Gateway Time-?out|did not answer|timed out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|could not resolve host|Unexpected end of JSON/i;
+  const looked = () => {
+    try {
+      const answer = look();
+      failures = 0;
+      return answer;
+    } catch (error) {
+      if (error instanceof QuotaPause || error instanceof StillWaiting || ++failures >= 3 || !transient.test(`${error.code} ${error.stderr} ${error.message}`)) throw error;
+      return { done: false, lines: [`waiting: GitHub read failed (${failures} in a row), trying again`] };
+    }
+  };
   // Exit 4: not finished, call the command again (a driver's tool call must end before its 10-minute limit).
   const stillWaiting = resetAt => {
     const quotaReset = resetAt ?? (command === 'wait' && github.quota?.remaining < sleepers.wait ? github.quota.resetAt : undefined);
@@ -113,7 +125,7 @@ async function poll(look) {
   };
   try {
     for (;;) {
-      const result = look(), { done, lines } = result;
+      const result = looked(), { done, lines } = result;
       if (done) return result;
       // Interim output names what is still awaited, once per change, so a background run is never silent.
       const waiting = lines.filter(line => line.startsWith('waiting:')).join('\n');
