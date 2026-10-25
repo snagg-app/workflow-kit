@@ -147,7 +147,7 @@ async function runCall({ argv: call, env, cwd, io }) {
     }
   } catch (error) {
     // A failed read is never "no blockers" and never a finished review.
-    if (!commandNames.filter(known => !['next', 'sweep', 'block', 'sub'].includes(known)).includes(command)) throw error;
+    if (!commandNames.includes(command)) throw error;
     const message = String(error.stderr || error.message).trim();
     output.finish(oneLine ? result('error', 'ERROR', { headline: `ERROR - ${message.replace(/\s*\n\s*/g, ' ')}`, blockers: [message], inline: true })
       : result('error', command === 'check' ? 'UNKNOWN' : 'ERROR', { blockers: [message], bullet: '- ' }));

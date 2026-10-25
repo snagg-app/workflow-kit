@@ -80,7 +80,11 @@ function sweep() {
       resets++;
     } catch (error) {
       // A used-up quota would fail every further issue the same way: stop at once.
-      if (error?.quotaUsedUp) throw error;
+      if (error?.quotaUsedUp) {
+        // The run ends ERROR (exit 2); what it already closed stays in the message (#1028).
+        if (closed.length) error.message += `\nclosed before the error: ${closed.map(number => `#${number}`).join(', ')}`;
+        throw error;
+      }
       // One issue sweep cannot judge or write must not stop the others; the run reports it and ends red.
       skipped.push(`#${issue.number} skipped: ${String(error?.message ?? error).split('\n')[0]}`);
     }

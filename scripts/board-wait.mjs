@@ -27,10 +27,14 @@ export const specs = [
  * Its `blocker:` lines become the blockers, every other line a note. `prior`: blockers found before the read (they make an unfinished read FAILED); `quota`: add the quota line.
  */
 function reviewOutcome(review, { prior = [], quota = false } = {}) {
+  const blocker = 'blocker: ', found = review.lines.filter(line => line.startsWith(blocker)).map(line => line.slice(blocker.length));
+  const threads = review.lines.find(line => /^unresolved threads: [1-9]/.test(line))?.slice('unresolved '.length);
+  // A finished look with a blocker line or open threads is never DONE (exit 0): a watcher that reads only the exit code would call the PR ready (#1028).
+  const open = review.done && !review.failed ? [...found, ...threads ? [threads] : []] : [];
   const verdict = !review.done ? prior.length ? result('failed', 'FAILED') : result('waiting', 'WAITING')
-    : review.failed ? result('failed', 'FAILED', { headline: ['FAILED', ...review.reasons?.length ? [review.reasons.join('; ')] : []].join(': ') }) : result('ok', 'DONE');
-  const blocker = 'blocker: ', found = review.lines.filter(line => line.startsWith(blocker));
-  return { ...verdict, blockers: [...prior, ...found.map(line => line.slice(blocker.length))],
+    : review.failed ? result('failed', 'FAILED', { headline: ['FAILED', ...review.reasons?.length ? [review.reasons.join('; ')] : []].join(': ') })
+      : open.length ? result('failed', 'FAILED', { headline: `FAILED: ${open.join('; ')}` }) : result('ok', 'DONE');
+  return { ...verdict, blockers: [...prior, ...found],
     notes: [...review.lines.filter(line => !line.startsWith(blocker)), ...quota ? [quotaLine()] : []].filter(Boolean), data: { head: review.pr?.headRefOid, reasons: review.reasons ?? [] } };
 }
 

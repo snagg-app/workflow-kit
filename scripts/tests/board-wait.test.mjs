@@ -26,6 +26,20 @@ test('wait ends at once on merge conflicts of a non-draft PR and ignores every o
   assert.equal(reviews({ ...readied, mergeStateStatus: 'BEHIND' }), 0, 'BEHIND is no conflict');
 });
 
+test('wait is never DONE with a blocker line or an open thread (#1028)', t => {
+  const { run, pr, look } = reviewsFixture(t);
+  const changes = { ...pr(), mergeStateStatus: 'BLOCKED', reviewDecision: 'CHANGES_REQUESTED',
+    latestOpinionatedReviews: { totalCount: 1, nodes: [{ state: 'CHANGES_REQUESTED', author: { login: 'maintainer' } }] } };
+  for (const [data, line] of [[changes, /^blocker: changes requested by maintainer$/m], [pr({ threadPages: [[false]] }), /^unresolved threads: 1$/m]]) {
+    look(data);
+    const result = run('wait', '7', '--max-minutes', '0.1');
+    assert.match(result.stdout, line);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /^FAILED: /m);
+    assert.doesNotMatch(result.stdout, /^DONE$/m);
+  }
+});
+
 test('wait rejects current-head Sonar issues, accepts zero, and preserves pending and head guards (#598)', t => {
   const { checkout, run, pr, look } = reviewsFixture(t);
   const sonar = { __typename: 'CheckRun', name: 'SonarCloud Code Analysis', status: 'COMPLETED', conclusion: 'SUCCESS',
