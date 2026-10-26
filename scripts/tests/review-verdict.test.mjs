@@ -85,11 +85,28 @@ test('open Sonar issues are red, a failed read throws', () => {
   assert.throws(() => judge(withSonar({ error: new Error('Sonar API answered 401') })), /401/);
 });
 
-test('a cancelled Sonar analysis counts as done with 0 findings and stays red with findings', () => {
+test('a listed analyzer with no suite at all waits, then fails, and an optional one never does (#1060)', () => {
+  const missing = (settings, pushedMinutesAgo) => judge(facts({ pr: { commits: { nodes: [{ commit: { oid: 'abcdef1234', committedDate: ago(pushedMinutesAgo), checkSuites: { totalCount: 0, nodes: [] },
+    statusCheckRollup: { contexts: { totalCount: 1, nodes: [job(1)] } } } }] } }, pushLog: [{ after: 'abcdef1234', timestamp: ago(pushedMinutesAgo) }] }), settings);
+  const listed = { awaitApps: ['sonarqubecloud'] };
+  assert.equal(missing(listed, 5).done, false, 'young head: still waiting');
+  const stalledVerdict = missing(listed, 30);
+  assert.equal(stalledVerdict.failed, true);
+  assert.match(stalledVerdict.reasons.join('\n'), /sonarqubecloud missing/);
+  const present = judge(facts({ pr: { commits: { nodes: [{ commit: { oid: 'abcdef1234', committedDate: ago(30), checkSuites: { totalCount: 1, nodes: [{ app: { slug: 'sonarqubecloud' }, status: 'COMPLETED', conclusion: 'SUCCESS', checkRuns: { totalCount: 1 } }] },
+    statusCheckRollup: { contexts: { totalCount: 1, nodes: [job(1)] } } } }] } } }), { awaitApps: ['app/SonarQubeCloud'] });
+  assert.equal(present.failed, false, 'a suite counts under any spelling of the listed name');
+  assert.equal(missing({}, 30).failed, false, 'a project that lists no analyzer is unaffected');
+  assert.equal(missing({ ...listed, optionalReviewers: ['sonarqubecloud'] }, 30).failed, false);
+});
+
+test('a cancelled Sonar analysis stays red, with 0 findings too (#1060)', () => {
   const cancelled = { ...sonarCheck, conclusion: 'CANCELLED' };
   const withCancelled = answer => judge(facts({ contexts: [job(1), cancelled], sonar: new Map([[cancelled, answer]]) }));
-  assert.equal(withCancelled({ total: 0, lines: [] }).failed, false);
-  assert.equal(withCancelled({ total: 1, lines: ['sonar: r A.java:1 m'] }).failed, true);
+  assert.equal(withCancelled({ total: 0, lines: [] }).failed, true);
+  assert.match(withCancelled({ total: 0, lines: [] }).reasons.join('\n'), /re-run the Sonar check/);
+  const unreadable = withCancelled({ error: new Error('Sonar API answered 404') }); // no read is made, so no throw hides the hint
+  assert.deepEqual(unreadable.reasons.filter(reason => /Sonar/.test(reason)), [unreadable.reasons.find(reason => /re-run the Sonar check/.test(reason))]);
   assert.equal(judge(facts({ contexts: [job(1), job(2, 'CANCELLED')] })).failed, true);
 });
 

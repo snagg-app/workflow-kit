@@ -176,6 +176,7 @@ test('done asks for a code-review once the diff reaches 3 modules of reviewModul
     if (refusedAt) {
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stdout + result.stderr, refusedAt);
+      assert.match(result.stdout + result.stderr, /"reviewModuleRoots"/);
     } else assert.equal(result.status, 0, 'two modules and files outside modules need no review: ' + result.stdout + result.stderr);
   }
 });

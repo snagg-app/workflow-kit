@@ -49,7 +49,8 @@ unfinished with exit 4 and the line `still waiting: call wait again`, so it ends
 shell tool; a quota pause that would end after that time is not slept through, the line then names the reset
 (`still waiting: call wait again after <time> (GitHub quota pause)`). Call `wait` again on exit 4. Analyzers that create their
 check only when finished are awaited when listed in `"awaitApps"`
-([setup](../../SETUP.md#3-board-and-labels)).
+([setup](../../SETUP.md#3-board-and-labels)). A listed app with no suite on the head fails after the stall time
+(`check suite NAME missing …`), a cancelled check of it fails at once; neither counts as clean.
 Recognized review traces: checks and statuses, Codex's `Running` summary (its code
 and security rows end separately: a security result comment never ends a running code
 review), bot 👀 reactions and review requests. Free-text announcements of other bots are not

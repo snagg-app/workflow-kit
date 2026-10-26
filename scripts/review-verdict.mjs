@@ -107,12 +107,12 @@ function judgeChecks(ctx, s) {
     // CI never stalls: a running check is not success however long it takes.
     if (pending) { waiting.push({ text: `check ${label}`, since: Infinity }); continue; }
     const result = check.conclusion ?? check.state;
-    // A cancelled SonarCloud analysis proves nothing itself (#847): judgeSonar then decides by the open findings of the PR, and a read it cannot make blocks.
+    // A cancelled SonarCloud analysis is no proof, even when the API reads 0 (#1060): it fails like any cancelled check, with the way out.
     const sonarCancelled = result === 'CANCELLED' && check.checkSuite?.app?.slug === 'sonarqubecloud';
-    if (!passed.has(result) && !sonarCancelled) {
+    if (!passed.has(result)) {
       s.failed = true;
       const asks = baseChecks.has(label);
-      reasons.push(`check ${label} ${result}${asks ? ` asks for the base: run board.mjs merge ${pr.number} or merge the base and push` : ''}`);
+      reasons.push(`check ${label} ${result}${asks ? ` asks for the base: run board.mjs merge ${pr.number} or merge the base and push` : ''}${sonarCancelled ? ': the analysis was cancelled and a read of 0 proves nothing; push a commit or re-run the Sonar check' : ''}`);
       if (asks) baseReasons.add(reasons.at(-1));
     }
     // Descriptions carry results such as "Review rate limited" behind a green state.
@@ -123,7 +123,7 @@ function judgeChecks(ctx, s) {
 }
 
 /** Suites without runs: a workflow that is about to report, or that failed to start. */
-function judgeSuites({ settings, commit, isOptional }, s) {
+function judgeSuites({ settings, commit, isOptional, now, pr, facts, stallMinutes }, s) {
   const { lines, waiting, reasons } = s;
   // An Actions suite without runs is a triggered workflow about to report. Other apps (Sonar, CodeRabbit,
   // Renovate …) open a suite on every push and often never run it, so they count only when the project
@@ -153,6 +153,15 @@ function judgeSuites({ settings, commit, isOptional }, s) {
       reasons.push(`check suite ${suite.app.slug} ${suite.conclusion}`);
       lines.push(`check suite ${suite.app.slug}: ${suite.conclusion}`);
     }
+  }
+  // #1060: a listed app that has no suite at all on this head never reported (its analysis was not triggered): wait for it, then fail, never pass as clean.
+  // Spelling as in optionalReviewers (app/NAME, [bot], case); the clock is the push of the head, not the commit date of a local commit.
+  const present = new Set(commit.checkSuites.nodes.map(suite => reviewerKey(suite.app?.slug)));
+  for (const slug of (settings.awaitApps ?? []).filter(slug => !isOptional(slug) && !present.has(reviewerKey(slug)))) {
+    if (now - headSetAt(pr, facts.pushLog) > stallMinutes * 60_000) {
+      s.failed = true;
+      reasons.push(`check suite ${slug} missing ${stallMinutes} minutes after the push; push a commit or trigger the ${slug} analysis`);
+    } else waiting.push({ text: `check suite ${slug} (none on this head yet)`, since: Infinity });
   }
 }
 
@@ -271,7 +280,7 @@ function judgeSonar({ pr, facts, live, after }, s) {
   const { lines, reasons } = s;
   const { comments } = facts;
   const short = pr.headRefOid.slice(0, 7);
-  for (const check of live.filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && check.conclusion !== 'SKIPPED')) {
+  for (const check of live.filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && !['SKIPPED', 'CANCELLED'].includes(check.conclusion))) { // a cancelled analysis is red already (#1060) and needs no read
     const found = facts.sonar.get(check);
     if (found.error) throw found.error;
     const { total: open, lines: findings } = found;
@@ -415,7 +424,7 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
   // Closed without merge ends the wait but is never a delivery.
   if (pr.state !== 'OPEN') return { done: true, failed: pr.state === 'CLOSED', reasons: ['PR closed without merge'], lines, pr };
   const pushed = headPushed(pr);
-  const ctx = { facts, settings, pr, now, graceMinutes, dismissStale, pushed, isOptional, commit: pr.commits.nodes[0].commit,
+  const ctx = { facts, settings, pr, now, stallMinutes, graceMinutes, dismissStale, pushed, isOptional, commit: pr.commits.nodes[0].commit,
     isOptionalCheck: check => isOptional(check.checkSuite?.app?.slug ?? check.creator?.login),
     isIgnoredCheck: check => (settings.ignoredChecks ?? []).includes(check.name ?? check.context),
     after: time => Date.parse(time) >= pushed };

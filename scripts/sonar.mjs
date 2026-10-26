@@ -12,7 +12,8 @@ export class SonarOtherPr extends Error {}
 let adapter; // (href, token) => { ok, status, text } like a fetch answer, read synchronously; unset means the real request
 export const useSonarAdapter = fake => { adapter = fake; };
 
-// The token goes only to these hosts, whatever URL a check run names.
+// The token goes only to these hosts, whatever URL a check run names. The US server (sonarqube.us) is covered: the request goes to the
+// origin of the check's own detailsUrl. The `sonar` CLI has no server option; it reads from the server of its login, and a project it does not know throws (#1060).
 const sonarHosts = ['https://sonarcloud.io', 'https://sonarqube.us'];
 const sonarListed = 10; // findings printed per analysis; the count says how many more
 const requestSeconds = 60;

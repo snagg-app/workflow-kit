@@ -80,7 +80,7 @@ function readFacts(pr, threadsOf) {
     // Per Sonar check of the head: the count and findings, or the failure to raise where the verdict reaches that check.
     sonar() {
       const checks = (pr.commits.nodes[0].commit.statusCheckRollup?.contexts.nodes ?? [])
-        .filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && check.conclusion !== 'SKIPPED');
+        .filter(check => check.checkSuite?.app?.slug === 'sonarqubecloud' && check.status === 'COMPLETED' && !['SKIPPED', 'CANCELLED'].includes(check.conclusion));
       return new Map(checks.map(check => {
         try { return [check, sonarIssues(check.detailsUrl, pr.number, env.SONAR_TOKEN)]; } catch (error) { return [check, { error }]; }
       }));
