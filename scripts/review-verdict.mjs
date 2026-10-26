@@ -123,7 +123,7 @@ function judgeChecks(ctx, s) {
 }
 
 /** Suites without runs: a workflow that is about to report, or that failed to start. */
-function judgeSuites({ settings, commit, isOptional, now, pushed, stallMinutes }, s) {
+function judgeSuites({ settings, commit, isOptional, now, pr, facts, stallMinutes }, s) {
   const { lines, waiting, reasons } = s;
   // An Actions suite without runs is a triggered workflow about to report. Other apps (Sonar, CodeRabbit,
   // Renovate …) open a suite on every push and often never run it, so they count only when the project
@@ -155,8 +155,10 @@ function judgeSuites({ settings, commit, isOptional, now, pushed, stallMinutes }
     }
   }
   // #1060: a listed app that has no suite at all on this head never reported (its analysis was not triggered): wait for it, then fail, never pass as clean.
-  for (const slug of (settings.awaitApps ?? []).filter(slug => !isOptional(slug) && !commit.checkSuites.nodes.some(suite => suite.app?.slug === slug))) {
-    if (now - pushed > stallMinutes * 60_000) {
+  // Spelling as in optionalReviewers (app/NAME, [bot], case); the clock is the push of the head, not the commit date of a local commit.
+  const present = new Set(commit.checkSuites.nodes.map(suite => reviewerKey(suite.app?.slug)));
+  for (const slug of (settings.awaitApps ?? []).filter(slug => !isOptional(slug) && !present.has(reviewerKey(slug)))) {
+    if (now - headSetAt(pr, facts.pushLog) > stallMinutes * 60_000) {
       s.failed = true;
       reasons.push(`check suite ${slug} missing ${stallMinutes} minutes after the push; push a commit or trigger the ${slug} analysis`);
     } else waiting.push({ text: `check suite ${slug} (none on this head yet)`, since: Infinity });

@@ -93,6 +93,9 @@ test('a listed analyzer with no suite at all waits, then fails, and an optional 
   const stalledVerdict = missing(listed, 30);
   assert.equal(stalledVerdict.failed, true);
   assert.match(stalledVerdict.reasons.join('\n'), /sonarqubecloud missing/);
+  const present = judge(facts({ pr: { commits: { nodes: [{ commit: { oid: 'abcdef1234', committedDate: ago(30), checkSuites: { totalCount: 1, nodes: [{ app: { slug: 'sonarqubecloud' }, status: 'COMPLETED', conclusion: 'SUCCESS', checkRuns: { totalCount: 1 } }] },
+    statusCheckRollup: { contexts: { totalCount: 1, nodes: [job(1)] } } } }] } } }), { awaitApps: ['app/SonarQubeCloud'] });
+  assert.equal(present.failed, false, 'a suite counts under any spelling of the listed name');
   assert.equal(missing({}, 30).failed, false, 'a project that lists no analyzer is unaffected');
   assert.equal(missing({ ...listed, optionalReviewers: ['sonarqubecloud'] }, 30).failed, false);
 });
