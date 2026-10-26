@@ -85,6 +85,18 @@ test('open Sonar issues are red, a failed read throws', () => {
   assert.throws(() => judge(withSonar({ error: new Error('Sonar API answered 401') })), /401/);
 });
 
+test('a listed analyzer with no suite at all waits, then fails, and an optional one never does (#1060)', () => {
+  const missing = (settings, pushedMinutesAgo) => judge(facts({ pr: { commits: { nodes: [{ commit: { oid: 'abcdef1234', committedDate: ago(pushedMinutesAgo), checkSuites: { totalCount: 0, nodes: [] },
+    statusCheckRollup: { contexts: { totalCount: 1, nodes: [job(1)] } } } }] } }, pushLog: [{ after: 'abcdef1234', timestamp: ago(pushedMinutesAgo) }] }), settings);
+  const listed = { awaitApps: ['sonarqubecloud'] };
+  assert.equal(missing(listed, 5).done, false, 'young head: still waiting');
+  const stalledVerdict = missing(listed, 30);
+  assert.equal(stalledVerdict.failed, true);
+  assert.match(stalledVerdict.reasons.join('\n'), /sonarqubecloud missing/);
+  assert.equal(missing({}, 30).failed, false, 'a project that lists no analyzer is unaffected');
+  assert.equal(missing({ ...listed, optionalReviewers: ['sonarqubecloud'] }, 30).failed, false);
+});
+
 test('a cancelled Sonar analysis stays red, with 0 findings too (#1060)', () => {
   const cancelled = { ...sonarCheck, conclusion: 'CANCELLED' };
   const withCancelled = answer => judge(facts({ contexts: [job(1), cancelled], sonar: new Map([[cancelled, answer]]) }));

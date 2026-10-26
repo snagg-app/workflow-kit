@@ -123,7 +123,7 @@ function judgeChecks(ctx, s) {
 }
 
 /** Suites without runs: a workflow that is about to report, or that failed to start. */
-function judgeSuites({ settings, commit, isOptional }, s) {
+function judgeSuites({ settings, commit, isOptional, now, pushed, stallMinutes }, s) {
   const { lines, waiting, reasons } = s;
   // An Actions suite without runs is a triggered workflow about to report. Other apps (Sonar, CodeRabbit,
   // Renovate …) open a suite on every push and often never run it, so they count only when the project
@@ -153,6 +153,13 @@ function judgeSuites({ settings, commit, isOptional }, s) {
       reasons.push(`check suite ${suite.app.slug} ${suite.conclusion}`);
       lines.push(`check suite ${suite.app.slug}: ${suite.conclusion}`);
     }
+  }
+  // #1060: a listed app that has no suite at all on this head never reported (its analysis was not triggered): wait for it, then fail, never pass as clean.
+  for (const slug of (settings.awaitApps ?? []).filter(slug => !isOptional(slug) && !commit.checkSuites.nodes.some(suite => suite.app?.slug === slug))) {
+    if (now - pushed > stallMinutes * 60_000) {
+      s.failed = true;
+      reasons.push(`check suite ${slug} missing ${stallMinutes} minutes after the push; push a commit or trigger the ${slug} analysis`);
+    } else waiting.push({ text: `check suite ${slug} (none on this head yet)`, since: Infinity });
   }
 }
 
@@ -415,7 +422,7 @@ export function judgeReview(facts, settings, { stallMinutes, now, graceMinutes, 
   // Closed without merge ends the wait but is never a delivery.
   if (pr.state !== 'OPEN') return { done: true, failed: pr.state === 'CLOSED', reasons: ['PR closed without merge'], lines, pr };
   const pushed = headPushed(pr);
-  const ctx = { facts, settings, pr, now, graceMinutes, dismissStale, pushed, isOptional, commit: pr.commits.nodes[0].commit,
+  const ctx = { facts, settings, pr, now, stallMinutes, graceMinutes, dismissStale, pushed, isOptional, commit: pr.commits.nodes[0].commit,
     isOptionalCheck: check => isOptional(check.checkSuite?.app?.slug ?? check.creator?.login),
     isIgnoredCheck: check => (settings.ignoredChecks ?? []).includes(check.name ?? check.context),
     after: time => Date.parse(time) >= pushed };
