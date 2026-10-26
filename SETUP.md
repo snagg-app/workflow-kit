@@ -70,7 +70,8 @@ The script preserves an existing policy rather than choosing one.
 
 If an analyzer reports through a GitHub App that creates its check only when it
 finishes (SonarCloud), list the app slug in `"awaitApps"`, for example
-`"awaitApps": ["sonarqubecloud"]`, so `board.mjs wait` waits for it. A review bot the
+`"awaitApps": ["sonarqubecloud"]`, so `board.mjs wait` waits for it. A listed app with no check suite at all on the head
+is waited for until the stall time, then `done` and `wait` fail ("app missing"); a cancelled check of it fails at once. A review bot the
 project does not depend on (CodeRabbit on a free plan that is mostly rate limited) goes in
 `"optionalReviewers"`, a list of bot logins or app slugs, for example
 `"optionalReviewers": ["coderabbitai"]`: `board.mjs wait` and `done` never
