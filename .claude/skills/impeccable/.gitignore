@@ -16,6 +16,7 @@
 /scripts/command-metadata.json
 /scripts/data/font-index-failures.json
 /scripts/data/font-index.json
+/scripts/engine-checksums.txt
 /scripts/impeccable
 /scripts/impeccable.cmd
 /scripts/live-browser-dom.js
