@@ -6,7 +6,8 @@ import { fixture, test } from './board-fixture.mjs';
 // quota-wait returns once the GraphQL quota has points again (the fake gh reports resets one to three seconds away).
 
 test('quota-wait returns at once while the quota is free and sleeps through a refusal until its reset', t => {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, env } = fixture(t);
+  env.BOARD_SLEEP_SCALE = '1'; // these sleep until a reset on the real clock
   writeFileSync(join(checkout, 'quota-left'), '4000');
   let started = Date.now();
   let result = run('quota-wait');
@@ -22,7 +23,8 @@ test('quota-wait returns at once while the quota is free and sleeps through a re
 });
 
 test('quota-wait reports the rateLimit of the answer body, not stale headers (#625)', t => {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, env } = fixture(t);
+  env.BOARD_SLEEP_SCALE = '1'; // these sleep until a reset on the real clock
   writeFileSync(join(checkout, 'quota-left'), '4979'); // headers claim plenty
   writeFileSync(join(checkout, 'quota-body'), '10'); // the real query says almost nothing is left
   const result = run('quota-wait', '--max-minutes', '0.1');
@@ -30,7 +32,8 @@ test('quota-wait reports the rateLimit of the answer body, not stale headers (#6
 });
 
 test('quota-wait does not report DONE for a successful HTTP response with GraphQL errors', t => {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, env } = fixture(t);
+  env.BOARD_SLEEP_SCALE = '1'; // these sleep until a reset on the real clock
   writeFileSync(join(checkout, 'limited-200'), '');
   const started = Date.now();
   const result = run('quota-wait');
@@ -39,7 +42,8 @@ test('quota-wait does not report DONE for a successful HTTP response with GraphQ
 });
 
 test('quota-wait ends "still waiting" with the reset time when it would outlast --max-minutes, also below the points wait needs', t => {
-  const { checkout, run } = fixture(t);
+  const { checkout, run, env } = fixture(t);
+  env.BOARD_SLEEP_SCALE = '1'; // these sleep until a reset on the real clock
   writeFileSync(join(checkout, 'limited'), '');
   const refused = run('quota-wait', '--max-minutes', '0.001');
   assert.equal(refused.status, 4, refused.stdout + refused.stderr);

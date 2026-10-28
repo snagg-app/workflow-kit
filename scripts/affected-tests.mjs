@@ -24,11 +24,14 @@ const tests = 'scripts/tests/';
 const ALL = /\.test\.mjs$/;
 const BOARD = /^board-.*\.test\.mjs$/;
 const NOT_BOARD = /^(?!board-).*\.test\.mjs$/;
+// Test files split to run side by side (#1067): one name stands for all parts.
+const KIT_SETUP = /^kit-setup(-[a-z]+)?\.test\.mjs$/;
+const SETUP = /^setup(-committed|-choice)?\.test\.mjs$/;
 
 // Source path pattern -> test files (names inside scripts/tests, or a pattern over those names).
 // A changed test file always runs itself; a file that matches no row is reported on stderr.
 export const TABLE = [
-  [/^scripts\/(board(-[a-z]+)*|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker)|fake-gh)\.mjs$/, [BOARD]],
+  [/^scripts\/(board(-[a-z]+)*|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker|done-fixture)|fake-gh)\.mjs$/, [BOARD]],
   [/^scripts\/base-red\.mjs$/, [BOARD, 'base-red.test.mjs', 'affected-tests.test.mjs']],
   [/^scripts\/claim\.mjs$|^scripts\/tests\/claim\.test\.mjs$/, [BOARD, 'claim.test.mjs']],
   [/^scripts\/(review-facts|review-verdict|sonar)\.mjs$|^scripts\/tests\/fake-sonar\.mjs$/, [BOARD, 'review-verdict.test.mjs']],
@@ -45,31 +48,32 @@ export const TABLE = [
   [/^scripts\/checkout-root\.mjs$/, [ALL]],
   [/^scripts\/(provider-links|write-guard)\.mjs$/, [NOT_BOARD]],
   [/^scripts\/lock\.mjs$/, ['provider.test.mjs', 'ponytail-hooks.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs']],
-  [/^scripts\/tests\/fixtures\.mjs$/, ['git-hooks', 'kit-init-hook', 'kit-setup', 'ponytail-batch', 'ponytail-hooks', 'renovate-regenerate', 'setup'].map(n => `${n}.test.mjs`)],
+  [/^scripts\/tests\/fixtures\.mjs$/, ['git-hooks', 'kit-init-hook', 'ponytail-batch', 'ponytail-hooks', 'renovate-regenerate'].map(n => `${n}.test.mjs`).concat(KIT_SETUP, SETUP)],
+  [/^scripts\/tests\/kit-setup-fixture\.mjs$/, [KIT_SETUP]],
   [/^scripts\/install-git-hooks\.mjs$/, ['git-hooks.test.mjs', 'kit-init-hook.test.mjs']],
-  [/^scripts\/project-profile\.mjs$/, ['entrypoints.test.mjs', 'kit-setup.test.mjs', 'ponytail-hooks.test.mjs']],
+  [/^scripts\/project-profile\.mjs$/, ['entrypoints.test.mjs', KIT_SETUP, 'ponytail-hooks.test.mjs']],
   [/^scripts\/(init-project|agents)\.mjs$|^scripts\/hook-commands\.json$|^templates\//, ['entrypoints.test.mjs', 'kit-init-hook.test.mjs', 'impeccable-update.test.mjs', 'matt-pocock.test.mjs', 'claim.test.mjs']],
-  [/^scripts\/provider\.mjs$/, ['provider.test.mjs', 'ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', 'matt-pocock.test.mjs', 'setup.test.mjs', 'impeccable-update.test.mjs']],
-  [/^scripts\/provider-ponytail\.mjs$/, ['ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', 'setup.test.mjs']],
+  [/^scripts\/provider\.mjs$/, ['provider.test.mjs', 'ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', 'matt-pocock.test.mjs', SETUP, 'impeccable-update.test.mjs']],
+  [/^scripts\/provider-ponytail\.mjs$/, ['ponytail-batch.test.mjs', 'ponytail-hooks.test.mjs', SETUP]],
   [/^scripts\/(ponytail-patch\.mjs|ponytail\/)/, ['update-ponytail.test.mjs', 'ponytail-batch.test.mjs']],
   [/^scripts\/versions\.json$|^\.agents\/hooks\/|^\.github\/hooks\/ponytail\.json$/, ['ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
-  [/^scripts\/kit\.mjs$/, ['kit-setup.test.mjs']],
-  [/^scripts\/github-board\.mjs$/, ['github-board.test.mjs', 'kit-setup.test.mjs', 'setup-github.test.mjs']],
-  [/^scripts\/setup-github\.mjs$/, ['github-board.test.mjs', 'kit-setup.test.mjs', 'setup-github.test.mjs']],
+  [/^scripts\/kit\.mjs$/, [KIT_SETUP]],
+  [/^scripts\/github-board\.mjs$/, ['github-board.test.mjs', KIT_SETUP, 'setup-github.test.mjs']],
+  [/^scripts\/setup-github\.mjs$/, ['github-board.test.mjs', KIT_SETUP, 'setup-github.test.mjs']],
   [/^scripts\/hooks\.mjs$/, ['entrypoints.test.mjs', 'kit-init-hook.test.mjs', 'provider-list.test.mjs']],
   [/^scripts\/versions\.mjs$/, ['entrypoints.test.mjs', 'matt-pocock.test.mjs', 'ponytail-batch.test.mjs']],
   [/^scripts\/kit-hook\.mjs$/,['kit-init-hook.test.mjs', 'ponytail-hooks.test.mjs', 'impeccable-hooks.test.mjs']],
   [/^scripts\/run-program\.mjs$/, [BOARD, 'git-tool.test.mjs']],
-  [/^scripts\/git-tool\.mjs$/, [BOARD, 'git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', 'kit-setup.test.mjs']], // board-checkout.mjs imports it
-  [/^scripts\/(kit-check|kit-entry)\.mjs$/, ['git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', 'kit-setup.test.mjs']],
+  [/^scripts\/git-tool\.mjs$/, [BOARD, 'git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', KIT_SETUP]], // board-checkout.mjs imports it
+  [/^scripts\/(kit-check|kit-entry)\.mjs$/, ['git-tool.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs', KIT_SETUP]],
   [/^scripts\/plugin-skills\.mjs$/, ['skill-core.test.mjs']],
   [/^scripts\/(impeccable-release\.mjs|impeccable\/)|^\.vendor\/impeccable$/, ['impeccable-update.test.mjs']],
   [/^scripts\/provider-impeccable\.mjs$/, ['provider.test.mjs', 'impeccable-update.test.mjs', 'impeccable-hooks.test.mjs', 'matt-pocock.test.mjs']],
-  [/^scripts\/(provider-matt-pocock|setup-skills|code-review-failure-paths)\.mjs$/, ['matt-pocock.test.mjs', 'setup.test.mjs']],
+  [/^scripts\/(provider-matt-pocock|setup-skills|code-review-failure-paths)\.mjs$/, ['matt-pocock.test.mjs', SETUP]],
   [/^\.github\/skills\/|^\.vendor\/matt-pocock-skills$/, ['matt-pocock.test.mjs']],
   [/^scripts\/check-submodule-sources\.mjs$|^\.gitmodules$/, ['check-submodule-sources.test.mjs']],
   [/^\.github\/workflows\/renovate-regenerate\.yml$|^renovate\.json$/, ['renovate-regenerate.test.mjs']],
-  [/^scripts\/keep-committed\.mjs$/, ['matt-pocock.test.mjs', 'setup.test.mjs']], // used by setup-skills.mjs
+  [/^scripts\/keep-committed\.mjs$/, ['matt-pocock.test.mjs', SETUP]], // used by setup-skills.mjs
   [/^scripts\/provider-list\.mjs$/, ['provider-list.test.mjs', 'provider.test.mjs', 'project-profile.test.mjs']],
   [/^scripts\/measure-base-load\.mjs$/, ['skill-links.test.mjs']], // no own test; measures the shared skills and hooks
 ];

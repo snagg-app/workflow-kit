@@ -3,7 +3,9 @@ import { delimiter, dirname, resolve } from 'node:path';
 import { runProgram } from './run-program.mjs';
 
 export function createProcess({ env: base = process.env } = {}) {
-  const sleep = seconds => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000);
+  // BOARD_SLEEP_SCALE (a number, default 1) shortens every pause; the board tests set 0 so retries and head polls do not wait in real time (#1067).
+  const scale = /^\d+(\.\d+)?$/.test(base.BOARD_SLEEP_SCALE ?? '') ? Number(base.BOARD_SLEEP_SCALE) : 1;
+  const sleep = seconds => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, seconds * 1000 * scale);
 
   /** One shell command of the project file in `cwd`, output passed through; throws on a non-zero exit. `execPath` is `git --exec-path`. */
   function runShell(execPath, cwd, command, env) {
