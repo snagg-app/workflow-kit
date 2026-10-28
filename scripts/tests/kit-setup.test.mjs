@@ -63,7 +63,7 @@ test('importing kit.mjs runs no step; kitSetup returns the result instead of exi
   writeFileSync(join(project, 'AGENTS.md'), 'own\n');
   symlinkSync(outside, join(project, '.github'), 'junction');
   const seen = [];
-  const result = await kitSetup(project, { onStep: step => seen.push(step.title) });
+  const result = await kitSetup(project, { onStep: step => seen.push(step.title), nodeSystem: () => { throw new Error('the node step must not run before the failing step'); } });
   assert.equal(result.exitCode, 1);
   assert.equal(result.steps.at(-1).state, 'error');
   assert.deepEqual(seen, result.steps.map(step => step.title));

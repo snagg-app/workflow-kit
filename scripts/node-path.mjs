@@ -2,8 +2,8 @@
 // Aufruf: import { ensureNode, realSystem } (kit.mjs setup). Die Entscheidung steht in reinen Funktionen; Registry, Profile, winget und brew liegen hinter `system`, Tests geben eine Attrappe.
 // Nutzen: Nur wenn Node fehlt, wird einmal der stabile Standard-Ordner des Versionsmanagers (fnm) eingetragen oder Node installiert; ein zweiter Lauf ändert nichts.
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path, { dirname, join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import path, { join } from 'node:path';
 import { nodeTooOld } from './versions.mjs';
 
 export const BLOCK_START = '# workflow-kit node (begin)';
@@ -20,18 +20,19 @@ export function addPathEntry(value, entry, { sep = ';', fold = false } = {}) {
 /** The profile text with the marked block for `dir` (replaced when present, appended otherwise). */
 export function withProfileBlock(text, dir) {
   const block = `${BLOCK_START}\nexport PATH="$PATH:${dir}"\n${BLOCK_END}\n`;
-  const from = text.indexOf(BLOCK_START), to = text.indexOf(BLOCK_END);
+  // The last start before the end marker: a stray start marker never swallows the lines after it.
+  const to = text.indexOf(BLOCK_END), from = text.lastIndexOf(BLOCK_START, to);
   if (from >= 0 && to > from) return text.slice(0, from) + block + text.slice(to + BLOCK_END.length).replace(/^\n/, '');
   return text + (text && !text.endsWith('\n') ? '\n' : '') + block;
 }
 
 /** Folders that hold the stable default Node of fnm (and Homebrew on macOS), in the order to try. */
 export function nodeDirCandidates({ platform, env, home }) {
-  const win = platform === 'win32', join = win ? path.win32.join : path.posix.join;
+  const win = platform === 'win32', pjoin = win ? path.win32.join : path.posix.join;
   const roots = win
-    ? [env.FNM_DIR, env.APPDATA && join(env.APPDATA, 'fnm')]
-    : [env.FNM_DIR, env.XDG_DATA_HOME && join(env.XDG_DATA_HOME, 'fnm'), join(home, '.local/share/fnm'), join(home, 'Library/Application Support/fnm')];
-  const dirs = roots.filter(Boolean).map(root => join(root, 'aliases/default', win ? '' : 'bin'));
+    ? [env.FNM_DIR, env.APPDATA && pjoin(env.APPDATA, 'fnm')]
+    : [env.FNM_DIR, env.XDG_DATA_HOME && pjoin(env.XDG_DATA_HOME, 'fnm'), pjoin(home, '.local/share/fnm'), pjoin(home, 'Library/Application Support/fnm')];
+  const dirs = roots.filter(Boolean).map(root => pjoin(root, 'aliases/default', win ? '' : 'bin'));
   if (platform === 'darwin') dirs.push('/opt/homebrew/bin', '/usr/local/bin');
   return dirs.map(dir => dir.replace(/[\\/]+$/, ''));
 }
@@ -44,7 +45,7 @@ export function profileFiles({ platform, home, hasZsh, exists }) {
 }
 
 const WINGET = ['winget', 'install', '--id', 'OpenJS.NodeJS.LTS', '-e', '--silent', '--accept-package-agreements', '--accept-source-agreements'];
-const FNM_INSTALL = 'curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell && ~/.local/share/fnm/fnm install --lts && ~/.local/share/fnm/fnm default lts-latest';
+const FNM_INSTALL = 'curl -fsSL https://fnm.vercel.app/install | bash -s -- --skip-shell --install-dir ~/.local/share/fnm && ~/.local/share/fnm/fnm install --lts && ~/.local/share/fnm/fnm default lts-latest';
 
 /** The manual command for the person when the automatic route failed. */
 export const manualCommand = platform => platform === 'win32' ? WINGET.join(' ') : platform === 'darwin' ? 'brew install node' : FNM_INSTALL;
@@ -59,7 +60,8 @@ export function ensureNode(sys) {
   const dirs = () => nodeDirCandidates(sys);
   let changed = '';
   let dir = dirs().find(candidate => sys.hasNode(candidate));
-  if (!dir) { changed = sys.install() ?? ''; dir = dirs().find(candidate => sys.hasNode(candidate)); }
+  // A failed install (winget needs elevation, no network) ends in the red result with the manual command below.
+  if (!dir) { try { changed = sys.install() ?? ''; } catch { /* reported below */ } dir = dirs().find(candidate => sys.hasNode(candidate)); }
   // After an install the folder may already be on the PATH (winget, brew): add it only when a fresh shell still misses node.
   if (dir && !(changed && good())) changed = [changed, sys.addToPath(dir)].filter(Boolean).join('; ');
   if (good()) return { state: 'ok', note: `${changed || 'node jetzt gefunden'}; neue Shells/Sitzungen nötig` };
@@ -69,7 +71,8 @@ export function ensureNode(sys) {
 const sh = (file, args, options = {}) => execFileSync(file, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 600000, ...options }).trim();
 const tryRun = (...call) => { try { return sh(...call); } catch { return ''; } };
 const REG = { user: 'HKCU:\\Environment', machine: 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment' };
-const readRegistry = hive => tryRun('powershell', ['-NoProfile', '-Command', `(Get-Item '${REG[hive]}').GetValue('Path','','DoNotExpandEnvironmentNames')`]);
+// UTF-8 out, so umlauts in a PATH entry survive the round trip; `run` = sh throws on a failed read (the write must not go on with an empty value).
+const readRegistry = (hive, run = tryRun) => run('powershell', ['-NoProfile', '-Command', `[Console]::OutputEncoding=[Text.Encoding]::UTF8; (Get-Item '${REG[hive]}').GetValue('Path','','DoNotExpandEnvironmentNames')`]);
 
 /** The real machine: Windows registry via PowerShell, profiles on macOS/Linux, winget / brew / the fnm installer. */
 export function realSystem({ platform = process.platform, env = process.env, home = env.HOME ?? env.USERPROFILE } = {}) {
@@ -91,7 +94,7 @@ export function realSystem({ platform = process.platform, env = process.env, hom
     },
     addToPath(dir) {
       if (win) {
-        const { value, changed } = addPathEntry(readRegistry('user'), dir, { fold: true });
+        const { value, changed } = addPathEntry(readRegistry('user', sh), dir, { fold: true });
         if (!changed) return '';
         // ExpandString keeps %VAR% entries; the dummy variable write broadcasts the change to running programs.
         sh('powershell', ['-NoProfile', '-Command', "Set-ItemProperty -Path 'HKCU:\\Environment' -Name Path -Value $env:KIT_NEW_PATH -Type ExpandString; [Environment]::SetEnvironmentVariable('KIT_PATH_REFRESH',$null,'User')"], { env: { ...env, KIT_NEW_PATH: value } });
@@ -105,7 +108,6 @@ export function realSystem({ platform = process.platform, env = process.env, hom
     install() {
       if (win) { sh(WINGET[0], WINGET.slice(1)); return 'Node per winget installiert'; }
       if (platform === 'darwin' && tryRun('sh', ['-c', 'command -v brew || ls /opt/homebrew/bin/brew'])) { sh('sh', ['-c', 'brew install node || /opt/homebrew/bin/brew install node']); return 'Node per brew installiert'; }
-      mkdirSync(dirname(join(home, '.local/share/fnm')), { recursive: true });
       sh('bash', ['-c', FNM_INSTALL]);
       return 'Node per fnm installiert (~/.local/share/fnm)';
     },

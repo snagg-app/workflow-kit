@@ -14,6 +14,8 @@ test('the profile block is written once, replaced when the folder changes, and t
   assert.equal(withProfileBlock(once, '/n/bin'), once);
   const moved = withProfileBlock(once, '/m/bin');
   assert.equal(moved.match(/workflow-kit node \(begin\)/g).length, 1);
+  const stray = withProfileBlock('# workflow-kit node (begin)\nmine\n', '/n/bin');
+  assert.ok(withProfileBlock(stray, '/m/bin').includes('mine\n'), 'a stray start marker never swallows user lines');
   assert.ok(moved.startsWith('export A=1\n') && moved.includes('/m/bin') && !moved.includes('/n/bin'));
 });
 
