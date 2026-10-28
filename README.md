@@ -108,7 +108,7 @@ They install and update themselves: at SessionStart the module returns at once a
 detached process (one run per machine and function through the provider's own lock, log in
 `~/.ponytail/workflow-kit/.install.log`). A missing version, a changed version after a kit update or a removed
 pinned Node is repaired at the next session start and active from the one after. Needs `node` on PATH;
-without it the one-line entry prints a clear message and ends with success. By hand, from the project:
+without it the one-line entry prints a clear message and ends with success. The bash entry first looks for fnm's Node (`FNM_DIR`, `~/AppData/Roaming/fnm`, `~/.local/share/fnm`), because Claude starts hooks without the PATH of your shell (#1064). By hand, from the project:
 `node .vendor/workflow-kit/scripts/kit.mjs setup` (it runs both installers).
 
 Agents do not run them ([agent rules](AGENT_RULES.md#hooks)); trust stays personal. Review and trust
