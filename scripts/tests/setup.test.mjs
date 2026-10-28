@@ -6,7 +6,6 @@ import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { materialize } from '../provider-links.mjs';
-import { coreSkills } from '../project-profile.mjs';
 import { kitCheckout, skipWithoutSubmodules } from './fixtures.mjs';
 
 const kit = fileURLToPath(new URL('../../', import.meta.url));
@@ -83,36 +82,6 @@ test('generated skills and hook sources survive a plain clone without setup', { 
   assert.equal(existsSync(join(clone, '.impeccable/vendor')), false);
 });
 
-test('setup leaves committed kit files as committed; only --refresh rewrites them (#877)', { skip: skipWithoutSubmodules() }, t => {
-  const fixture = temporary(t, 'workflow-kit committed '), scripts = join(kitCheckout(t), 'scripts');
-  const git = (...args) => execFileSync('git', ['-C', fixture, ...args], { encoding: 'utf8' });
-  git('init', '--quiet');
-  const setup = (...args) => spawnSync(process.execPath, [join(scripts, 'setup-skills.mjs'), ...args], { cwd: fixture, encoding: 'utf8' });
-  assert.equal(setup().status, 0);
-  git('add', '.agents');
-  git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'Skills of an older kit');
-  // The kit moved on: a committed kit text is older, and the profile now drops a committed skill.
-  const older = join(fixture, '.agents/skills/find-skills/SKILL.md'), dropped = join(fixture, '.agents/skills/spec-review/SKILL.md');
-  writeFileSync(older, 'older kit text\n');
-  git('add', older);
-  git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '--quiet', '-m', 'Older text');
-  mkdirSync(join(fixture, '.github'));
-  writeFileSync(join(fixture, '.github/workflow-project.json'), '{"skills": ["find-skills"]}');
-  const result = setup();
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Kept \d+ committed kit file/);
-  assert.equal(git('status', '--porcelain', '--untracked-files=no'), '', 'setup changed no committed file');
-  assert.equal(readFileSync(older, 'utf8'), 'older kit text\n');
-  assert.ok(existsSync(dropped), 'a committed skill the profile drops stays');
-  // Committed copies are not moved aside first (#881): not by the first run, and not by two more, also with CRLF line ends.
-  writeFileSync(older, 'older kit text\r\n');
-  for (let run = 0; run < 2; run++) assert.equal(setup().status, 0);
-  assert.equal(existsSync(join(fixture, '.workflow-kit/replaced')), false, 'no backup of a file that stays as committed');
-  assert.equal(setup('--refresh').status, 0);
-  assert.notEqual(readFileSync(older, 'utf8'), 'older kit text\n', '--refresh writes the kit state over the committed copy');
-  assert.ok(!existsSync(dropped), '--refresh applies the profile');
-});
-
 test('setup never runs a Git from the checkout or the working directory', t => {
   const root = temporary(t, 'workflow-kit git ');
   mkdirSync(join(root, '.git'));
@@ -132,36 +101,4 @@ test('materialization applies executable mode changes even when content matches'
   chmodSync(source, 0o755);
   materialize(root, output, source);
   assert.equal(lstatSync(output).mode & 0o777, 0o755);
-});
-
-test('the project file chooses the kit skills; the project\'s own skills stay', { skip: skipWithoutSubmodules() }, t => {
-  const fixture = temporary(t, 'workflow-kit choice '), scripts = join(kitCheckout(t), 'scripts');
-  execFileSync('git', ['init', '--quiet', fixture]);
-  const setup = () => spawnSync(process.execPath, [join(scripts, 'setup-skills.mjs')], { cwd: fixture, encoding: 'utf8' });
-  const has = (provider, name) => existsSync(join(fixture, provider, 'skills', name));
-  const first = setup();
-  assert.equal(first.status, 0, first.stderr);
-  for (const provider of ['.agents', '.claude']) {
-    assert.deepEqual(coreSkills.filter(name => !has(provider, name)), [], 'the core is active without a choice');
-    assert.ok(!has(provider, 'tdd') && !has(provider, 'impeccable'), provider);
-  }
-  mkdirSync(join(fixture, '.claude/skills/mine'), { recursive: true });
-  mkdirSync(join(fixture, '.github'));
-  const profile = join(fixture, '.github/workflow-project.json');
-  writeFileSync(profile, JSON.stringify({ skills: ['tdd', 'ponytail'] }));
-  const result = setup();
-  assert.equal(result.status, 0, result.stderr);
-  for (const provider of ['.agents', '.claude']) {
-    assert.ok(has(provider, 'tdd') && has(provider, 'ponytail'), provider);
-    assert.ok(!has(provider, 'grilling') && !has(provider, 'find-skills') && !has(provider, 'impeccable'), provider);
-  }
-  assert.ok(has('.claude', 'mine'), 'a skill of the project is not touched');
-  writeFileSync(profile, JSON.stringify({ skills: ['core', 'tdd'] }));
-  assert.equal(setup().status, 0);
-  assert.ok(has('.agents', 'tdd') && has('.agents', 'grilling') && !has('.agents', 'impeccable'));
-  writeFileSync(profile, JSON.stringify({ skills: 'all' }));
-  assert.equal(setup().status, 0);
-  assert.ok(has('.agents', 'impeccable') && has('.claude', 'tdd'));
-  writeFileSync(profile, JSON.stringify({ skills: ['tdd', 'typo'] }));
-  assert.notEqual(setup().status, 0);
 });

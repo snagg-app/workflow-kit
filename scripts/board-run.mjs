@@ -104,12 +104,12 @@ async function runCall({ argv: call, env, cwd, io }) {
   // `new` has no issue yet and assigns the number it creates.
   const number = Number(String(args.words[0]).replace(/^#/, ''));
   const gh = externalToolIn(env, 'gh', cwd, projectDirectory);
-  const { sleep, runShell } = createProcess({ env });
+  const { sleep, clockSleep, runShell } = createProcess({ env });
   const checkout = createCheckout({ projectDirectory, sleep, env });
   const { git, gitAt, localHead } = checkout;
 
   const startedAt = Date.now();
-  const github = createGithub({ tool: gh, reserve: sleepers[command], pauses: command === 'wait', projectDirectory, sleep, env, say: output.diagnostic });
+  const github = createGithub({ tool: gh, reserve: sleepers[command], pauses: command === 'wait', projectDirectory, sleep: clockSleep, env, say: output.diagnostic });
   const { graphql, rest, restAll } = github;
 
   /** The issue lives in another repository when --issue-repo says so: its board and statuses replace the project's (read once, before the modules are made). */
