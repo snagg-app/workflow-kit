@@ -102,7 +102,11 @@ export function realSystem({ platform = process.platform, env = process.env, hom
       }
       const hasZsh = !!tryRun('sh', ['-c', 'command -v zsh']);
       const files = profileFiles({ platform, home, hasZsh, exists: existsSync });
-      for (const file of files) writeFileSync(file, withProfileBlock(existsSync(file) ? readFileSync(file, 'utf8') : '', dir));
+      for (const file of files) {
+        let text = '';
+        try { text = readFileSync(file, 'utf8'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        writeFileSync(file, withProfileBlock(text, dir));
+      }
       return `Profil ergänzt (${files.join(', ')}): ${dir}`;
     },
     install() {
