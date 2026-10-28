@@ -21,7 +21,7 @@ export function setup(t) {
   const kit = kitCheckout(t), project = temporary(t, 'kit setup project '), home = temporary(t, 'kit setup home ');
   execFileSync('git', ['init', '--quiet', project]);
   // No network: the Impeccable engine download fails fast and counts as an open step.
-  const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9' };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, IMPECCABLE_DOWNLOAD_BASE: 'http://127.0.0.1:9', KIT_NODE_SETUP: 'skip' };
   const run = (extra = {}) => spawnSync(process.execPath, [join(kit, 'scripts/kit.mjs'), '--cwd', project, 'setup'], { encoding: 'utf8', env: { ...env, ...extra } });
   return { project, home, run, env };
 }

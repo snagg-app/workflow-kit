@@ -11,6 +11,7 @@ import { initProject } from './init-project.mjs';
 import { keepCommitted } from './keep-committed.mjs';
 import { installGitHooks } from './install-git-hooks.mjs';
 import { kitCheck, kitEnvironment, modulesCheck } from './kit-check.mjs';
+import { ensureNode, realSystem } from './node-path.mjs';
 import { pluginSkills } from './plugin-skills.mjs';
 import { activeSkills, projectFeatures, readProfile } from './project-profile.mjs';
 import { featureProviders } from './provider-list.mjs';
@@ -36,7 +37,7 @@ export function checkKit(root) {
  * - exitCode: 1 after an error (the first failing local step ends the run), else 0.
  * `onStep` gets each step as soon as it is done, so a caller can show progress during long steps.
  */
-export async function kitSetup(root, { onStep = () => {}, refresh = false } = {}) {
+export async function kitSetup(root, { onStep = () => {}, refresh = false, nodeSystem = realSystem } = {}) {
   const profile = join(root, '.github/workflow-project.json');
   // `kit setup` reads the profile once and hands it to the steps; a broken one fails the first step that needs it, as before.
   let read;
@@ -69,6 +70,13 @@ export async function kitSetup(root, { onStep = () => {}, refresh = false } = {}
   });
   step(`skills for ${agentLabels()}`, true, async log => { await setupSkills({ log, profile: current(), refresh }); return ok(); });
   step('git hooks (.githooks)', true, log => { const { ready, reason } = installGitHooks({ root, log }); return ready ? ok() : open(reason); });
+  // Hooks run in a non-interactive shell: node must be found there (#1068). KIT_NODE_SETUP=skip is for tests and CI.
+  step('node in a non-interactive shell', true, () => {
+    if (process.env.KIT_NODE_SETUP === 'skip') return ok('skipped (KIT_NODE_SETUP=skip)');
+    const result = ensureNode(nodeSystem());
+    if (result.state === 'error') throw new Error(result.hint);
+    return ok(result.note);
+  });
   // A function the project does not use is not installed (no download); its hook entries are already gone from init-project.
   for (const provider of featureProviders().filter(provider => provider.install))
     step(`${provider.label} hooks`, false, async log => {

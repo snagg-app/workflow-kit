@@ -73,6 +73,7 @@ export const TABLE = [
   [/^\.github\/skills\/|^\.vendor\/matt-pocock-skills$/, ['matt-pocock.test.mjs']],
   [/^scripts\/check-submodule-sources\.mjs$|^\.gitmodules$/, ['check-submodule-sources.test.mjs']],
   [/^\.github\/workflows\/renovate-regenerate\.yml$|^renovate\.json$/, ['renovate-regenerate.test.mjs']],
+  [/^scripts\/node-path\.mjs$/, ['node-path.test.mjs', SETUP]],
   [/^scripts\/keep-committed\.mjs$/, ['matt-pocock.test.mjs', SETUP]], // used by setup-skills.mjs
   [/^scripts\/provider-list\.mjs$/, ['provider-list.test.mjs', 'provider.test.mjs', 'project-profile.test.mjs']],
   [/^scripts\/measure-base-load\.mjs$/, ['skill-links.test.mjs']], // no own test; measures the shared skills and hooks
