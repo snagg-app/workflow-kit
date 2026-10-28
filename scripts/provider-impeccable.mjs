@@ -81,7 +81,7 @@ const self = {
         mkdirSync(dirname(target), { recursive: true });
         copyFileSync(join(c.source, file), target);
         // Match checkout line endings, including Windows command files, for stable regeneration.
-        if (/(?:\.(?:md|json|js|toml|cmd|ya?ml)|\/(?:LICENSE|VERSION|impeccable))$/.test(file)) {
+        if (/(?:\.(?:md|json|js|toml|cmd|txt|ya?ml)|\/(?:LICENSE|VERSION|impeccable))$/.test(file)) {
           let content = c.text(target);
           if (/\/reference\/(?:extract|harden|optimize)\.md$/.test(file))
             content = content.split('\n').map(line => line.trimEnd()).join('\n').trimEnd() + '\n';
