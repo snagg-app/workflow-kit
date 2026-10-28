@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **Die lokalen Kit-Tests sind viel schneller: keine Testdatei dauert mehr als 30 Sekunden, die ganze Suite etwa eine Minute statt fünf (#1067).** Der größte Bremser war `done` in den Tests: Es wartete bei jedem Test mit unverändertem PR-Kopf 25 Sekunden auf GitHub. Die Board-Tests setzen jetzt `BOARD_SLEEP_SCALE=0`, damit Pausen nicht echt abgewartet werden (ohne diese Variable ändert sich nichts). Die großen Testdateien für `done`, `start`, `kit setup` und `setup` sind in kleinere Dateien geteilt, die `node --test` und `affected-tests` nebeneinander laufen lassen. Kein Test wurde gelöscht oder abgeschwächt.
+
 - **`done` verlangt einen Review bei Änderungen über mehrere Module, und die Sonar-Zahl kommt nicht mehr aus der Check-Zusammenfassung (#1055).** Neues Profilfeld `reviewModuleRoots` (Ordner, deren Unterordner Module oder Adapter sind): Berührt der Diff mindestens 3 solche Module, verlangt `done` wie bei `reviewRequiredPaths` einen `code-review`. Ohne `SONAR_TOKEN` liest das Kit die offenen Sonar-Issues jetzt mit `sonar list issues` statt aus „0 New issues“ (das zählt nur neuen Code und hat dreimal offene Issues verdeckt). Fehlen Token und Anmeldung, steht eine Zeile mit der Ursache und `done` setzt kein Human review.
 
 - **Der `code-review`-Skill schreibt den Review-Nachweis als letzten Schritt selbst, `review-marker.mjs` kennt `--cwd` (#1054).** `node scripts/review-marker.mjs --cwd WORKTREE` schreibt in genau diesen Worktree, auch beim Aufruf über `.vendor/workflow-kit`. Das Skript meldet einen Fehler (Exit 1), wenn es nichts schreiben kann, lehnt unbekannte Optionen ab (Exit 2) und schreibt nichts, solange der Worktree ungespeicherte Änderungen an verfolgten Dateien hat.
