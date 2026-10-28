@@ -1,7 +1,7 @@
 // What the kit setup tests share (kit-setup*.test.mjs).
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { lstatSync, readFileSync, readdirSync, readlinkSync } from 'node:fs';
+import { readFileSync, readdirSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { kitCheckout, temporary } from './fixtures.mjs';
 
@@ -10,7 +10,7 @@ export function snapshot(dir, base = dir, found = {}) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name), name = path.slice(base.length);
     if (entry.name === '.git') continue;
-    if (lstatSync(path).isSymbolicLink()) found[name] = readlinkSync(path);
+    if (entry.isSymbolicLink()) found[name] = readlinkSync(path);
     else if (entry.isDirectory()) snapshot(path, base, found);
     else found[name] = createHash('sha256').update(readFileSync(path)).digest('hex');
   }
