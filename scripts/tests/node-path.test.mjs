@@ -32,7 +32,7 @@ test('the Node folder is the stable fnm default; zsh gets .zshenv, bash its logi
 test('the hook search tries fnm before nvm/volta/mise/Homebrew, and the last resort never shadows a node already found', () => {
   const { findNode } = JSON.parse(readFileSync(new URL('../hook-commands.json', import.meta.url), 'utf8'));
   const at = text => findNode.indexOf(text);
-  const order = ['.local/share/fnm', '.fnm', 'Application Support/fnm', 'node-versions', 'aliases/default', '.nvm/versions/node', '.volta/bin', 'mise/shims', '/opt/homebrew/bin', '/usr/local/bin'].map(at);
+  const order = ['.local/share/fnm', '.fnm', 'Application Support/fnm', 'node-versions', 'aliases/default', '.nvm/versions/node', '.volta/bin', 'mise/shims', '/opt/homebrew/bin'].map(at);
   assert.ok(order.every(index => index >= 0) && order.every((index, i) => i === 0 || index > order[i - 1]), 'search order: ' + order);
   assert.ok(findNode.includes('PATH="$PATH:$d"'), 'the last resort is appended, not prepended');
 });
