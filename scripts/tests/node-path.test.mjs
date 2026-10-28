@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { addPathEntry, ensureNode, nodeDirCandidates, profileFiles, withProfileBlock } from '../node-path.mjs';
 
@@ -25,6 +26,15 @@ test('the Node folder is the stable fnm default; zsh gets .zshenv, bash its logi
   assert.equal(nodeDirCandidates({ platform: 'linux', env: { FNM_DIR: '/f' }, home: '/h' })[0], '/f/aliases/default/bin');
   assert.deepEqual(profileFiles({ platform: 'darwin', home: '/h', hasZsh: false, exists: () => false }), ['/h/.profile', '/h/.zshenv']);
   assert.deepEqual(profileFiles({ platform: 'linux', home: '/h', hasZsh: false, exists: () => true }), ['/h/.bash_profile']);
+});
+
+// #1071: bash -c without login reads no profile; the hook command searches itself. fnm first (default alias wins), the other usual places only as the last resort, appended.
+test('the hook search tries fnm before nvm/volta/mise/Homebrew, and the last resort never shadows a node already found', () => {
+  const { findNode } = JSON.parse(readFileSync(new URL('../hook-commands.json', import.meta.url), 'utf8'));
+  const at = text => findNode.indexOf(text);
+  const order = ['.local/share/fnm', '.fnm', 'Application Support/fnm', 'node-versions', 'aliases/default', '.nvm/versions/node', '.volta/bin', 'mise/shims', '/opt/homebrew/bin'].map(at);
+  assert.ok(order.every(index => index >= 0) && order.every((index, i) => i === 0 || index > order[i - 1]), 'search order: ' + order);
+  assert.ok(findNode.includes('PATH="$PATH:$d"'), 'the last resort is appended, not prepended');
 });
 
 function fake({ found = [], dirs = [], installed = [] }) {
