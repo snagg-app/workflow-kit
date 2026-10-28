@@ -416,4 +416,19 @@ for (const [agent, key, shell, args] of entries) {
     assert.ok(existsSync(join(chosen, 'scripts/kit-hook.mjs')));
   });
 }
+
+// #1064: Claude starts bash hooks without the PATH of the user's shell, where fnm puts Node; the hook then did nothing (no kit link in a fresh worktree).
+test('claude command: Node outside PATH is taken from the fnm default, else the hint stays', { skip: !sh && 'sh unavailable' }, async t => {
+  const temp = temporary(t, 'kit-node '), project = join(temp, 'project'), empty = mkdtempSync(join(temp, 'empty '));
+  mkdirSync(join(project, '.agents'), { recursive: true });
+  writeFileSync(join(project, entryFile), '');
+  const command = hookSettings('claude').hooks.SubagentStart[0].hooks[0].command;
+  const run = fnm => spawn(sh, ['-c', command], { cwd: project, env: { ...isolatedGit(temp), HOME: home(temp), PATH: empty, CLAUDE_PROJECT_DIR: project, ...fnm }, input: '{}' });
+  assert.match(JSON.parse((await run({})).stdout).systemMessage, /Node is missing/);
+  const bin = join(temp, 'fnm/aliases/default/installation/bin'), node = join(bin, 'node');
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(node, '#!/bin/sh\nprintf \'%s\\n\' \'{"systemMessage":"fake node"}\'\n');
+  chmodSync(node, 0o755);
+  assert.match(JSON.parse((await run({ FNM_DIR: join(temp, 'fnm') })).stdout).systemMessage, /fake node/);
+});
 });

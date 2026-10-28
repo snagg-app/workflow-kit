@@ -25,7 +25,7 @@ export function hookSettings(name, on) {
   const { hooks: shape, projectEnv: env } = agents[name];
   // The project folder as the shell reads it: the agent's variable, else the working folder.
   const dir = windows => (!env ? (windows ? "'.'" : '.') : windows ? `if ($env:${env}) { $env:${env} } else { '.' }` : `\${${env}:-.}`);
-  const fill = (text, event, windows) => text.replaceAll('{projectDir}', dir(windows)).replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile).replaceAll('{node}', node);
+  const fill = (text, event, windows) => text.replaceAll('{findNode}', () => commands.findNode).replaceAll('{projectDir}', dir(windows)).replaceAll('{event}', event).replaceAll('{agent}', name).replaceAll('{entry}', entryFile).replaceAll('{node}', node);
   const hooks = {};
   for (const { event, kind, timeout, matcher, statusMessage, feature } of events()) {
     if (feature && on && !on[feature]) continue;
