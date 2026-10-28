@@ -31,7 +31,7 @@ const SETUP = /^setup(-committed|-choice)?\.test\.mjs$/;
 // Source path pattern -> test files (names inside scripts/tests, or a pattern over those names).
 // A changed test file always runs itself; a file that matches no row is reported on stderr.
 export const TABLE = [
-  [/^scripts\/(board(-[a-z]+)*|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker|done-fixture)|fake-gh)\.mjs$/, [BOARD]],
+  [/^scripts\/(board(-[a-z]+)*|quota|project-profile|github)\.mjs$|^scripts\/tests\/(board-(fixture|runner|worker|done-fixture|start-fixture)|fake-gh)\.mjs$/, [BOARD]],
   [/^scripts\/base-red\.mjs$/, [BOARD, 'base-red.test.mjs', 'affected-tests.test.mjs']],
   [/^scripts\/claim\.mjs$|^scripts\/tests\/claim\.test\.mjs$/, [BOARD, 'claim.test.mjs']],
   [/^scripts\/(review-facts|review-verdict|sonar)\.mjs$|^scripts\/tests\/fake-sonar\.mjs$/, [BOARD, 'review-verdict.test.mjs']],

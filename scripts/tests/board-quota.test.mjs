@@ -19,8 +19,7 @@ test('check reports its own GraphQL calls and spend, including a refused read', 
 });
 
 test('a used-up GraphQL quota is waited out by reviews and reported by the other commands', t => {
-  const { checkout, run, writeIssue, env } = fixture(t);
-  env.BOARD_SLEEP_SCALE = '1'; // the test measures the real sleep until the reset
+  const { checkout, run, writeIssue } = fixture(t);
   writeFileSync(join(checkout, 'pr.json'), JSON.stringify(handoffPr()));
   writeIssue(issue());
   writeFileSync(join(checkout, 'limited'), '');
