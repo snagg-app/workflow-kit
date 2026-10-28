@@ -366,7 +366,7 @@ for (const [agent, key, shell, args] of entries) {
     const origin = join(temp, 'origin'), project = join(temp, 'project');
     // The kit's address is rewritten to a local repository, so the trial needs no network.
     const rewrite = to => ({ GIT_CONFIG_COUNT: '2', GIT_CONFIG_KEY_0: 'core.longpaths', GIT_CONFIG_VALUE_0: 'true', GIT_CONFIG_KEY_1: `url.${to.replaceAll('\\', '/')}.insteadOf`, GIT_CONFIG_VALUE_1: 'https://github.com/snagg-app/workflow-kit.git' });
-    const env = { ...isolatedGit(temp), HOME: home(temp), HOOK_MARKER: join(temp, 'marker'), ...rewrite(origin) };
+    const env = { ...isolatedGit(temp), HOME: home(temp), FNM_DIR: '', HOOK_MARKER: join(temp, 'marker'), ...rewrite(origin) };
     delete env.WORKFLOW_KIT_DIR;
     const git = async (cwd, ...a) => {
       const result = await spawn('git', ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', ...a], { cwd, env });
@@ -418,17 +418,23 @@ for (const [agent, key, shell, args] of entries) {
 }
 
 // #1064: Claude starts bash hooks without the PATH of the user's shell, where fnm puts Node; the hook then did nothing (no kit link in a fresh worktree).
-test('claude command: Node outside PATH is taken from the fnm default, else the hint stays', { skip: !sh && 'sh unavailable' }, async t => {
-  const temp = temporary(t, 'kit-node '), project = join(temp, 'project'), empty = mkdtempSync(join(temp, 'empty '));
+test('claude command: Node outside PATH comes from fnm (default alias, else the newest version by number), else the hint stays', { skip: !sh && 'sh unavailable' }, async t => {
+  const temp = temporary(t, 'kit-node '), project = join(temp, 'project'), fnm = join(temp, 'fnm'), empty = mkdtempSync(join(temp, 'empty '));
   mkdirSync(join(project, '.agents'), { recursive: true });
+  mkdirSync(fnm);
   writeFileSync(join(project, entryFile), '');
   const command = hookSettings('claude').hooks.SubagentStart[0].hooks[0].command;
-  const run = fnm => spawn(sh, ['-c', command], { cwd: project, env: { ...isolatedGit(temp), HOME: home(temp), PATH: empty, CLAUDE_PROJECT_DIR: project, ...fnm }, input: '{}' });
-  assert.match(JSON.parse((await run({})).stdout).systemMessage, /Node is missing/);
-  const bin = join(temp, 'fnm/aliases/default/installation/bin'), node = join(bin, 'node');
-  mkdirSync(bin, { recursive: true });
-  writeFileSync(node, '#!/bin/sh\nprintf \'%s\\n\' \'{"systemMessage":"fake node"}\'\n');
-  chmodSync(node, 0o755);
-  assert.match(JSON.parse((await run({ FNM_DIR: join(temp, 'fnm') })).stdout).systemMessage, /fake node/);
+  const run = async () => JSON.parse((await spawn(sh, ['-c', command], { cwd: project, env: { ...isolatedGit(temp), HOME: home(temp), FNM_DIR: fnm, PATH: [empty, dirname(sh)].join(delimiter), CLAUDE_PROJECT_DIR: project }, input: '{}' })).stdout).systemMessage;
+  const fake = (installation, name) => {
+    const bin = join(fnm, installation, 'bin');
+    mkdirSync(bin, { recursive: true });
+    writeFileSync(join(bin, 'node'), `#!/bin/sh\nprintf '%s\\n' '{"systemMessage":"${name}"}'\n`);
+    chmodSync(join(bin, 'node'), 0o755);
+  };
+  assert.match(await run(), /Node is missing/);
+  fake('node-versions/v9.11.2/installation', 'v9'); fake('node-versions/v24.10.0/installation', 'v24');
+  assert.equal(await run(), 'v24');
+  fake('aliases/default/installation', 'alias');
+  assert.equal(await run(), 'alias');
 });
 });
