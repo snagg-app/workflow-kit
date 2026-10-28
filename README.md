@@ -97,6 +97,17 @@ then run
 `git add --intent-to-add --all && git diff --exit-code HEAD`: any diff, including a new
 file, means committed outputs were stale.
 
+## Node für Hooks (PATH)
+
+Hooks laufen in einer Shell ohne Profile. Findet sie `node` nicht, tun alle Hooks nichts. `kit setup` (auch `--refresh`) prüft das und repariert es einmal, ohne Rückfrage:
+
+- **Node schon da** (und neu genug laut `scripts/versions.json`): nichts passiert. Ausgabe: „node in nicht-interaktiver Shell gefunden“.
+- **Windows mit fnm**: Der feste Ordner `%APPDATA%\fnm\aliases\default` (oder `FNM_DIR`) wird einmal ans Ende des Benutzer-PATH gehängt (Registry `HKCU\Environment`, nie doppelt, nichts gekürzt, `%VAR%`-Einträge bleiben). Neue Programme sehen es sofort, offene Terminals und Sitzungen erst nach einem Neustart.
+- **Linux/macOS mit fnm**: In `~/.profile` (oder `~/.bash_profile`, wenn es existiert) und bei zsh/macOS in `~/.zshenv` steht ein Block zwischen `# workflow-kit node (begin)` und `# workflow-kit node (end)`. Grenze: Eine Bash ohne Login liest keine Profile; dort greift der Suchlauf der Hook-Befehle.
+- **Gar kein Node**: Windows `winget install --id OpenJS.NodeJS.LTS`, macOS `brew install node`, Linux fnm (Installer von fnm.vercel.app, `--skip-shell`, dann `fnm install --lts`). Klappt das nicht, endet das Setup rot mit dem genauen Befehl.
+
+Rückgängig: Windows den Eintrag aus „Umgebungsvariablen > Path“ löschen; Linux/macOS den markierten Block löschen. Node aktualisieren: `fnm install <Version>` und `fnm default <Version>` (der PATH-Eintrag bleibt gleich), sonst `winget upgrade OpenJS.NodeJS.LTS` bzw. `brew upgrade node`. Im Test und in CI: `KIT_NODE_SETUP=skip` überspringt den Schritt.
+
 ## Hooks
 
 Every hook of Claude and Codex is a short call of `.agents/workflow-kit-hook.mjs <Event> --agent <claude|codex>`
