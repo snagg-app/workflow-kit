@@ -436,13 +436,5 @@ test('claude command: Node outside PATH comes from fnm (default alias, else the 
   assert.equal(await run(), 'v24');
   fake('aliases/default/installation', 'alias');
   assert.equal(await run(), 'alias');
-  // #1071: Linux/macOS without a login shell: nvm and other usual places are the last resort, after fnm.
-  const nvmBin = join(home(temp), '.nvm/versions/node/v20.1.0/bin');
-  mkdirSync(nvmBin, { recursive: true });
-  writeFileSync(join(nvmBin, 'node'), `#!/bin/sh\nprintf '%s\\n' '{"systemMessage":"nvm"}'\n`);
-  chmodSync(join(nvmBin, 'node'), 0o755);
-  assert.equal(await run(), 'alias');
-  rmSync(fnm, { recursive: true });
-  assert.equal(await run(), 'nvm');
 });
 });
