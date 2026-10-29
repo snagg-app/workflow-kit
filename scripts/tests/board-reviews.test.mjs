@@ -3,6 +3,25 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, handoffPr, reviewsFixture, test } from './board-fixture.mjs';
 
+test('review grace follows the base or first-setup defaults, never the checkout (#1077)', t => {
+  const { checkout, minutesAgo, pr, look } = reviewsFixture(t);
+  const config = join(checkout, '.github/workflow-project.json');
+  const profile = JSON.parse(readFileSync(config, 'utf8'));
+  const baseFile = join(checkout, 'base-project.json');
+  const readied = { ...pr({ pushed: 1 }), isDraft: false, createdAt: minutesAgo(30), readyEvents: { nodes: [{ createdAt: minutesAgo(0.5) }] } };
+  writeFileSync(config, JSON.stringify({ ...profile, reviewerGraceMinutes: 0 }));
+  writeFileSync(baseFile, JSON.stringify({ ...profile, reviewerGraceMinutes: 3 }));
+  assert.equal(look(readied).status, 3, 'checkout zero must not shorten base grace');
+  assert.equal(look(readied, undefined, '--grace', '0').status, 0, 'an explicit operator option is preserved');
+  writeFileSync(config, JSON.stringify({ ...profile, reviewerGraceMinutes: 20 }));
+  writeFileSync(baseFile, JSON.stringify({ ...profile, reviewerGraceMinutes: 0 }));
+  assert.equal(look(readied).status, 0, 'the base may deliberately disable grace');
+  writeFileSync(config, JSON.stringify({ ...profile, reviewerGraceMinutes: 0 }));
+  writeFileSync(join(checkout, 'base-missing'), '');
+  writeFileSync(join(checkout, 'base-bootstrap.json'), '{}');
+  assert.equal(look(readied).status, 3, 'first setup keeps the conservative default grace');
+});
+
 
 
 test('reviews waits only for traces on the current head and never reads failures as done', t => {

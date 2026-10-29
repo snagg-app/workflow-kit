@@ -39,6 +39,22 @@ test('done first setup cannot ignore failed CI through the local profile (#1077)
   assert.equal(json('issues-comments.json').length, 0, 'no handoff');
 });
 
+test('done first setup cannot hand off before default reviewer grace despite checkout zero (#1077)', t => {
+  const { run, file, text, json } = delivery(t, handoffFixture);
+  writeFileSync(file('base-missing'), '');
+  writeFileSync(file('base-bootstrap.json'), '{}');
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), reviewerGraceMinutes: 0 }));
+  const pr = json('pr.json');
+  pr.createdAt = new Date(Date.now() - 30 * 60_000).toISOString();
+  pr.readyEvents = { nodes: [{ createdAt: new Date(Date.now() - 30_000).toISOString() }] };
+  writeFileSync(file('pr.json'), JSON.stringify(pr));
+  const result = run('done', '1', 'result.md', '--max-minutes', '0.001');
+  assert.equal(result.status, 4, result.stdout + result.stderr);
+  assert.match(result.stdout, /reviewers may still start/);
+  assert.notEqual(text('stored'), 'Human review');
+  assert.equal(json('issues-comments.json').length, 0, 'no premature handoff');
+});
+
 test('done refuses a deleted or unreadable base profile before writes (#1077)', t => {
   for (const history of [[{ sha: 'a'.repeat(40) }], {}]) {
     const { run, file, text, json } = delivery(t, handoffFixture);
