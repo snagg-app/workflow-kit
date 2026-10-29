@@ -92,6 +92,11 @@ detects a conflict, including directory/file conflicts. Unrelated changes leave 
 pushed head intact. Rename/delete paths are compared without rename folding and
 without the GitHub file-list cap. The setting is read from the current PR target
 branch, never the checkout; another value or an unreadable comparison fails closed.
+For the first setup PR only, a missing profile uses the kit defaults after the API
+proves a readable base commit, a complete tree without the profile and no profile
+history on that same commit. A previously deleted profile, invalid profile,
+unreadable repository/ref or incomplete evidence still fails closed. These defaults
+do not inherit ignored checks or optional reviewers from the unmerged setup PR.
 The conflict probe uses Git's `merge-tree --write-tree` (Git 2.38 or newer).
 Both modes keep the exact-head tests, CI/review gates and tested-head resume behavior.
 `"reviewRequiredPaths"` lists the path patterns for which `done` demands a `code-review` of the head

@@ -208,10 +208,29 @@ export function parseProfile(source, where = profileFile) {
   return Object.defineProperty(view, 'raw', { value: raw });
 }
 
-/** The profile as GitHub has it on `ref` (the repository's default branch without one), checked. `rest` is the github adapter's. */
-export function readProfileAt(rest, repository, ref) {
+/** The profile as GitHub has it on `ref`, checked. Only base review gates allow a proved, never-configured base to use defaults. */
+export function readProfileAt(rest, repository, ref, { allowUnconfigured = false } = {}) {
   const where = `${profileFile} of ${repository}${ref === undefined ? '' : ` on ${ref}`}`;
-  const file = rest(`repos/${repository}/contents/${profileFile}${ref === undefined ? '' : `?ref=${encodeURIComponent(ref)}`}`);
+  let file;
+  try {
+    file = rest(`repos/${repository}/contents/${profileFile}${ref === undefined ? '' : `?ref=${encodeURIComponent(ref)}`}`);
+  } catch (error) {
+    // gh's own HTTP status, never a message from a file. A 404 alone can also mean no access or a missing ref.
+    if (!allowUnconfigured || !ref || !/\(HTTP 404\)/.test(String(error.stderr ?? ''))) throw error;
+    const commit = rest(`repos/${repository}/commits/${encodeURIComponent(ref)}`);
+    const oid = value => /^[a-f0-9]{40}$/.test(value ?? '');
+    assert.ok(oid(commit?.sha) && oid(commit?.commit?.tree?.sha), `${where}: cannot prove the base commit`);
+    const tree = rest(`repos/${repository}/git/trees/${commit.commit.tree.sha}?recursive=1`);
+    assert.ok(tree?.sha === commit.commit.tree.sha && tree.truncated === false && Array.isArray(tree.tree)
+      && tree.tree.every(entry => typeof entry?.path === 'string' && ['blob', 'tree', 'commit'].includes(entry.type)),
+      `${where}: cannot prove the complete base tree`);
+    assert.ok(!tree.tree.some(entry => entry.path === profileFile || (entry.path === '.github' && entry.type !== 'tree')),
+      `${where}: the base tree contradicts the missing profile; retry`);
+    // A removed profile is an error, not a new installation. Pin both evidence reads to the same immutable base commit.
+    const history = rest(`repos/${repository}/commits?sha=${commit.sha}&path=${encodeURIComponent(profileFile)}&per_page=1`);
+    assert.ok(Array.isArray(history) && history.length === 0, `${where}: the profile existed before or its history is unreadable; restore it`);
+    return parseProfile('{}', where);
+  }
   assert.equal(file?.encoding, 'base64', `${where} is unreadable`);
   return parseProfile(Buffer.from(file.content, 'base64').toString('utf8'), where);
 }

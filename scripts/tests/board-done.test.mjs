@@ -14,6 +14,61 @@ test('done refuses a spec before acceptance comments or body changes', t => {
   for (const name of ['mutations', 'comment-writes', 'body-writes']) assert.equal(existsSync(join(checkout, name)), false, name);
 });
 
+test('done completes first setup on a proved unconfigured base with the normal gates (#1077)', t => {
+  const { run, file, text } = delivery(t, handoffFixture);
+  writeFileSync(file('base-missing'), '');
+  writeFileSync(file('base-bootstrap.json'), '{}');
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(text('affected-tests-calls'), /--run/, 'first setup still runs tests');
+  assert.equal(text('stored'), 'Human review');
+});
+
+test('done first setup cannot ignore failed CI through the local profile (#1077)', t => {
+  const { run, file, text, json } = delivery(t, handoffFixture);
+  writeFileSync(file('base-missing'), '');
+  writeFileSync(file('base-bootstrap.json'), '{}');
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), ignoredChecks: ['CI'] }));
+  const pr = json('pr.json');
+  pr.commits.nodes[0].commit.statusCheckRollup.contexts.nodes[0].conclusion = 'FAILURE';
+  writeFileSync(file('pr.json'), JSON.stringify(pr));
+  const result = run('done', '1', 'result.md');
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /check CI.*FAILURE|CI.*failed/i);
+  assert.notEqual(text('stored'), 'Human review');
+  assert.equal(json('issues-comments.json').length, 0, 'no handoff');
+});
+
+test('done first setup cannot hand off before default reviewer grace despite checkout zero (#1077)', t => {
+  const { run, file, text, json } = delivery(t, handoffFixture);
+  writeFileSync(file('base-missing'), '');
+  writeFileSync(file('base-bootstrap.json'), '{}');
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), reviewerGraceMinutes: 0 }));
+  const pr = json('pr.json');
+  pr.createdAt = new Date(Date.now() - 30 * 60_000).toISOString();
+  pr.readyEvents = { nodes: [{ createdAt: new Date(Date.now() - 30_000).toISOString() }] };
+  writeFileSync(file('pr.json'), JSON.stringify(pr));
+  const result = run('done', '1', 'result.md', '--max-minutes', '0.001');
+  assert.equal(result.status, 4, result.stdout + result.stderr);
+  assert.match(result.stdout, /reviewers may still start/);
+  assert.notEqual(text('stored'), 'Human review');
+  assert.equal(json('issues-comments.json').length, 0, 'no premature handoff');
+});
+
+test('done refuses a deleted or unreadable base profile before writes (#1077)', t => {
+  for (const history of [[{ sha: 'a'.repeat(40) }], {}]) {
+    const { run, file, text, json } = delivery(t, handoffFixture);
+    writeFileSync(file('base-missing'), '');
+    writeFileSync(file('base-bootstrap.json'), JSON.stringify({ history }));
+    const result = run('done', '1', 'result.md');
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, /profile existed before or its history is unreadable/);
+    assert.equal(text('stored'), 'In progress');
+    assert.equal(json('pr.json').isDraft, true);
+    for (const name of ['mutations', 'comment-writes', 'body-writes', 'affected-tests-calls']) assert.equal(text(name), '', name);
+  }
+});
+
 
 test('done prepares and hands off the review status without rewriting the review option on resume (#593)', t => {
   for (const status of ['Automated review']) {
