@@ -37,6 +37,17 @@ function api(argv, input, stdout, stderr, exit) {
     // REST lists (comments, reviews, reactions) come in pages of 100, like GitHub.
     const parts = path.split('?')[0].split('/');
     const backlink = 'backlink-' + parts[4] + '.json';
+    // First-installation proof: a readable, immutable base with no profile and no profile history.
+    if (fs.existsSync('base-bootstrap.json')) {
+      const proof = JSON.parse(fs.readFileSync('base-bootstrap.json'));
+      if (parts[3] === 'commits' && parts.length === 5) {
+        stdout(JSON.stringify({ sha: 'a'.repeat(40), commit: { tree: { sha: 'b'.repeat(40) } } })); exit(0);
+      }
+      if (parts[3] === 'git' && parts[4] === 'trees') {
+        stdout(JSON.stringify({ sha: 'b'.repeat(40), truncated: false, tree: [] })); exit(0);
+      }
+      if (parts[3] === 'commits' && parts.length === 4) { stdout(JSON.stringify(proof.history ?? [])); exit(0); }
+    }
     // The REST search of `start` for related work (related-search.json: the items, the default is none; the query is kept).
     if (parts[0] === 'search' && parts[1] === 'issues') {
       fs.appendFileSync('related-queries', decodeURIComponent(new URLSearchParams(path.split('?')[1]).get('q')) + '\n');

@@ -72,6 +72,58 @@ test('profile: disk and Git ref give the same view and the same message for a br
   assert.equal(readProfileAt(answer('{"language":"de"}'), 'o/r', 'main').language, 'de');
 });
 
+test('profile: first setup can use defaults only for a never-configured readable base (#1077)', () => {
+  const sha = 'a'.repeat(40), tree = 'b'.repeat(40), calls = [];
+  const missing = Object.assign(new Error('not found'), { stderr: 'gh: Not Found (HTTP 404)' });
+  const answer = path => {
+    calls.push(path);
+    if (path.includes('/contents/')) throw missing;
+    if (path === 'repos/o/r/commits/main') return { sha, commit: { tree: { sha: tree } } };
+    if (path === `repos/o/r/git/trees/${tree}?recursive=1`) return { sha: tree, truncated: false, tree: [{ path: '.github', type: 'tree' }] };
+    if (path === `repos/o/r/commits?sha=${sha}&path=.github%2Fworkflow-project.json&per_page=1`) return [];
+    assert.fail(path);
+  };
+  assert.throws(() => readProfileAt(answer, 'o/r', 'main'), error => error === missing, 'ordinary readers stay strict');
+  calls.length = 0;
+  const profile = readProfileAt(answer, 'o/r', 'main', { allowUnconfigured: true });
+  assert.equal(profile.doneBaseMerge, 'always');
+  assert.deepEqual([profile.ignoredChecks, profile.optionalReviewers], [[], []]);
+  assert.equal(calls.length, 4, 'all absence evidence is read');
+});
+
+test('profile: first-setup defaults never hide errors, deletion or incomplete absence evidence (#1077)', () => {
+  const sha = 'a'.repeat(40), tree = 'b'.repeat(40);
+  const missing = Object.assign(new Error('not found'), { stderr: 'gh: Not Found (HTTP 404)' });
+  const commit = { sha, commit: { tree: { sha: tree } } };
+  for (const [name, evidence] of [
+    ['deleted profile', { history: [{ sha }] }],
+    ['file appeared meanwhile', { tree: { truncated: false, tree: [{ path: '.github/workflow-project.json', type: 'blob' }] } }],
+    ['symlinked parent', { tree: { truncated: false, tree: [{ path: '.github', type: 'blob' }] } }],
+    ['truncated tree', { tree: { truncated: true, tree: [] } }],
+    ['unreadable tree', { tree: { tree: [] } }],
+    ['unreadable history', { history: {} }],
+    ['unreadable commit', { commit: {} }],
+    ['unknown repository or ref', { fail: '/commits/main' }],
+    ['history read failed', { fail: '/commits?' }],
+  ]) {
+    const rest = path => {
+      if (evidence.fail && path.includes(evidence.fail)) throw missing;
+      if (path.includes('/contents/')) throw missing;
+      if (path.endsWith('/commits/main')) return evidence.commit ?? commit;
+      if (path.includes('/git/trees/')) return { sha: tree, ...(evidence.tree ?? { truncated: false, tree: [] }) };
+      if (path.includes('/commits?')) return evidence.history ?? [];
+      assert.fail(path);
+    };
+    assert.throws(() => readProfileAt(rest, 'o/r', 'main', { allowUnconfigured: true }), name);
+  }
+  for (const error of [new Error('timeout'), Object.assign(new Error('denied'), { stderr: 'gh: Forbidden (HTTP 403)' })]) {
+    let calls = 0;
+    assert.throws(() => readProfileAt(() => { calls++; throw error; }, 'o/r', 'main', { allowUnconfigured: true }), current => current === error);
+    assert.equal(calls, 1, 'no fallback for other failures');
+  }
+  assert.throws(() => readProfileAt(() => ({ encoding: 'base64', content: Buffer.from('{').toString('base64') }), 'o/r', 'main', { allowUnconfigured: true }), /not valid JSON/);
+});
+
 test('the UI check of "auto" is kept per commit and does not scan again', t => {
   const root = mkdtempSync(join(tmpdir(), 'profile-ui-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));

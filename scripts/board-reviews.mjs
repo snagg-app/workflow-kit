@@ -11,7 +11,7 @@ import { baseMovement, readFacts, readPr, unresolvedThreads } from './review-fac
 // ponytail: one REST read per look, no cache; cache by base commit if the REST quota ever gets tight.
 function useBaseSettings(pr) {
   assert.ok(pr.baseRefName, 'The PR base is not readable');
-  const base = readProfileAt(github.rest, project.repository, pr.baseRefName);
+  const base = readProfileAt(github.rest, project.repository, pr.baseRefName, { allowUnconfigured: true });
   memory.gate = { ...project, ...Object.fromEntries(['awaitApps', 'optionalReviewers', 'updateBranchChecks', 'ignoredChecks', 'doneBaseMerge', 'reviewRequiredPaths', 'reviewModuleRoots'].map(key => [key, base[key]])) };
   memory.optional = undefined;
 }
