@@ -152,6 +152,7 @@ test('done can explicitly skip local tests through preparation and handoff witho
   assert.equal(text('affected-tests-calls'), '');
   assert.equal(existsSync(file('.git/board-done-tested')), false);
   assert.match(json('issues-comments.json').at(-1).body, new RegExp(`Head: ${head.slice(0, 7)}`));
+  assert.match(json('issues-comments.json').at(-1).body, new RegExp(`Lokale Tests übersprungen: ${reason}`));
 });
 
 test('a repeated done --skip-local-tests does not merge a moved base again (#927)', t => {

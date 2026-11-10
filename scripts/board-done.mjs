@@ -236,7 +236,8 @@ async function done() {
   if (file && !findHandoffComment(polled.comments, issue.viewer, head)) {
     // #1052: tests that were red on the base too did not block; the comment lists them with their issue.
     const baseRed = (skipReason && !isTested()) || !existsSync(steps) ? '' : baseRedHandoff(baseRedTests(readFileSync(steps, 'utf8')), `origin/${pull.base.ref}`);
-    const body = baseRed ? withBaseRed(lines(file), baseRed) : lines(file);
+    const skipNote = skipReason && !isTested() ? `Lokale Tests übersprungen: ${skipReason}\n\n` : '';
+    const body = skipNote + (baseRed ? withBaseRed(lines(file), baseRed) : lines(file));
     github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\n${handoffHeadLine(head)}\n\n${body}\n` });
   }
   return handoff();
