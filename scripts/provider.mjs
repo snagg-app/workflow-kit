@@ -69,7 +69,11 @@ function pinnedSource(p, c) {
     assert.ok(!/^(?:[a-z]|S) /m.test(c.git('-C', source, 'ls-files', '-v')), `${p.label} source hides local changes from git status`);
   };
   if (existsSync(join(source, '.git'))) clean();
-  c.git('-C', c.kit, 'submodule', 'update', '--init', '--', p.source);
+  try { c.git('-C', c.kit, 'submodule', 'update', '--init', '--', p.source); } catch (error) {
+    // Never checked out and not fetchable (offline, a lock held by another run): the provider is optional, so the caller warns and goes on. A checkout that cannot move to the pin still fails.
+    if (!existsSync(join(source, '.git'))) return { missing: error };
+    throw error;
+  }
   clean();
   const revision = c.git('-C', source, 'rev-parse', 'HEAD').trim();
   // submodule.<name>.update=none skips the checkout above; only the kit's pin may be packaged.
@@ -82,7 +86,9 @@ function pinnedSource(p, c) {
  * `{ outputs: [[project path, path in next]], retire: [absolute paths to move aside], message }`; nothing else touches the project.
  */
 export async function setup(p, c) {
-  return publish(p, { ...c, ...pinnedSource(p, c) });
+  const pinned = pinnedSource(p, c);
+  if (pinned.missing) return (c.log ?? console.log)(`Warning: ${p.label} skills skipped, its submodule ${p.source} is not initialised and could not be fetched (${String(pinned.missing.stderr || pinned.missing.message).trim().split(/\r?\n/)[0]}). Run: git -C ${c.kit} submodule update --init -- ${p.source}`);
+  return publish(p, { ...c, ...pinned });
 }
 
 export async function publish(p, c) {
