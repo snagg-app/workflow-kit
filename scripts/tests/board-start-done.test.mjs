@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fixture, issue, test } from './board-fixture.mjs';
 import { startFixture } from './board-start-fixture.mjs';
@@ -287,4 +287,31 @@ test('start of the own session continues the pushed branch of the issue instead 
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.equal(git(checkout, 'branch', '--show-current'), 'claude/1-fixture');
   assert.equal(git(checkout, 'rev-parse', 'HEAD'), ahead);
+});
+
+test('done puts a tooling-only change on main whatever the Zielrelease says, and stops a branch built on the release', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  const project = JSON.parse(text('.github/workflow-project.json'));
+  writeFileSync(file('.github/workflow-project.json'), JSON.stringify({ ...project, mainOnlyPaths: ['scripts/'], baseBranch: { field: 'Zielrelease', pattern: 'release/{value}' } }));
+  writeIssue({ ...issue('Ready'), projectItems: { nodes: [{ ...issue().projectItems.nodes[0], base: { name: '0.1.2' } }] } });
+  writeFileSync(file('release.txt'), 'r');
+  git(checkout, 'add', 'release.txt');
+  git(checkout, 'commit', '-q', '-m', 'release only');
+  git(checkout, 'push', '-q', 'origin', 'main:refs/heads/release/0.1.2');
+  git(checkout, 'reset', '-q', '--hard', 'HEAD~1');
+  assert.equal(run('start', '1', '--session', 'S1').status, 0);
+  writeIssue({ ...JSON.parse(text('issue.json')), comments: { nodes: [{ createdAt: new Date().toISOString(), url: 'u', body: 'Beansprucht.\nAgent: claude, Session: S1\nBasis: release/0.1.2\n' }] } });
+  const work = () => {
+    mkdirSync(file('scripts'), { recursive: true });
+    writeFileSync(file('scripts/work.txt'), 'x');
+    git(checkout, 'add', 'scripts/work.txt');
+    git(checkout, 'commit', '-q', '-m', 'work');
+  };
+  work();
+  const refused = run('done', '1');
+  assert.ok(!existsSync(file('created-pr')) && (refused.stdout + refused.stderr).includes('git rebase --onto origin/main origin/release/0.1.2'), refused.stdout + refused.stderr);
+  git(checkout, 'reset', '-q', '--hard', 'origin/main');
+  work();
+  run('done', '1');
+  assert.ok(text('created-pr').includes('base=main'));
 });
