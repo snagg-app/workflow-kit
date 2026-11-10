@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **Der Übergabe-Kommentar nennt den Grund von `--skip-local-tests`.** Wer die lokalen Tests überspringt, sieht den Grund jetzt als erste Zeile des Kommentars (auch in einem schon geschriebenen Kommentar für denselben Kopf, in der Sprache des Projekts).
+
 - **Die lokalen Kit-Tests sind viel schneller: keine Testdatei dauert mehr als 30 Sekunden, die ganze Suite etwa eine Minute statt fünf (#1067).** Der größte Bremser war `done` in den Tests: Es wartete bei jedem Test mit unverändertem PR-Kopf 25 Sekunden auf GitHub. Die Board-Tests setzen jetzt `BOARD_SLEEP_SCALE=0`, damit Pausen nicht echt abgewartet werden (ohne diese Variable ändert sich nichts). Die großen Testdateien für `done`, `start`, `kit setup` und `setup` sind in kleinere Dateien geteilt, die `node --test` und `affected-tests` nebeneinander laufen lassen. Kein Test wurde gelöscht oder abgeschwächt.
 
 - **`done` verlangt einen Review bei Änderungen über mehrere Module, und die Sonar-Zahl kommt nicht mehr aus der Check-Zusammenfassung (#1055).** Neues Profilfeld `reviewModuleRoots` (Ordner, deren Unterordner Module oder Adapter sind): Berührt der Diff mindestens 3 solche Module, verlangt `done` wie bei `reviewRequiredPaths` einen `code-review`. Ohne `SONAR_TOKEN` liest das Kit die offenen Sonar-Issues jetzt mit `sonar list issues` statt aus „0 New issues“ (das zählt nur neuen Code und hat dreimal offene Issues verdeckt). Fehlen Token und Anmeldung, steht eine Zeile mit der Ursache und `done` setzt kein Human review.
