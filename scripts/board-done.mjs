@@ -235,7 +235,7 @@ async function done() {
   }
   const skipNoteText = () => skipReason && !isTested() ? texts.skipNote(skipReason) : '';
   // Ein schon vorhandener Kommentar für diesen Head bekommt den Hinweis nachgetragen (CodeRabbit #1084).
-  if (file && ownHandoff?.id && skipNoteText() && !ownHandoff.body.includes(texts.skipNote(skipReason))) {
+  if (ownHandoff?.id && skipNoteText() && !ownHandoff.body.includes(texts.skipNote(skipReason))) {
     github.write('PATCH', `repos/${project.repository}/issues/comments/${ownHandoff.id}`, { body: `${ownHandoff.body.trimEnd()}
 
 ${skipNoteText()}

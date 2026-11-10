@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { handoffFixture, issue, test } from './board-fixture.mjs';
 import { delivery, showPr, moveBase } from './board-done-fixture.mjs';
 
@@ -217,3 +218,16 @@ test('done without a handoff file keeps the waiting and failure codes of the rev
   assert.equal(text('stored'), 'Automated review');
 });
 
+
+test('done --skip-local-tests adds the reason to a handoff comment that exists for the head', t => {
+  const { run, head, json, checkout } = delivery(t, handoffFixture);
+  assert.equal(run('done', '1', 'result.md').status, 0);
+  const comment = json('issues-comments.json').at(-1);
+  assert.doesNotMatch(comment.body, /übersprungen/);
+  rmSync(join(checkout, '.git/board-done-tested'));
+  const again = run('done', '1', '--skip-local-tests', 'Nur Doku');
+  assert.equal(again.status, 0, again.stdout + again.stderr);
+  const body = json('issues-comments.json').at(-1).body;
+  assert.match(body, new RegExp(`Head: ${head.slice(0, 7)}`));
+  assert.match(body, /Lokale Tests übersprungen: Nur Doku/);
+});
