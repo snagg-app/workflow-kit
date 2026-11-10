@@ -29,6 +29,17 @@ export const specs = [
 /** A branch name is taken when the issue, this clone or the remote already has it. */
 const takenFor = issue => name => workBranches(issue).includes(name) || checkout.branchExists(name);
 
+// "mainOnlyPaths" of the profile: a change that touches only those paths (tooling) belongs on the default branch, whatever the Zielrelease says.
+// A branch that stands on main gets its PR there; one built on the release stops with the command that moves it (a PR on the wrong base runs Sonar against the wrong base).
+function mainOnlyBase(base, here) {
+  const main = defaultBranchName(), only = files => files.length > 0 && files.every(file => project.mainOnlyPaths.some(path => file.startsWith(path.replace(/\*$/, ''))));
+  const changed = against => git('diff', '--name-only', `origin/${against}...HEAD`).split('\n').filter(Boolean);
+  if (base === main || !project.mainOnlyPaths.length) return [base, here];
+  if (only(changed(main))) return [main, checkout.stand(main)];
+  if (only(changed(base))) assert.fail(`the changes touch only mainOnlyPaths (${project.mainOnlyPaths.join(', ')}), so the PR belongs on ${main}, but this branch stands on ${base}; no PR was opened. Run: git rebase --onto origin/${main} origin/${base} HEAD, then done again`);
+  return [base, here];
+}
+
 /**
  * The first push (#643): the claim comment has no branch and no PR yet. Own commits on top of the claimed base get the branch `<agent>/<number>-<title>` (the checkout's own
  * branch when it already has that shape) and the Draft PR that closes the issue, with the claim line in its body. Returns the PR number, or undefined when there is nothing to open
@@ -51,6 +62,7 @@ function openFirstPr(issue) {
     if (!here || stand.ahead + stand.behind < here.ahead + here.behind) [base, here] = [candidate, stand];
   }
   if (here.ahead === 0) return;
+  [base, here] = mainOnlyBase(base, here);
   const { branch, create } = targetBranch({ number, title: issue.title, agent: claim.agent, session: claim.session, branch: here.branch, taken: takenFor(issue) });
   if (create) git('switch', '-c', branch, '--no-track');
   const plan = pushPlan({ stand: { ...here, branch }, number });

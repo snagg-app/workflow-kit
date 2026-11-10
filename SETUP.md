@@ -104,6 +104,7 @@ Both modes keep the exact-head tests, CI/review gates and tested-head resume beh
 `["**/db/migration/**", "**/security/**"]`. It is read from the PR target branch like
 `doneBaseMerge`. Omitted, it is `["**/db/migration/**"]`; `[]` asks for no review. A PR without a
 matching file runs `done` as before.
+`"mainOnlyPaths"` lists path prefixes (a trailing `*` is dropped, for example `["scripts/", "CONTRIBUTING*"]`) of changes that belong on the default branch whatever the Zielrelease says. When `done` opens the PR and every changed file starts with one of them, a branch standing on `main` gets its PR on `main`; a branch built on the release stops with the `git rebase --onto` command. Omitted, nothing changes.
 `"reviewModuleRoots"` lists folders whose subfolders are modules or adapters, for example
 `["backend", "backend/importer/adapters"]`. When the diff changes files in at least 3 such modules, `done` demands the same
 `code-review` (a shared contract plus its adapters). Read from the PR target branch; omitted or `[]`, no PR needs it for this reason.
