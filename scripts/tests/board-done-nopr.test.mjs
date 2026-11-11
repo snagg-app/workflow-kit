@@ -285,3 +285,12 @@ test('done ticks and posts nothing while the wait ends on a blocker only (#982)'
   assert.ok(json('backlink-1.json').body.startsWith('- [ ] first'), 'no ticks');
 });
 
+
+test('done ends every output with the BOARD-DONE-ENDE line, on success and on failure', t => {
+  const { run, file, json } = delivery(t, handoffFixture);
+  writeFileSync(file('pr.json'), JSON.stringify({ ...json('pr.json'), changedFiles: 0 }));
+  const ok = run('done', '1', 'result.md');
+  assert.equal(ok.stdout.trim().split('\n').at(-1), 'BOARD-DONE-ENDE status=HANDOFF exit=0');
+  const failed = run('done', '99');
+  assert.match(failed.stdout.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=FAILED exit=[1-9]/);
+});

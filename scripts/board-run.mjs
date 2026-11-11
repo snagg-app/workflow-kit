@@ -40,11 +40,22 @@ import * as threads from './board-threads.mjs';
 export async function runBoard({ argv, env = process.env, cwd = process.cwd(), io } = {}) {
   const [stdout, stderr] = [[], []];
   const lines = { log: text => { stdout.push(text); io?.log(text); }, error: text => { stderr.push(text); io?.error(text); } };
-  const exitCode = await runCall({ argv: [...argv], env, cwd, io: lines });
+  const seen = {};
+  let exitCode;
+  try { exitCode = await runCall({ argv: [...argv], env, cwd, io: lines, seen }); } catch (error) {
+    if (!seen.done) throw error;
+    lines.error(String(error?.stack ?? error));
+    exitCode = 1;
+  }
+  // The very last line of every `done` call, so a monitor waits for exactly this line (`until grep -q '^BOARD-DONE-ENDE' LOG; do sleep 20; done; tail -n 30 LOG`).
+  if (seen.done) {
+    const status = exitCode === 0 ? (/^PREPARED /m.test(stdout.join('\n')) ? 'PREPARED' : 'HANDOFF') : exitCode === 4 ? 'WAITING' : 'FAILED';
+    lines.log(`BOARD-DONE-ENDE status=${status} exit=${exitCode}`);
+  }
   return { exitCode, stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }
 
-async function runCall({ argv: call, env, cwd, io }) {
+async function runCall({ argv: call, env, cwd, io, seen }) {
   // The only printer of this call (board-result.mjs); replaced once the arguments are known and --json / --verbose can apply.
   let output = createOutput({ io });
   // Taken off here, so the parser sees the command first.
@@ -71,6 +82,7 @@ async function runCall({ argv: call, env, cwd, io }) {
     return 2;
   }
   const command = call[0];
+  seen.done = command === 'done';
   const projectFile = join(projectDirectory, '.github/workflow-project.json');
   if (!existsSync(projectFile)) {
     output.diagnostic(`${projectFile} is missing: run board.mjs inside the project, or name it with --cwd PROJECT_DIR`);
