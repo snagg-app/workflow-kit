@@ -2,7 +2,7 @@
 
 ## Unveröffentlicht
 
-- **`done` schreibt als allerletzte Zeile immer `BOARD-DONE-ENDE status=<HANDOFF|PREPARED|WAITING|FAILED> exit=<Code>`.** Auch bei Fehlern und Ausnahmen, nur nicht mit `--json` (dort bleibt stdout ein einzelnes JSON-Dokument). Ein Monitor im Hintergrund wartet darauf mit `until grep -q '^BOARD-DONE-ENDE' LOG; do sleep 20; done; tail -n 30 LOG` und feuert nicht mehr auf Zwischenzeilen wie eine alte READY-Zeile.
+- **`done` schreibt als allerletzte Zeile immer `BOARD-DONE-ENDE status=<HANDOFF|PREPARED|WAITING|FAILED> exit=<Code>`.** Auch bei Fehlern und Ausnahmen, auf stderr (mit `--json` bleibt stdout ein einzelnes JSON-Dokument; Monitor-Logs fangen `2>&1` ab). Ein Monitor im Hintergrund wartet darauf mit `until grep -q '^BOARD-DONE-ENDE' LOG; do sleep 20; done; tail -n 30 LOG` und feuert nicht mehr auf Zwischenzeilen wie eine alte READY-Zeile.
 
 - **`done` nennt den Rebase-Befehl mit dem Branchnamen statt `HEAD`.** Steht der Branch auf dem Release, aber der Diff betrifft nur `mainOnlyPaths`, bricht `done` ab und nennt `git rebase --onto origin/<main> origin/<release> <branch>`. Mit `HEAD` am Ende endete git auf einem losgelösten HEAD, und der Branch blieb unverändert.
 

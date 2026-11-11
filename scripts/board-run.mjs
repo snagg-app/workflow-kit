@@ -40,9 +40,9 @@ import * as threads from './board-threads.mjs';
 export async function runBoard({ argv, env = process.env, cwd = process.cwd(), io } = {}) {
   const [stdout, stderr] = [[], []];
   const lines = { log: text => { stdout.push(text); io?.log(text); }, error: text => { stderr.push(text); io?.error(text); } };
-  // `done` is found before any early exit; --json keeps stdout a single JSON document, so it gets no end line.
+  // `done` is found before any early exit; its end line goes to stderr, so stdout stays a single JSON document with --json.
   const first = argv.find((word, at) => !word.startsWith("-") && !["--cwd", "--issue-repo"].includes(argv[at - 1]));
-  const seen = { done: first === "done" && !argv.includes("--json") && !argv.includes("--help") && !argv.includes("-h") };
+  const seen = { done: first === "done" && !argv.includes("--help") && !argv.includes("-h") };
   let exitCode;
   try { exitCode = await runCall({ argv: [...argv], env, cwd, io: lines, seen }); } catch (error) {
     if (!seen.done) throw error;
@@ -51,8 +51,8 @@ export async function runBoard({ argv, env = process.env, cwd = process.cwd(), i
   }
   // The very last line of every `done` call, so a monitor waits for exactly this line (`until grep -q '^BOARD-DONE-ENDE' LOG; do sleep 20; done; tail -n 30 LOG`).
   if (seen.done) {
-    const status = exitCode === 0 ? (/^PREPARED /m.test(stdout.join('\n')) ? 'PREPARED' : 'HANDOFF') : exitCode === 4 ? 'WAITING' : 'FAILED';
-    lines.log(`BOARD-DONE-ENDE status=${status} exit=${exitCode}`);
+    const status = exitCode === 0 ? (seen.verdict === 'PREPARED' ? 'PREPARED' : 'HANDOFF') : exitCode === 4 ? 'WAITING' : 'FAILED';
+    lines.error(`BOARD-DONE-ENDE status=${status} exit=${exitCode}`);
   }
   return { exitCode, stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }
@@ -156,6 +156,7 @@ async function runCall({ argv: call, env, cwd, io, seen }) {
     const outcome = await commands[spec.run]();
     if (isResult(outcome)) {
       output.finish(outcome);
+      seen.verdict = outcome.verdict;
       exitCode = outcome.exitCode;
     }
   } catch (error) {

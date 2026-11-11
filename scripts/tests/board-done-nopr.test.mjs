@@ -290,13 +290,15 @@ test('done ends every output with the BOARD-DONE-ENDE line, on success and on fa
   const { run, file, json } = delivery(t, handoffFixture);
   writeFileSync(file('pr.json'), JSON.stringify({ ...json('pr.json'), changedFiles: 0 }));
   const ok = run('done', '1', 'result.md');
-  assert.equal(ok.stdout.trim().split('\n').at(-1), 'BOARD-DONE-ENDE status=HANDOFF exit=0');
+  assert.equal(ok.stderr.trim().split('\n').at(-1), 'BOARD-DONE-ENDE status=HANDOFF exit=0');
   const failed = run('done', '99');
-  assert.match(failed.stdout.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=FAILED exit=[1-9]/);
+  assert.match(failed.stderr.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=FAILED exit=[1-9]/);
 });
 
 test('done --cwd without a value still ends with the BOARD-DONE-ENDE line; --json stays plain JSON', t => {
   const { run } = delivery(t, handoffFixture);
-  assert.match(run('done', '1', '--cwd').stdout.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=FAILED exit=2/);
-  assert.doesNotMatch(run('done', '1', '--json').stdout, /BOARD-DONE-ENDE/);
+  assert.match(run('done', '1', '--cwd').stderr.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=FAILED exit=2/);
+  const json = run('done', '1', '--json');
+  assert.doesNotThrow(() => JSON.parse(json.stdout));
+  assert.match(json.stderr.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=PREPARED exit=0$/);
 });
