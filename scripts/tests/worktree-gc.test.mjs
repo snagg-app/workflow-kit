@@ -103,6 +103,7 @@ test('volumes: proof-root label (#1093): gone worktree under a reachable contain
   assert.equal(goneProofRoot('/work/clone/.claude/worktrees/gone', containers, () => false), false, 'container unreachable (unmounted drive)');
   assert.equal(goneProofRoot('/tmp/scratchpad/base-1', containers, exists), false, 'outside the worktrees');
   assert.equal(goneProofRoot(undefined, containers, exists), false, 'no label');
+  assert.equal(goneProofRoot('gone/.local', containers, exists), false, 'a relative label is never proof');
 });
 
 test('dry run is the default and deletes nothing; --rm deletes only finished worktrees', async t => {

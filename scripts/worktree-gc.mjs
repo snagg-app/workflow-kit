@@ -13,7 +13,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { gitAsyncIn } from './git-tool.mjs';
@@ -100,7 +100,7 @@ export function goneWorkdir(dir, owned, exists = existsSync) {
  * are the folders holding this clone's worktrees. The worktree root (first folder below the container) is gone while its container
  * still exists (not an unmounted drive). A path elsewhere (scratchpad, foreign clone) or a worktree still on disk: not proven. */
 export function goneProofRoot(dir, containers, exists = existsSync) {
-  if (!dir) return false;
+  if (!dir || !isAbsolute(dir) || /[\r\n]/.test(dir)) return false; // a relative label would resolve against --cwd
   const full = resolve(dir).replaceAll('\\', '/');
   for (const container of containers) {
     const prefix = `${norm(container)}/`;
@@ -243,7 +243,8 @@ ${error.message}`);
     if (inspected.ok) for (const line of inspected.out.split(/\r?\n/)) { const [name, workdir, proofRoot] = line.split('\t'); labels.set(name, { workdir, proofRoot }); }
   }
   const owned = worktrees.map(w => w.path);
-  const containers = [...new Set(worktrees.slice(1).map(w => dirname(w.path)))]; // slice(1): the main checkout's parent may hold foreign clones
+  // Only folders inside the main checkout: a foreign clone's worktrees may share a parent with it.
+  const containers = [...new Set(worktrees.slice(1).map(w => dirname(w.path)).filter(dir => norm(dir).startsWith(`${norm(worktrees[0].path)}/`)))];
   const gone = (name, exists) => goneWorkdir(labels.get(name)?.workdir, owned, exists) || goneProofRoot(labels.get(name)?.proofRoot, containers, exists);
   const goneAfterRm = name => gone(name, path => existsSync(path) && !finished.some(w => norm(path) === norm(w.path) || norm(path).startsWith(`${norm(w.path)}/`)));
   const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths), protect, name => gone(name, existsSync));
