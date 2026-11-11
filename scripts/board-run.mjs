@@ -40,7 +40,9 @@ import * as threads from './board-threads.mjs';
 export async function runBoard({ argv, env = process.env, cwd = process.cwd(), io } = {}) {
   const [stdout, stderr] = [[], []];
   const lines = { log: text => { stdout.push(text); io?.log(text); }, error: text => { stderr.push(text); io?.error(text); } };
-  const seen = {};
+  // `done` is found before any early exit; --json keeps stdout a single JSON document, so it gets no end line.
+  const first = argv.find((word, at) => !word.startsWith("-") && !["--cwd", "--issue-repo"].includes(argv[at - 1]));
+  const seen = { done: first === "done" && !argv.includes("--json") && !argv.includes("--help") && !argv.includes("-h") };
   let exitCode;
   try { exitCode = await runCall({ argv: [...argv], env, cwd, io: lines, seen }); } catch (error) {
     if (!seen.done) throw error;
@@ -82,7 +84,6 @@ async function runCall({ argv: call, env, cwd, io, seen }) {
     return 2;
   }
   const command = call[0];
-  seen.done = command === 'done';
   const projectFile = join(projectDirectory, '.github/workflow-project.json');
   if (!existsSync(projectFile)) {
     output.diagnostic(`${projectFile} is missing: run board.mjs inside the project, or name it with --cwd PROJECT_DIR`);

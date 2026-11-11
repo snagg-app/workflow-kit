@@ -294,3 +294,9 @@ test('done ends every output with the BOARD-DONE-ENDE line, on success and on fa
   const failed = run('done', '99');
   assert.match(failed.stdout.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=FAILED exit=[1-9]/);
 });
+
+test('done --cwd without a value still ends with the BOARD-DONE-ENDE line; --json stays plain JSON', t => {
+  const { run } = delivery(t, handoffFixture);
+  assert.match(run('done', '1', '--cwd').stdout.trim().split('\n').at(-1), /^BOARD-DONE-ENDE status=FAILED exit=2/);
+  assert.doesNotMatch(run('done', '1', '--json').stdout, /BOARD-DONE-ENDE/);
+});
