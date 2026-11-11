@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **`worktree-gc --rm` lässt Worktrees von Desktop-Sitzungen in Ruhe (#1096).** Eine Chief-Sitzung arbeitet oft stundenlang, ohne Dateien zu ändern, und unter Windows ist ihr Arbeitsordner nicht lesbar; der Worktree sah deshalb „fertig“ aus und wurde unter der laufenden Sitzung gelöscht. Ordner unter `.claude/worktrees/`, die nicht wie ein Subagent heißen (`agent-<Hex>`), bleiben jetzt (Vorschau: „session worktree“). Mit `--only` lassen sie sich weiter entfernen.
+
 - **`worktree-gc` erkennt Proof-Gradle-Volumes entfernter Worktrees (#1093).** Diese Volumes tragen kein Compose-Etikett, sondern `snagg.proof-root`; sie blieben deshalb immer „unklar“ liegen. Jetzt gelten sie als verwaist, wenn der Worktree-Ordner weg ist, der Ordner mit den Worktrees des Klons aber noch erreichbar. Außerdem fragt `worktree-gc` die Volume-Etiketten in Gruppen ab: bei rund 900 Volumes sprengte die Befehlszeile unter Windows die Längengrenze, und dann blieb jedes Volume „unklar“.
 
 - **`worktree-gc` hält Worktrees nicht mehr wegen eines `du`-Laufs für belegt, und `done` prüft den freien Plattenplatz.** Ein langer `du -sh` über alle Worktrees nannte jeden Pfad auf der Befehlszeile und hielt 134 von 143 Worktrees fest. Rein lesende Werkzeuge (`du`, `df`, `ls`, `stat`, `wc`) zählen nicht mehr als Nutzung; jeder andere Prozess schon. Die Sperre „claude agent agent-…“ nennt die PID der langlebigen Claude-App, die sie nie löst; sie hält einen sauberen, gepushten, alten, unbenutzten Worktree nicht mehr fest. `done` bricht vor Basis-Merge und Tests ab, wenn auf dem Laufwerk weniger als 5 GB frei sind.

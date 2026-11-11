@@ -26,6 +26,7 @@ test('only a clean, pushed, idle, old worktree is finished; each guard keeps it'
   assert.ok(keepReason({ ...finished, main: true }));
   assert.equal(keepReason({ ...finished, locked: 'dead (pid 1)', lockAlive: false }), null);
   assert.equal(keepReason({ ...finished, path: 'C:/p/.claude/worktrees/agent-a1b2' }), null, 'a subagent worktree goes (#1096)');
+  assert.equal(keepReason({ ...finished, path: 'C:\\p\\.claude\\worktrees\\agent-login-fix-7a' }), 'session worktree', 'a session titled "agent …" is no subagent');
   assert.equal(keepReason({ ...finished, path: 'C:/p/.claude/worktrees/chief-7a200b' }), 'session worktree');
   assert.equal(keepReason({ ...finished, path: 'C:/p/.claude/worktrees/chief-7a200b' }, { explicit: true }), null, '--only still removes it');
   assert.equal(keepReason({ ...finished, ageMinutes: 0, locked: 'x' }, { explicit: true }), null, '--only skips lock and age');
