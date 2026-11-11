@@ -9,7 +9,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { context, guarded, install, outsideCheckouts, publish, withLock } from '../provider.mjs';
+import { context, guarded, install, outsideCheckouts, publish, setup, withLock } from '../provider.mjs';
 import impeccable from '../provider-impeccable.mjs';
 import ponytail from '../provider-ponytail.mjs';
 import { temporary } from './fixtures.mjs';
@@ -214,4 +214,27 @@ test('provider.mjs runs when started through a link to the kit, as .vendor/workf
   const run = spawnSync(process.execPath, [join(link, 'provider.mjs')], { encoding: 'utf8' });
   assert.equal(run.status, 2, 'the usage error proves the entry point ran, not a silent exit 0');
   assert.match(run.stderr, /Usage: node/);
+});
+
+test('a provider whose submodule cannot be fetched is skipped with a warning, not an abort', async t => {
+  const kit = temporary(t, 'provider missing submodule ');
+  mkdirSync(join(kit, 'src'));
+  const log = [];
+  await setup({ label: 'Fake', source: 'src' }, { kit, log: line => log.push(line), git: () => { throw new Error('offline'); } });
+  assert.match(log.join('\n'), /^Warning: Fake skills skipped/);
+});
+
+test('a submodule that the update leaves unchecked-out (update=none) is skipped with a warning', async t => {
+  const kit = temporary(t, 'provider update none ');
+  mkdirSync(join(kit, 'src'));
+  const log = [];
+  await setup({ label: 'Fake', source: 'src' }, { kit, log: line => log.push(line), git: () => '' });
+  assert.match(log.join(' '), /^Warning: Fake skills skipped.*update=none/);
+});
+
+test('a checked-out submodule whose update fails still aborts', async t => {
+  const kit = temporary(t, 'provider checkout update fails ');
+  mkdirSync(join(kit, 'src/.git'), { recursive: true });
+  const git = (...args) => { if (args.includes('update')) throw new Error('offline'); return ''; };
+  await assert.rejects(setup({ label: 'Fake', source: 'src' }, { kit, log() {}, git }), /offline/);
 });
