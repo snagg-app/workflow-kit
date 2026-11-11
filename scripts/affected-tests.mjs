@@ -45,6 +45,7 @@ export const TABLE = [
   [/^\.githooks\//, ['git-hooks.test.mjs']],
   [/^scripts\/affected-tests\.mjs$/, ['affected-tests.test.mjs']],
   [/^scripts\/worktree-gc\.mjs$/, ['worktree-gc.test.mjs']],
+  [/^scripts\/disk-space\.mjs$/, ['disk-space.test.mjs']],
   [/^scripts\/checkout-root\.mjs$/, [ALL]],
   [/^scripts\/(provider-links|write-guard)\.mjs$/, [NOT_BOARD]],
   [/^scripts\/lock\.mjs$/, ['provider.test.mjs', 'ponytail-hooks.test.mjs', 'kit-init-hook.test.mjs', 'entrypoints.test.mjs']],

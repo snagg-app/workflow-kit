@@ -19,6 +19,9 @@ test('only a clean, pushed, idle, old worktree is finished; each guard keeps it'
   assert.ok(keepReason({ ...finished, busy: true }));
   assert.ok(keepReason({ ...finished, locked: 'claude agent (pid 1)', lockAlive: true }));
   assert.ok(keepReason({ ...finished, locked: 'no pid in here' }));
+  assert.equal(keepReason({ ...finished, locked: 'claude agent agent-a1b2 (pid 1)', lockAlive: true }), null, 'the app lock names its own long-lived pid (#1091)');
+  assert.ok(keepReason({ ...finished, locked: 'claude agent agent-a1b2 (pid 1)', lockAlive: true, busy: true }), 'an app lock is freed only when idle');
+  assert.ok(keepReason({ ...finished, locked: 'claude agent agent-a1b2 (pid 1)', lockAlive: true, ageMinutes: 5 }), 'and old');
   assert.ok(keepReason({ ...finished, ageMinutes: 5 }));
   assert.ok(keepReason({ ...finished, main: true }));
   assert.equal(keepReason({ ...finished, locked: 'dead (pid 1)', lockAlive: false }), null);
@@ -39,6 +42,16 @@ test('the shells that started the script carry the path too and do not count as 
   assert.equal(busyFrom({ ok: true, out: chain }, path, 30), false);
   assert.equal(busyFrom({ ok: true, out: `${chain}\n99\t1\tvim ${path}/file` }, path, 30), true);
   assert.equal(busyFrom({ ok: true, out: `${chain}\n99\t10\tnode ${path}/sibling.mjs` }, path, 30), true, 'a child of the shell is no ancestor');
+});
+
+test('a read-only listing (du over all worktrees) does not make a worktree busy, any other tool still does (#1091)', () => {
+  const path = resolve('/work/tree');
+  const du = `42\t1\t"C:\\Program Files\\Git\\usr\\bin\\du.exe" -sh ${path} /other`;
+  assert.equal(busyFrom({ ok: true, out: du }, path), false);
+  assert.equal(busyFrom({ ok: true, out: `42\t1\tdu -sh ${path}` }, path), false);
+  assert.equal(busyFrom({ ok: true, out: `${du}\n43\t1\tnode ${path}/tool.mjs` }, path), true);
+  assert.equal(busyFrom({ ok: true, out: `42\t1\tduplicate ${path}` }, path), true, 'only the exact tool name is skipped');
+  assert.equal(busyFrom({ ok: true, out: `42\t1\t` }, path), false);
 });
 
 test('a failed count of unpushed commits is unknown and keeps the worktree, never zero', () => {

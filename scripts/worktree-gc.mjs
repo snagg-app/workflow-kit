@@ -9,7 +9,7 @@
 // one of `worktreeVolumeProtect` (the project's long-lived volumes; also --volume-protect, repeatable).
 // A volume is deleted only if its compose label `working_dir` lies inside this clone and is gone; anything else is "unclear" and stays (#951).
 // A worktree is deleted only if ALL hold: no local changes, no commits missing on the remote (or in a merged PR),
-// no running process, not locked by a living session, older than --min-age. Anything unclear is kept.
+// no running process (read-only listings such as du do not count, #1091), not locked by a living session, older than --min-age. Anything unclear is kept.
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -33,8 +33,16 @@ export function busyFrom(listing, path, self = process.pid) {
   const parent = new Map(rows.map(row => [row.pid, row.ppid]));
   const mine = new Set([self]);
   for (let pid = parent.get(self); pid && !mine.has(pid); pid = parent.get(pid)) mine.add(pid);
-  return rows.some(row => !mine.has(row.pid) && row.command.replaceAll('\\', '/').toLowerCase().includes(here));
+  return rows.some(row => !mine.has(row.pid) && !readOnlyTool(row.command) && row.command.replaceAll('\\', '/').toLowerCase().includes(here));
 }
+
+// A disk-usage listing names every worktree on its command line and runs for minutes (#1091: one `du -sh <140 paths>` kept 134 worktrees).
+// It uses none of them. Only this fixed list is skipped; any other process, and any tool we cannot name, still counts as busy.
+const READ_ONLY_TOOLS = new Set(['du', 'df', 'ls', 'stat', 'wc']);
+const readOnlyTool = command => {
+  const exe = command.match(/^\s*(?:"([^"]+)"|(\S+))/)?.slice(1).find(Boolean);
+  return Boolean(exe) && READ_ONLY_TOOLS.has(exe.replaceAll('\\', '/').split('/').pop().replace(/\.exe$/i, '').toLowerCase());
+};
 
 /** Number of commits not on any remote, from the rev-list result {ok, out}. A failed or unreadable count is null (unknown), never 0. */
 export function unpushedCount(result) {
@@ -62,7 +70,9 @@ export function keepReason(w, { minAge = 120, explicit = false } = {}) {
   if (w.unpushed !== 0) return 'commits not on the remote';
   if (w.busy) return 'running process';
   if (explicit) return null;
-  if (w.locked != null && w.lockAlive !== false) return 'locked by a living session';
+  // The Claude app locks every subagent worktree with its own long-lived pid and never unlocks (#1091): that pid proves nothing,
+  // so such a lock does not count. Idle, clean, pushed and old are checked above and below.
+  if (w.locked != null && w.lockAlive !== false && !/^claude agent agent-/.test(w.locked)) return 'locked by a living session';
   if (w.ageMinutes < minAge) return 'too young';
   return null;
 }

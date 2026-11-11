@@ -2,6 +2,7 @@
 
 ## Unveröffentlicht
 
+- **`worktree-gc` hält Worktrees nicht mehr wegen eines `du`-Laufs für belegt, und `done` prüft den freien Plattenplatz.** Ein langer `du -sh` über alle Worktrees nannte jeden Pfad auf der Befehlszeile und hielt 134 von 143 Worktrees fest. Rein lesende Werkzeuge (`du`, `df`, `ls`, `stat`, `wc`) zählen nicht mehr als Nutzung; jeder andere Prozess schon. Die Sperre „claude agent agent-…“ nennt die PID der langlebigen Claude-App, die sie nie löst; sie hält einen sauberen, gepushten, alten, unbenutzten Worktree nicht mehr fest. `done` bricht vor Basis-Merge und Tests ab, wenn auf dem Laufwerk weniger als 5 GB frei sind.
 - **`done` schreibt als allerletzte Zeile immer `BOARD-DONE-ENDE status=<HANDOFF|PREPARED|WAITING|FAILED> exit=<Code>`.** Auch bei Fehlern und Ausnahmen, auf stderr (mit `--json` bleibt stdout ein einzelnes JSON-Dokument; Monitor-Logs fangen `2>&1` ab). Ein Monitor im Hintergrund wartet darauf mit `until grep -q '^BOARD-DONE-ENDE' LOG; do sleep 20; done; tail -n 30 LOG` und feuert nicht mehr auf Zwischenzeilen wie eine alte READY-Zeile.
 
 - **`done` nennt den Rebase-Befehl mit dem Branchnamen statt `HEAD`.** Steht der Branch auf dem Release, aber der Diff betrifft nur `mainOnlyPaths`, bricht `done` ab und nennt `git rebase --onto origin/<main> origin/<release> <branch>`. Mit `HEAD` am Ende endete git auf einem losgelösten HEAD, und der Branch blieb unverändert.
