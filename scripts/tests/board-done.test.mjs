@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, handoffFixture, issue, test } from './board-fixture.mjs';
-import { delivery, showPr, moveBase, baseMergePolicy } from './board-done-fixture.mjs';
+import { delivery, showPr, moveBase, baseMergePolicy, sonarDelivery } from './board-done-fixture.mjs';
 
 test('done refuses a spec before acceptance comments or body changes', t => {
   const { checkout, run, writeIssue } = fixture(t);
@@ -199,5 +199,38 @@ test('done overlap comparison fails closed when the fetched PR base does not exi
   assert.equal(git('rev-parse', 'HEAD'), head);
   assert.equal(text('affected-tests-calls'), '');
   assert.equal(text('stored'), 'In progress');
+});
+
+// #1098: a project with the Sonar app in awaitApps gets the local analysis before the push of `done`.
+const pushed = ({ git }) => git('ls-remote', 'origin', 'refs/heads/work').split('\t')[0];
+
+test('done stops before the push when the local Sonar analysis has findings', t => {
+  const d = sonarDelivery(t, handoffFixture, { status: 'findings', text: 'java:S1192 Foo.java:3' });
+  const run = d.run('done', '1', 'result.md');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr + run.stdout, /java:S1192 Foo\.java:3/);
+  assert.equal(pushed(d), d.head, 'nothing is pushed');
+});
+
+test('done stops before the push when the local Sonar analysis itself fails (timeout, crash)', t => {
+  const d = sonarDelivery(t, handoffFixture, { status: 'failed', text: 'spawnSync sonar ETIMEDOUT' });
+  const run = d.run('done', '1', 'result.md');
+  assert.equal(run.status, 1);
+  assert.match(run.stderr + run.stdout, /ETIMEDOUT/);
+  assert.equal(pushed(d), d.head, 'nothing is pushed');
+});
+
+test('done goes on when the local Sonar analysis is clean', t => {
+  const d = sonarDelivery(t, handoffFixture);
+  d.run('done', '1', 'result.md');
+  assert.equal(d.text('sonar-local-calls').trim(), d.git('merge-base', 'HEAD', 'origin/release/0.1.1'), 'the analysis runs against the merge-base');
+  assert.equal(pushed(d), d.git('rev-parse', 'HEAD'), 'the head is pushed');
+});
+
+test('done only warns when the Sonar CLI is missing or not logged in', t => {
+  const d = sonarDelivery(t, handoffFixture, { status: 'unavailable', text: 'spawnSync sonar ENOENT' });
+  const run = d.run('done', '1', 'result.md');
+  assert.match(run.stdout + run.stderr, /WARNING: local Sonar analysis skipped \(spawnSync sonar ENOENT\)/);
+  assert.equal(pushed(d), d.git('rev-parse', 'HEAD'), 'the head is pushed');
 });
 

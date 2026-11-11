@@ -58,17 +58,23 @@ export const useSonarAnalyzer = fake => { analyzer = fake; };
 
 /**
  * #1098: the local analysis `sonar analyze --base MERGE_BASE` before the push. status: 'clean', 'findings' (text lists them) or
- * 'unavailable' (no CLI, no login, analysis refused: text says why; the caller warns and goes on, never blocks).
+ * 'unavailable' (no CLI, no login, analysis refused: text says why; the caller warns and goes on) or 'failed' (timeout, crash: blocks).
  */
 export function sonarLocal(cwd, mergeBase) {
   if (analyzer) return analyzer(cwd, mergeBase);
   const run = spawnSync('sonar', ['analyze', '--base', mergeBase, '--force', '--format', 'json'], { encoding: 'utf8', timeout: 10 * 60 * 1000, maxBuffer: 64 << 20, cwd });
   const out = run.stdout ?? '';
   let report;
-  try { report = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1)); } catch { /* not JSON: unavailable below */ }
+  try { report = JSON.parse(out.slice(out.indexOf('{'), out.lastIndexOf('}') + 1)); } catch { /* not JSON: judged below */ }
+  const total = (report?.secrets?.summary?.totalIssues ?? 0) + (report?.agentic?.summary?.totalIssues ?? 0);
   const error = report?.agentic?.globalError?.message;
-  if (!report || error) return { status: 'unavailable', text: error ?? run.error?.message ?? String(run.stderr || out || `exit ${run.status}`).trim().split('\n')[0] };
-  const total = (report.secrets?.summary?.totalIssues ?? 0) + (report.agentic?.summary?.totalIssues ?? 0);
+  // Findings count before a global error of a later group; without findings, a refused analysis only warns.
+  if (!total && error) return { status: 'unavailable', text: error };
+  if (!report) {
+    const reason = run.error?.message ?? String(run.stderr || out || `exit ${run.status}`).trim().split('\n')[0];
+    // A missing CLI warns; a timeout, a signal or a crash (run.error / signal) is a failure. Other output without a report is the login prompt.
+    return { status: run.error?.code === 'ENOENT' || !(run.error || run.signal) ? 'unavailable' : 'failed', text: reason };
+  }
   if (!total) return { status: 'clean', text: '' };
   // shortcut: the CLI's finding shape is printed as it comes, truncated; shape it per rule when the output proves stable.
   return { status: 'findings', text: `${total} finding(s): ${JSON.stringify({ secrets: report.secrets?.issues, files: report.agentic?.files }).slice(0, 3000)}` };

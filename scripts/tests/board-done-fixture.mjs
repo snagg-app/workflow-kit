@@ -57,3 +57,13 @@ export function moveBase(git, checkout, theirs = {}, mine = {}) {
 export function baseMergePolicy(file, json, doneBaseMerge = 'overlap') {
   writeFileSync(file('base-project.json'), JSON.stringify({ ...json('.github/workflow-project.json'), doneBaseMerge }));
 }
+
+// #1098: a delivery whose project waits for the Sonar app (awaitApps) and has an own commit to push; `local` is what the fake local analysis answers.
+export function sonarDelivery(t, fixtureOf, local) {
+  const d = delivery(t, fixtureOf);
+  writeFileSync(d.file('base-project.json'), JSON.stringify({ ...d.json('.github/workflow-project.json'), awaitApps: ['sonarqubecloud'] }));
+  if (local) writeFileSync(d.file('sonar-local.json'), JSON.stringify(local));
+  moveBase(d.git, d.checkout);
+  showPr(d.file, d.json, { isDraft: false });
+  return d;
+}
