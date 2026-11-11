@@ -74,6 +74,8 @@ function pinnedSource(p, c) {
     if (!existsSync(join(source, '.git'))) return { missing: error };
     throw error;
   }
+  // submodule.<name>.update=none ends the command successfully without a checkout: same optional skip, other cause.
+  if (!existsSync(join(source, '.git'))) return { missing: new Error('the update is disabled (submodule update=none) and left no checkout') };
   clean();
   const revision = c.git('-C', source, 'rev-parse', 'HEAD').trim();
   // submodule.<name>.update=none skips the checkout above; only the kit's pin may be packaged.
@@ -87,7 +89,7 @@ function pinnedSource(p, c) {
  */
 export async function setup(p, c) {
   const pinned = pinnedSource(p, c);
-  if (pinned.missing) return (c.log ?? console.log)(`Warning: ${p.label} skills skipped, its submodule ${p.source} is not initialised and could not be fetched (${String(pinned.missing.stderr || pinned.missing.message).trim().split(/\r?\n/)[0]}). Run: git -C ${c.kit} submodule update --init -- ${p.source}`);
+  if (pinned.missing) return (c.log ?? console.log)(`Warning: ${p.label} skills skipped, its submodule ${p.source} is not initialised and was not fetched (${String(pinned.missing.stderr || pinned.missing.message).trim().split(/\r?\n/)[0]}). Run: git -C ${c.kit} submodule update --init -- ${p.source}`);
   return publish(p, { ...c, ...pinned });
 }
 
