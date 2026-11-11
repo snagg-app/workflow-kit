@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, handoffFixture, issue, test } from './board-fixture.mjs';
 import { localVerdict } from '../sonar.mjs';
-import { delivery,showPr, moveBase, baseMergePolicy, sonarDelivery } from './board-done-fixture.mjs';
+import { delivery, showPr, moveBase, baseMergePolicy, sonarDelivery } from './board-done-fixture.mjs';
 
 test('done refuses a spec before acceptance comments or body changes', t => {
   const { checkout, run, writeIssue } = fixture(t);

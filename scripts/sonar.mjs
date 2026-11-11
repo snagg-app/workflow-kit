@@ -79,7 +79,7 @@ export function localVerdict(report) {
   // shortcut: the CLI's finding shape is printed as it comes, truncated; shape it per rule when the output proves stable.
   if (total) return { status: 'findings', text: `${total} finding(s): ${JSON.stringify({ secrets: report.secrets?.issues, files: report.agentic?.files }).slice(0, 3000)}` };
   if (error?.kind === 'forbidden') return { status: 'secrets-only', text: 'Code-Regeln lokal nicht verfügbar (Vortex 403), nur Secrets geprüft' };
-  return error ? { status: 'unavailable', text: error.message } : { status: 'clean', text: '' };
+  return error ? { status: 'unavailable', text: error.message ?? error.kind ?? 'unknown error' } : { status: 'clean', text: '' };
 }
 
 /**
