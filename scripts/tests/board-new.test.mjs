@@ -93,6 +93,7 @@ test('new checks every required value before creating, reads all values back and
   };
   refused('no priority', ...base.filter((arg, index) => ![8, 9].includes(index)));
   refused('no label', ...base.filter((arg, index) => ![6, 7].includes(index)));
+  assert.match(refused('all missing values at once', ...base.filter((arg, index) => ![7, 8, 9, 10].includes(index))), /priority, at least one label are required/);
   refused('unknown label', ...base, '--label', 'nope');
   refused('unknown milestone', ...base.map(arg => arg === '0.1.1' ? '9.9' : arg));
   assert.match(refused('unknown option', ...base.map(arg => arg === 'Size=xs' ? 'Size=XXL' : arg)), /XS.*S/);
