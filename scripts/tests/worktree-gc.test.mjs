@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { isolatedGit, run, temporary } from './fixtures.mjs';
-import { busyFrom, goneWorkdir, keepReason, mergedHeads, orphanVolumes, rootHashes, unpushedCount, unpushedFor } from '../worktree-gc.mjs';
+import { busyFrom, goneProofRoot, goneWorkdir, keepReason, mergedHeads, orphanVolumes, rootHashes, unpushedCount, unpushedFor } from '../worktree-gc.mjs';
 
 const script = fileURLToPath(new URL('../worktree-gc.mjs', import.meta.url));
 const finished = { dirty: false, unpushed: 0, busy: false, locked: null, ageMinutes: 1000 };
@@ -92,6 +92,18 @@ test('volumes: an unknown hash alone is no proof, a foreign clone or an unreacha
   assert.deepEqual(orphanVolumes(names, ['cache-'], live, [], name => goneWorkdir(dirs.get(name), owned, mounted)), [vanished], 'only the own clone with a gone dir under a reachable parent');
   assert.equal(goneWorkdir('/work/clone/wt/docker', owned, () => true), false, 'dir still exists');
   assert.equal(goneWorkdir(undefined, owned, () => false), false, 'no label');
+});
+
+test('volumes: proof-root label (#1093): gone worktree under a reachable container is proven, the rest stays', () => {
+  const containers = ['/work/clone/.claude/worktrees'];
+  const exists = path => path === '/work/clone/.claude/worktrees' || path === '/work/clone/.claude/worktrees/live';
+  assert.equal(goneProofRoot('/work/clone/.claude/worktrees/gone', containers, exists), true, 'worktree root itself');
+  assert.equal(goneProofRoot('/work/clone/.claude/worktrees/gone/.local/test-base-1', containers, exists), true, 'path below the worktree');
+  assert.equal(goneProofRoot('/work/clone/.claude/worktrees/live/.local/test-base-1', containers, exists), false, 'worktree still on disk');
+  assert.equal(goneProofRoot('/work/clone/.claude/worktrees/gone', containers, () => false), false, 'container unreachable (unmounted drive)');
+  assert.equal(goneProofRoot('/tmp/scratchpad/base-1', containers, exists), false, 'outside the worktrees');
+  assert.equal(goneProofRoot(undefined, containers, exists), false, 'no label');
+  assert.equal(goneProofRoot('gone/.local', containers, exists), false, 'a relative label is never proof');
 });
 
 test('dry run is the default and deletes nothing; --rm deletes only finished worktrees', async t => {

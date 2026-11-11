@@ -7,13 +7,13 @@
 // Volumes: `worktreeVolumePrefixes` in .github/workflow-project.json lists the name prefixes; a volume is
 // `<prefix><sha256(worktree root)[0:12]>[-suffix]`. Only those names are ever touched, and never a name containing
 // one of `worktreeVolumeProtect` (the project's long-lived volumes; also --volume-protect, repeatable).
-// A volume is deleted only if its compose label `working_dir` lies inside this clone and is gone; anything else is "unclear" and stays (#951).
+// A volume is deleted only if its compose label `working_dir` or its `snagg.proof-root` lies inside this clone's worktrees and is gone; anything else is "unclear" and stays (#951, #1093).
 // A worktree is deleted only if ALL hold: no local changes, no commits missing on the remote (or in a merged PR),
 // no running process (read-only listings such as du do not count, #1091), not locked by a living session, older than --min-age. Anything unclear is kept.
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { enterCwd, externalTool, projectRoot } from './checkout-root.mjs';
 import { gitAsyncIn } from './git-tool.mjs';
@@ -94,6 +94,22 @@ export function goneWorkdir(dir, owned, exists = existsSync) {
   const here = norm(dir);
   if (!owned.some(path => here === norm(path) || here.startsWith(`${norm(path)}/`))) return false;
   return !exists(dir) && exists(dirname(dir));
+}
+
+/** Proof from the label `snagg.proof-root` of proof-cache volumes (#1093): a path in or below `<container>/<worktree>`, where `containers`
+ * are the folders holding this clone's worktrees. The worktree root (first folder below the container) is gone while its container
+ * still exists (not an unmounted drive). A path elsewhere (scratchpad, foreign clone) or a worktree still on disk: not proven. */
+export function goneProofRoot(dir, containers, exists = existsSync) {
+  if (!dir || !isAbsolute(dir) || /[\r\n]/.test(dir)) return false; // a relative label would resolve against --cwd
+  const full = resolve(dir).replaceAll('\\', '/');
+  const fold = path => process.platform === 'win32' ? norm(path) : resolve(path).replaceAll('\\', '/').replace(/\/$/, ''); // only Windows ignores case
+  for (const container of containers) {
+    const prefix = `${fold(container)}/`;
+    if (!fold(full).startsWith(prefix)) continue;
+    const root = `${container.replace(/[\\/]$/, '')}/${full.slice(prefix.length).split('/')[0]}`; // original case: the disk may be case-sensitive
+    return !exists(root) && exists(container);
+  }
+  return false;
 }
 
 /** All spellings of a root that a tool may have hashed (slashes, drive letter case). */
@@ -220,12 +236,20 @@ ${error.message}`);
   const hashesOf = list => new Set(list.flatMap(w => rootHashes(w.path)));
   // Only a volume whose compose working_dir was inside this clone and is gone counts as orphaned; the rest is "unclear" and stays.
   const suspects = orphanVolumes(all, prefixes, hashesOf(livePaths), protect, () => true);
+  const toInspect = orphanVolumes(all, prefixes, new Set(), protect, () => true); // also the volumes of worktrees about to go, for the preview
   const label = 'com.docker.compose.project.working_dir';
-  const inspected = suspects.length ? await exec(docker, ['volume', 'inspect', '--format', `{{.Name}}\t{{index .Labels "${label}"}}`, ...suspects]) : { ok: true, out: '' };
-  const workdirs = new Map(inspected.ok ? inspected.out.split(/\r?\n/).map(line => line.split('\t')) : []);
+  // In chunks: ~900 names overflow the Windows command line (a failed inspect would leave every volume "unclear").
+  const labels = new Map();
+  for (let at = 0; at < toInspect.length; at += 100) {
+    const inspected = await exec(docker, ['volume', 'inspect', '--format', `{{.Name}}\t{{index .Labels "${label}"}}\t{{index .Labels "snagg.proof-root"}}`, ...toInspect.slice(at, at + 100)]);
+    if (inspected.ok) for (const line of inspected.out.split(/\r?\n/)) { const [name, workdir, proofRoot] = line.split('\t'); labels.set(name, { workdir, proofRoot }); }
+  }
   const owned = worktrees.map(w => w.path);
-  const goneAfterRm = name => goneWorkdir(workdirs.get(name), owned, path => existsSync(path) && !finished.some(w => norm(path) === norm(w.path) || norm(path).startsWith(`${norm(w.path)}/`)));
-  const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths), protect, name => goneWorkdir(workdirs.get(name), owned));
+  // Only folders inside the main checkout: a foreign clone's worktrees may share a parent with it.
+  const containers = [...new Set(worktrees.slice(1).map(w => dirname(w.path)).filter(dir => norm(dir).startsWith(`${norm(worktrees[0].path)}/`)))];
+  const gone = (name, exists) => goneWorkdir(labels.get(name)?.workdir, owned, exists) || goneProofRoot(labels.get(name)?.proofRoot, containers, exists);
+  const goneAfterRm = name => gone(name, path => existsSync(path) && !finished.some(w => norm(path) === norm(w.path) || norm(path).startsWith(`${norm(w.path)}/`)));
+  const orphans = orphanVolumes(all, prefixes, hashesOf(livePaths), protect, name => gone(name, existsSync));
   const afterRm = orphanVolumes(all, prefixes, hashesOf(livePaths.filter(w => !finished.includes(w))), protect, goneAfterRm);
   console.log(`Volumes: ${all.length} in total, ${all.filter(n => protect.some(word => n.toLowerCase().includes(word.toLowerCase()))).length} protected (never touched), ${orphans.length} orphaned, ${suspects.length - orphans.length} unclear (kept)${option.rm ? '' : `, ${afterRm.length - orphans.length} more once the finished worktrees are gone`}`);
   if (!option.rm) for (const name of suspects.filter(n => !orphans.includes(n))) console.log(`  unclear: ${name}`);
