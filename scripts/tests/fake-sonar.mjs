@@ -3,6 +3,12 @@
 // The same door answers when no token is set (the real one then runs the `sonar` CLI, #1055).
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 
+// The local analysis (#1098): `sonar-local.json` is { status, text }, without it the analysis is clean; every call is noted in `sonar-local-calls`.
+export function fakeSonarLocal(cwd, mergeBase) {
+  appendFileSync('sonar-local-calls', `${mergeBase}\n`);
+  return existsSync('sonar-local.json') ? JSON.parse(readFileSync('sonar-local.json', 'utf8')) : { status: 'clean', text: '' };
+}
+
 export function fakeSonar(href, token) {
   appendFileSync('sonar-requests', `${JSON.stringify([href, `Bearer ${token}`])}\n`);
   const { status, total, issues } = existsSync('sonar.json') ? JSON.parse(readFileSync('sonar.json', 'utf8')) : { status: 200, total: 0, issues: [] };

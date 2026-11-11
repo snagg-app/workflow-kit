@@ -24,6 +24,7 @@ import { lowDiskRefusal } from './disk-space.mjs';
 import { kitSelfCheck } from './kit-self-check.mjs';
 import { missingReview } from './review-marker.mjs';
 import { moduleReviewPaths } from './review-modules.mjs';
+import { sonarLocal } from './sonar.mjs';
 import { poll, reviewOutcome, reviewsForHead } from './board-wait.mjs';
 
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
@@ -174,6 +175,12 @@ async function done() {
       const problem = kitSelfCheck(projectDirectory, base);
       if (problem) return failed(problem);
     } catch (error) { return failed(`cannot check the kit files: ${failure(error)}`); }
+    // #1098: a project that waits for Sonar gets the local analysis before the push; a second done run after a red gate costs ~15 min. Findings stop here; a missing CLI or login only warns.
+    if (gate.awaitApps.includes('sonarqubecloud')) try {
+      const local = sonarLocal(projectDirectory, git('merge-base', 'HEAD', base));
+      if (local.status === 'findings') return failed(`sonar analyze found issues before the push; fix them, then run done again:\n${local.text}`);
+      if (local.status === 'unavailable') progress(`WARNING: local Sonar analysis skipped (${local.text}); run \`sonar auth login\``);
+    } catch (error) { return failed(`cannot run the local Sonar analysis: ${failure(error)}`); }
     // #659: new local commits (a correction after an earlier done) are pushed even when no base merge was needed.
     const plan = pushPlan({ stand: checkout.stand(), number, pr, mergeNeeded });
     if (plan.push) {
