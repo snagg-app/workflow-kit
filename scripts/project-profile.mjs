@@ -59,6 +59,7 @@ export function projectLabels(project) {
 const texts = {
   en: {
     handoff: 'Handoff',
+    skipNote: reason => `Local tests skipped: ${reason}`,
     baseRedHeading: 'Already red on the base',
     baseRedIntro: base => `These tests fail on \`${base}\` too, not because of this PR; they did not block the handoff.`,
     baseRedKnown: url => `issue ${url}`,
@@ -95,6 +96,7 @@ const texts = {
   },
   de: {
     handoff: 'Übergabe',
+    skipNote: reason => `Lokale Tests übersprungen: ${reason}`,
     baseRedHeading: 'Schon auf der Basis rot',
     baseRedIntro: base => `Diese Tests scheitern auch auf \`${base}\`, nicht wegen dieses PR; sie haben die Übergabe nicht blockiert.`,
     baseRedKnown: url => `Issue ${url}`,

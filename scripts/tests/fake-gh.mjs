@@ -96,6 +96,14 @@ function api(argv, input, stdout, stderr, exit) {
       stdout(fs.existsSync(file) ? fs.readFileSync(file) : '[]');
       exit(0);
     }
+    // `done` appends the skip note to a handoff comment that exists already.
+    if (parts[3] === 'issues' && parts[4] === 'comments' && argv.includes('PATCH')) {
+      const posted = JSON.parse(fs.readFileSync('issues-comments.json'));
+      posted.find(comment => String(comment.id) === parts[5]).body = input;
+      fs.writeFileSync('issues-comments.json', JSON.stringify(posted));
+      stdout('{}');
+      exit(0);
+    }
     if (parts[3] === 'issues' && parts.length === 5 && argv.includes('PATCH')) {
       const issue = JSON.parse(fs.readFileSync(backlink));
       if (argv.includes('state=closed')) {
