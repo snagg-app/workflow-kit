@@ -62,7 +62,7 @@ export function mergedHeads(json) {
 }
 
 /** Why this worktree must stay, or null if it is finished. Pure: the facts are gathered elsewhere.
- * `explicit` (--only) skips the two guards meant for other sessions' trees (lock, age); the safety checks always apply. */
+ * `explicit` (--only) skips the guards meant for other sessions' trees (session worktree, lock, age); the safety checks always apply. */
 export function keepReason(w, { minAge = 120, explicit = false } = {}) {
   if (w.main) return 'main checkout';
   if (w.current) return 'this checkout';
@@ -70,6 +70,8 @@ export function keepReason(w, { minAge = 120, explicit = false } = {}) {
   if (w.unpushed !== 0) return 'commits not on the remote';
   if (w.busy) return 'running process';
   if (explicit) return null;
+  // A desktop session works for hours without touching files and Windows hides its cwd (#1096): the app removes it when the session is archived.
+  if (w.path && !w.missing && /\/\.claude\/worktrees\/(?!agent-[0-9a-f]+$)[^/]+$/.test(norm(w.path))) return 'session worktree';
   // The Claude app locks every subagent worktree with its own long-lived pid and never unlocks (#1091): that pid proves nothing,
   // so such a lock does not count. Idle, clean, pushed and old are checked above and below.
   if (w.locked != null && w.lockAlive !== false && !/^claude agent agent-/.test(w.locked)) return 'locked by a living session';
