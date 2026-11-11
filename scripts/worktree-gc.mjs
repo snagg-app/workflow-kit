@@ -33,8 +33,16 @@ export function busyFrom(listing, path, self = process.pid) {
   const parent = new Map(rows.map(row => [row.pid, row.ppid]));
   const mine = new Set([self]);
   for (let pid = parent.get(self); pid && !mine.has(pid); pid = parent.get(pid)) mine.add(pid);
-  return rows.some(row => !mine.has(row.pid) && row.command.replaceAll('\\', '/').toLowerCase().includes(here));
+  return rows.some(row => !mine.has(row.pid) && !readOnlyTool(row.command) && row.command.replaceAll('\\', '/').toLowerCase().includes(here));
 }
+
+// A disk-usage listing names every worktree on its command line and runs for minutes (#1091: one `du -sh <140 paths>` kept 134 worktrees).
+// It uses none of them. Only this fixed list is skipped; any other process, and any tool we cannot name, still counts as busy.
+const READ_ONLY_TOOLS = new Set(['du', 'df', 'ls', 'stat', 'wc']);
+const readOnlyTool = command => {
+  const exe = command.match(/^\s*(?:"([^"]+)"|(\S+))/)?.slice(1).find(Boolean);
+  return Boolean(exe) && READ_ONLY_TOOLS.has(exe.replaceAll('\\', '/').split('/').pop().replace(/\.exe$/i, '').toLowerCase());
+};
 
 /** Number of commits not on any remote, from the rev-list result {ok, out}. A failed or unreadable count is null (unknown), never 0. */
 export function unpushedCount(result) {

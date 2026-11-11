@@ -20,6 +20,7 @@ import { resolveOption, set } from './board-fields.mjs';
 import { findHandoffComment, handoff, ready } from './board-handoff.mjs';
 import { baseSettings, useBaseSettings } from './board-reviews.mjs';
 import { openFirstPr } from './board-start.mjs';
+import { lowDiskRefusal } from './disk-space.mjs';
 import { kitSelfCheck } from './kit-self-check.mjs';
 import { missingReview } from './review-marker.mjs';
 import { moduleReviewPaths } from './review-modules.mjs';
@@ -136,6 +137,8 @@ async function done() {
   // An untested head applies the target base's policy (#558, #579). A conflict is aborted, the branch stays as it was.
   // #656: a head the PR does not show yet is pushed even when its tested marker exists (a run that ended after the tests).
   if (!isSettled() || localHead() !== pull.head.sha) {
+    const lowDisk = lowDiskRefusal(projectDirectory);
+    if (lowDisk) return failed(lowDisk);
     const base = `origin/${pull.base.ref}`, failure = error => String(error.stderr || error.message).trim();
     // Only the PR's own branch of this repository is merged into and pushed.
     const pr = { branch: pull.head.ref, head: pull.head.sha, number: prNumber, repository: project.repository, sameRepo: pull.head.repo?.full_name?.toLowerCase() === project.repository.toLowerCase() };

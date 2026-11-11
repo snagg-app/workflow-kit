@@ -41,6 +41,16 @@ test('the shells that started the script carry the path too and do not count as 
   assert.equal(busyFrom({ ok: true, out: `${chain}\n99\t10\tnode ${path}/sibling.mjs` }, path, 30), true, 'a child of the shell is no ancestor');
 });
 
+test('a read-only listing (du over all worktrees) does not make a worktree busy, any other tool still does (#1091)', () => {
+  const path = resolve('/work/tree');
+  const du = `42\t1\t"C:\\Program Files\\Git\\usr\\bin\\du.exe" -sh ${path} /other`;
+  assert.equal(busyFrom({ ok: true, out: du }, path), false);
+  assert.equal(busyFrom({ ok: true, out: `42\t1\tdu -sh ${path}` }, path), false);
+  assert.equal(busyFrom({ ok: true, out: `${du}\n43\t1\tnode ${path}/tool.mjs` }, path), true);
+  assert.equal(busyFrom({ ok: true, out: `42\t1\tduplicate ${path}` }, path), true, 'only the exact tool name is skipped');
+  assert.equal(busyFrom({ ok: true, out: `42\t1\t` }, path), false);
+});
+
 test('a failed count of unpushed commits is unknown and keeps the worktree, never zero', () => {
   assert.equal(unpushedCount({ ok: false, out: '' }), null);
   assert.ok(keepReason({ ...finished, unpushed: unpushedCount({ ok: false, out: '' }) }));
