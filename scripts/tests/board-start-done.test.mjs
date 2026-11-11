@@ -20,6 +20,20 @@ test('done opens the branch and the Draft PR with the first push (#643)', t => {
   assert.equal(git(checkout, 'rev-parse', '--abbrev-ref', 'claude/1-fixture@{upstream}'), 'origin/claude/1-fixture', 'the upstream is the branch itself, never the base (#646)');
 });
 
+test('done --refs opens the Draft PR itself with "Refs #N", not "Closes"', t => {
+  const { checkout, run, writeIssue, git, file, text } = startFixture(t);
+  writeIssue(issue('Ready'));
+  assert.equal(run('start', '1', '--session', 'S1').status, 0);
+  writeIssue({ ...JSON.parse(text('issue.json')), comments: { nodes: [{ createdAt: new Date().toISOString(), url: 'u', body: 'Beansprucht.\nAgent: claude, Session: S1\nBasis: main\n' }] } });
+  writeFileSync(file('work.txt'), 'x');
+  git(checkout, 'add', 'work.txt');
+  git(checkout, 'commit', '-q', '-m', 'work');
+  run('done', '1', '--refs');
+  const created = text('created-pr');
+  assert.ok(created.includes('draft=true') && created.includes('Refs #1\nAgent: claude, Session: S1\n'));
+  assert.ok(!created.includes('Closes'));
+});
+
 test('done opens the PR on the base the branch stands on when the Zielrelease changed after the claim (#855)', t => {
   const { checkout, run, writeIssue, git, file, text } = startFixture(t);
   const project = JSON.parse(text('.github/workflow-project.json'));

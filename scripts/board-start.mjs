@@ -42,10 +42,10 @@ function mainOnlyBase(base, here) {
 
 /**
  * The first push (#643): the claim comment has no branch and no PR yet. Own commits on top of the claimed base get the branch `<agent>/<number>-<title>` (the checkout's own
- * branch when it already has that shape) and the Draft PR that closes the issue, with the claim line in its body. Returns the PR number, or undefined when there is nothing to open
+ * branch when it already has that shape) and the Draft PR that closes the issue, with the claim line in its body. `refsOnly` (done --refs): the body says "Refs #N" and the issue is not linked natively. Returns the PR number, or undefined when there is nothing to open
  * (no claim, no commit of its own: a check task ends with FILE alone).
  */
-function openFirstPr(issue) {
+function openFirstPr(issue, refsOnly = false) {
   const claim = commentClaims(issue).at(-1);
   // A merged PR (squash: its commits are not in the base) means the work is delivered: the FILE-only path reports it.
   if (!claim || issue.closedByPullRequestsReferences?.nodes.some(pr => pr?.state === 'MERGED')) return;
@@ -70,8 +70,8 @@ function openFirstPr(issue) {
   git(...plan.args);
   // #725: a branch with an open PR the issue does not list yet (on a release base the closing keyword links nothing, so a run that stopped before the link left exactly that) gets no second PR (GitHub answers 422).
   const open = rest(`repos/${project.repository}/pulls?head=${project.repository.split('/')[0]}:${branch}&state=open`)[0]?.number;
-  const pr = open ?? JSON.parse(github.write('POST', `repos/${project.repository}/pulls`, { fields: { title: issue.title, head: branch, base, draft: true }, body: `Closes ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim.line}\n` })).number;
-  linkIssue(number, pr, false, issue).forEach(progress);
+  const pr = open ?? JSON.parse(github.write('POST', `repos/${project.repository}/pulls`, { fields: { title: issue.title, head: branch, base, draft: true }, body: `${refsOnly ? 'Refs' : 'Closes'} ${issueProject === project ? '' : issueProject.repository}#${number}\n${claim.line}\n` })).number;
+  linkIssue(number, pr, refsOnly, issue).forEach(progress);
   progress(open ? `done: branch ${branch} already has PR #${pr}; linked it` : `done: opened branch ${branch} and Draft PR #${pr} on ${base}`);
   return pr;
 }
