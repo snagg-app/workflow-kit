@@ -7,9 +7,9 @@ import { workerData } from 'node:worker_threads';
 import { runBoard } from '../board-run.mjs';
 import { useProcessAdapter } from '../run-program.mjs';
 import { useGhAdapter } from '../github.mjs';
-import { useSonarAdapter } from '../sonar.mjs';
+import { useSonarAdapter, useSonarAnalyzer } from '../sonar.mjs';
 import { fakeGh } from './fake-gh.mjs';
-import { fakeSonar } from './fake-sonar.mjs';
+import { fakeSonar, fakeSonarLocal } from './fake-sonar.mjs';
 
 const { requests, results, done } = workerData;
 
@@ -45,6 +45,7 @@ const noteAffectedTests = args => {
 // Every `gh` call of board.mjs goes through github.mjs, which takes the fake as its test variant.
 useGhAdapter(echoingFakeGh);
 useSonarAdapter(fakeSonar);
+useSonarAnalyzer(fakeSonarLocal);
 useProcessAdapter((file, args, options) => file === process.execPath && /affected-tests\.mjs$/.test(args[0]) ? noteAffectedTests(args)
   : /(^|[\\/])git(\.exe)?$/.test(file) ? realExecFileSync('git', args, { ...options, env: { ...options?.env, PATH: hostPath } })
     : realExecFileSync(file, args, options));
