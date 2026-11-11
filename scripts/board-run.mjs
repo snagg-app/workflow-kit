@@ -40,11 +40,24 @@ import * as threads from './board-threads.mjs';
 export async function runBoard({ argv, env = process.env, cwd = process.cwd(), io } = {}) {
   const [stdout, stderr] = [[], []];
   const lines = { log: text => { stdout.push(text); io?.log(text); }, error: text => { stderr.push(text); io?.error(text); } };
-  const exitCode = await runCall({ argv: [...argv], env, cwd, io: lines });
+  // `done` is found before any early exit; its end line goes to stderr, so stdout stays a single JSON document with --json.
+  const first = argv.find((word, at) => !word.startsWith("-") && !["--cwd", "--issue-repo"].includes(argv[at - 1]));
+  const seen = { done: first === "done" && !argv.includes("--help") && !argv.includes("-h") };
+  let exitCode;
+  try { exitCode = await runCall({ argv: [...argv], env, cwd, io: lines, seen }); } catch (error) {
+    if (!seen.done) throw error;
+    lines.error(String(error?.stack ?? error));
+    exitCode = 1;
+  }
+  // The very last line of every `done` call, so a monitor waits for exactly this line (`until grep -q '^BOARD-DONE-ENDE' LOG; do sleep 20; done; tail -n 30 LOG`).
+  if (seen.done) {
+    const status = exitCode === 0 ? (seen.verdict === 'PREPARED' ? 'PREPARED' : 'HANDOFF') : exitCode === 4 ? 'WAITING' : 'FAILED';
+    lines.error(`BOARD-DONE-ENDE status=${status} exit=${exitCode}`);
+  }
   return { exitCode, stdout: stdout.join('\n'), stderr: stderr.join('\n') };
 }
 
-async function runCall({ argv: call, env, cwd, io }) {
+async function runCall({ argv: call, env, cwd, io, seen }) {
   // The only printer of this call (board-result.mjs); replaced once the arguments are known and --json / --verbose can apply.
   let output = createOutput({ io });
   // Taken off here, so the parser sees the command first.
@@ -143,6 +156,7 @@ async function runCall({ argv: call, env, cwd, io }) {
     const outcome = await commands[spec.run]();
     if (isResult(outcome)) {
       output.finish(outcome);
+      seen.verdict = outcome.verdict;
       exitCode = outcome.exitCode;
     }
   } catch (error) {

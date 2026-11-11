@@ -28,7 +28,7 @@ import { poll, reviewOutcome, reviewsForHead } from './board-wait.mjs';
 /** What `board.mjs help` and the parser know about the command; `run` names the function this module returns. */
 export const specs = [
   { name: 'done', run: 'done', writes: true, doc: 'docs/board/done.md', words: [{ name: 'ISSUE', kind: 'number' }, { name: 'PR', optional: true }, { name: 'HANDOFF_FILE', optional: true }],
-    summary: 'Everything from the last push to Human review. Steps: tests, PR ready, acceptance boxes, Automated review, wait for CI and reviewers, handoff comment, gate. A repeated call does what is still open; without HANDOFF_FILE it only prepares.',
+    summary: 'Everything from the last push to Human review. Steps: tests, PR ready, acceptance boxes, Automated review, wait for CI and reviewers, handoff comment, gate. A repeated call does what is still open; without HANDOFF_FILE it only prepares. The last output line is always `BOARD-DONE-ENDE status=<HANDOFF|PREPARED|WAITING|FAILED> exit=<code>`; a background monitor: `until grep -q "^BOARD-DONE-ENDE" LOG; do sleep 20; done; tail -n 30 LOG`.',
     flags: { '--refs': shared.refs, '--no-pr': { help: 'An exploration without a PR may reach Human review.' }, '--max-minutes': shared.maxMinutes,
       '--skip-local-tests': { value: 'REASON', help: 'Skip only the local test run and name why (CI and review gates still apply).' }, '--issue-repo': shared.issueRepo } },
 ];
