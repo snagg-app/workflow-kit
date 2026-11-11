@@ -46,15 +46,15 @@ function missingPaths(text, root) {
  */
 const sameTitle = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
 function planNew({ title, bodyFile, milestone, priority, labels: wanted, fields }, status = statuses.backlog) {
-  for (const [what, text] of [['title', title], ['body file', bodyFile], ['milestone', milestone], ['priority', priority]]) assert.ok(text, `${what} is required`);
-  assert.ok(wanted.length, 'at least one label is required');
-  const text = readFileSync(bodyFile, 'utf8').replace(/^\uFEFF/, '').replaceAll('\r\n', '\n').trimEnd();
-  assert.ok(text, `${bodyFile} is empty`);
   assert.ok(!fields.some(([fieldName]) => ['status', 'priority'].includes(fieldName.toLowerCase())), 'Status and Priority are not field values (give the priority; the command sets Status)');
   const pairs = [['Status', status], ['Priority', priority], ...fields];
-  for (const required of project.requiredFields) {
-    assert.ok(pairs.some(([fieldName]) => fieldName.toLowerCase() === required.toLowerCase()), `the project requires ${required}: give a value for it`);
-  }
+  // All missing values at once, not one per attempt.
+  const missing = [...[['title', title], ['body file', bodyFile], ['milestone', milestone], ['priority', priority]].filter(([, value]) => !value).map(([what]) => what),
+    ...(wanted.length ? [] : ['at least one label']),
+    ...project.requiredFields.filter(required => !pairs.some(([fieldName]) => fieldName.toLowerCase() === required.toLowerCase())).map(required => `the field ${required}`)];
+  assert.ok(!missing.length, `${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} required`);
+  const text = readFileSync(bodyFile, 'utf8').replace(/^\uFEFF/, '').replaceAll('\r\n', '\n').trimEnd();
+  assert.ok(text, `${bodyFile} is empty`);
   const plans = planFields(pairs);
   const statusPlan = plans.find(plan => plan.fieldName === 'Status');
   assert.ok(!wanted.some(label => label.toLowerCase() === specLabel.toLowerCase()) || statusPlan.option.name === statuses.backlog, `A new spec starts in ${statuses.backlog}; only a human-invoked spec-review changes its status`);

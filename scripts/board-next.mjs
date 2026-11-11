@@ -28,7 +28,7 @@ function next() {
   // The open PRs (state, update time, merge state) and the update times tell abandoned work from live work (#400); the viewer finds the own.
   const nodes = [];
   let login;
-  for (const blocking of ['-is:blocked', 'is:blocked']) for (let after, read = 0; ;) {
+  for (const blocking of ['-is:blocked', 'is:blocked']) for (let after, read = 0, start = nodes.length, retried = false; ;) {
     const { search, viewer } = graphql(`query($q:String!,$after:String){viewer{login} search(query:$q,type:ISSUE_ADVANCED,first:30,after:$after){
     issueCount pageInfo{hasNextPage endCursor} nodes{...on Issue{number title body updatedAt assignees(first:10){nodes{login}} ${issueFeedback}
     blockedBy(first:100){totalCount nodes{${predecessorFields}}}
@@ -41,6 +41,8 @@ function next() {
     nodes.push(...search.nodes);
     read += search.nodes.length;
     if (!search.pageInfo.hasNextPage) {
+      // The search index is briefly inconsistent now and then: read this search once more before calling it incomplete.
+      if (read < search.issueCount && !retried) { retried = true; nodes.length = start; after = undefined; read = 0; continue; }
       assert.ok(read >= search.issueCount, `Search returned ${read} of ${search.issueCount} ${blocking} issues; the list would be incomplete`);
       break;
     }
