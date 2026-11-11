@@ -2,6 +2,8 @@
 
 ## Unveröffentlicht
 
+- **`done` nennt den Rebase-Befehl mit dem Branchnamen statt `HEAD`.** Steht der Branch auf dem Release, aber der Diff betrifft nur `mainOnlyPaths`, bricht `done` ab und nennt `git rebase --onto origin/<main> origin/<release> <branch>`. Mit `HEAD` am Ende endete git auf einem losgelösten HEAD, und der Branch blieb unverändert.
+
 - **`start` und `kit setup` brechen nicht mehr ab, wenn ein Skill-Submodul fehlt und nicht geladen werden kann.** War `.vendor/ponytail` (oder ein anderes Anbieter-Submodul des Kits) nie ausgecheckt und lässt sich nicht holen, steht jetzt eine Warnung mit dem Befehl `git submodule update --init`, und die übrigen Schritte laufen weiter. Ein ausgechecktes Submodul, das nicht auf den Pin kommt, oder lokale Änderungen darin brechen weiterhin ab.
 
 - **Der Übergabe-Kommentar nennt den Grund von `--skip-local-tests`.** Wer die lokalen Tests überspringt, sieht den Grund jetzt als erste Zeile des Kommentars (auch in einem schon geschriebenen Kommentar für denselben Kopf, in der Sprache des Projekts).

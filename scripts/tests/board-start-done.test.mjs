@@ -323,7 +323,7 @@ test('done puts a tooling-only change on main whatever the Zielrelease says, and
   };
   work();
   const refused = run('done', '1');
-  assert.ok(!existsSync(file('created-pr')) && (refused.stdout + refused.stderr).includes('git rebase --onto origin/main origin/release/0.1.2'), refused.stdout + refused.stderr);
+  assert.ok(!existsSync(file('created-pr')) && (refused.stdout + refused.stderr).includes('git rebase --onto origin/main origin/release/0.1.2 claude/1-fixture'), refused.stdout + refused.stderr);
   git(checkout, 'reset', '-q', '--hard', 'origin/main');
   work();
   run('done', '1');

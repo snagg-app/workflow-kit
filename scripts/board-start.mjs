@@ -36,7 +36,7 @@ function mainOnlyBase(base, here) {
   const changed = against => git('diff', '--name-only', `origin/${against}...HEAD`).split('\n').filter(Boolean);
   if (base === main || !project.mainOnlyPaths.length) return [base, here];
   if (only(changed(main))) return [main, checkout.stand(main)];
-  if (only(changed(base))) assert.fail(`the changes touch only mainOnlyPaths (${project.mainOnlyPaths.join(', ')}), so the PR belongs on ${main}, but this branch stands on ${base}; no PR was opened. Run: git rebase --onto origin/${main} origin/${base} HEAD, then done again`);
+  if (only(changed(base))) assert.fail(`the changes touch only mainOnlyPaths (${project.mainOnlyPaths.join(', ')}), so the PR belongs on ${main}, but this branch stands on ${base}; no PR was opened. Run: git rebase --onto origin/${main} origin/${base} ${git('branch', '--show-current')}, then done again`);
   return [base, here];
 }
 
