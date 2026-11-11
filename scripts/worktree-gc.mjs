@@ -102,9 +102,10 @@ export function goneWorkdir(dir, owned, exists = existsSync) {
 export function goneProofRoot(dir, containers, exists = existsSync) {
   if (!dir || !isAbsolute(dir) || /[\r\n]/.test(dir)) return false; // a relative label would resolve against --cwd
   const full = resolve(dir).replaceAll('\\', '/');
+  const fold = path => process.platform === 'win32' ? norm(path) : resolve(path).replaceAll('\\', '/').replace(/\/$/, ''); // only Windows ignores case
   for (const container of containers) {
-    const prefix = `${norm(container)}/`;
-    if (!norm(full).startsWith(prefix)) continue;
+    const prefix = `${fold(container)}/`;
+    if (!fold(full).startsWith(prefix)) continue;
     const root = `${container.replace(/[\\/]$/, '')}/${full.slice(prefix.length).split('/')[0]}`; // original case: the disk may be case-sensitive
     return !exists(root) && exists(container);
   }
@@ -235,11 +236,12 @@ ${error.message}`);
   const hashesOf = list => new Set(list.flatMap(w => rootHashes(w.path)));
   // Only a volume whose compose working_dir was inside this clone and is gone counts as orphaned; the rest is "unclear" and stays.
   const suspects = orphanVolumes(all, prefixes, hashesOf(livePaths), protect, () => true);
+  const toInspect = orphanVolumes(all, prefixes, new Set(), protect, () => true); // also the volumes of worktrees about to go, for the preview
   const label = 'com.docker.compose.project.working_dir';
   // In chunks: ~900 names overflow the Windows command line (a failed inspect would leave every volume "unclear").
   const labels = new Map();
-  for (let at = 0; at < suspects.length; at += 100) {
-    const inspected = await exec(docker, ['volume', 'inspect', '--format', `{{.Name}}\t{{index .Labels "${label}"}}\t{{index .Labels "snagg.proof-root"}}`, ...suspects.slice(at, at + 100)]);
+  for (let at = 0; at < toInspect.length; at += 100) {
+    const inspected = await exec(docker, ['volume', 'inspect', '--format', `{{.Name}}\t{{index .Labels "${label}"}}\t{{index .Labels "snagg.proof-root"}}`, ...toInspect.slice(at, at + 100)]);
     if (inspected.ok) for (const line of inspected.out.split(/\r?\n/)) { const [name, workdir, proofRoot] = line.split('\t'); labels.set(name, { workdir, proofRoot }); }
   }
   const owned = worktrees.map(w => w.path);
