@@ -9,7 +9,7 @@
 // one of `worktreeVolumeProtect` (the project's long-lived volumes; also --volume-protect, repeatable).
 // A volume is deleted only if its compose label `working_dir` lies inside this clone and is gone; anything else is "unclear" and stays (#951).
 // A worktree is deleted only if ALL hold: no local changes, no commits missing on the remote (or in a merged PR),
-// no running process, not locked by a living session, older than --min-age. Anything unclear is kept.
+// no running process (read-only listings such as du do not count, #1091), not locked by a living session, older than --min-age. Anything unclear is kept.
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, statSync } from 'node:fs';
@@ -70,7 +70,9 @@ export function keepReason(w, { minAge = 120, explicit = false } = {}) {
   if (w.unpushed !== 0) return 'commits not on the remote';
   if (w.busy) return 'running process';
   if (explicit) return null;
-  if (w.locked != null && w.lockAlive !== false) return 'locked by a living session';
+  // The Claude app locks every subagent worktree with its own long-lived pid and never unlocks (#1091): that pid proves nothing,
+  // so such a lock does not count. Idle, clean, pushed and old are checked above and below.
+  if (w.locked != null && w.lockAlive !== false && !/^claude agent agent-/.test(w.locked)) return 'locked by a living session';
   if (w.ageMinutes < minAge) return 'too young';
   return null;
 }

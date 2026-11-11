@@ -19,6 +19,9 @@ test('only a clean, pushed, idle, old worktree is finished; each guard keeps it'
   assert.ok(keepReason({ ...finished, busy: true }));
   assert.ok(keepReason({ ...finished, locked: 'claude agent (pid 1)', lockAlive: true }));
   assert.ok(keepReason({ ...finished, locked: 'no pid in here' }));
+  assert.equal(keepReason({ ...finished, locked: 'claude agent agent-a1b2 (pid 1)', lockAlive: true }), null, 'the app lock names its own long-lived pid (#1091)');
+  assert.ok(keepReason({ ...finished, locked: 'claude agent agent-a1b2 (pid 1)', lockAlive: true, busy: true }), 'an app lock is freed only when idle');
+  assert.ok(keepReason({ ...finished, locked: 'claude agent agent-a1b2 (pid 1)', lockAlive: true, ageMinutes: 5 }), 'and old');
   assert.ok(keepReason({ ...finished, ageMinutes: 5 }));
   assert.ok(keepReason({ ...finished, main: true }));
   assert.equal(keepReason({ ...finished, locked: 'dead (pid 1)', lockAlive: false }), null);
