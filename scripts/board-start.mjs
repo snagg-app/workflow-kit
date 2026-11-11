@@ -36,7 +36,9 @@ function mainOnlyBase(base, here) {
   const changed = against => git('diff', '--name-only', `origin/${against}...HEAD`).split('\n').filter(Boolean);
   if (base === main || !project.mainOnlyPaths.length) return [base, here];
   if (only(changed(main))) return [main, checkout.stand(main)];
-  if (only(changed(base))) assert.fail(`the changes touch only mainOnlyPaths (${project.mainOnlyPaths.join(', ')}), so the PR belongs on ${main}, but this branch stands on ${base}; no PR was opened. Run: git rebase --onto origin/${main} origin/${base} ${git('branch', '--show-current')}, then done again`);
+  // The hint is meant to be copied into a shell: every name in it is quoted, so a branch like `a;id` cannot run a second command.
+  const word = name => /^[\w./-]+$/.test(name) ? name : `'${name.replaceAll("'", "'\\''")}'`;
+  if (only(changed(base))) assert.fail(`the changes touch only mainOnlyPaths (${project.mainOnlyPaths.join(', ')}), so the PR belongs on ${main}, but this branch stands on ${base}; no PR was opened. Run: git rebase --onto ${word(`origin/${main}`)} ${word(`origin/${base}`)} ${word(git('branch', '--show-current'))}, then done again`);
   return [base, here];
 }
 
