@@ -180,6 +180,7 @@ async function done() {
       const local = sonarLocal(projectDirectory, git('merge-base', 'HEAD', base));
       if (local.status === 'findings') return failed(`sonar analyze found issues before the push; fix them, then run done again:\n${local.text}`);
       if (local.status === 'failed') return failed(`the local Sonar analysis failed (${local.text}); run done again`);
+      if (local.status === 'secrets-only') progress(`WARNING: ${local.text}; check the diff for code rules (S1192, logging) yourself`);
       if (local.status === 'unavailable') progress(`WARNING: local Sonar analysis skipped (${local.text}); run \`sonar auth login\``);
     } catch (error) { return failed(`cannot run the local Sonar analysis: ${failure(error)}`); }
     // #659: new local commits (a correction after an earlier done) are pushed even when no base merge was needed.

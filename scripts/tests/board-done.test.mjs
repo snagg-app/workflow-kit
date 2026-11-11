@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fixture, handoffFixture, issue, test } from './board-fixture.mjs';
-import { delivery, showPr, moveBase, baseMergePolicy, sonarDelivery } from './board-done-fixture.mjs';
+import { localVerdict } from '../sonar.mjs';
+import { delivery,showPr, moveBase, baseMergePolicy, sonarDelivery } from './board-done-fixture.mjs';
 
 test('done refuses a spec before acceptance comments or body changes', t => {
   const { checkout, run, writeIssue } = fixture(t);
@@ -231,6 +232,16 @@ test('done only warns when the Sonar CLI is missing or not logged in', t => {
   const d = sonarDelivery(t, handoffFixture, { status: 'unavailable', text: 'spawnSync sonar ENOENT' });
   const run = d.run('done', '1', 'result.md');
   assert.match(run.stdout + run.stderr, /WARNING: local Sonar analysis skipped \(spawnSync sonar ENOENT\)/);
+  assert.equal(pushed(d), d.git('rev-parse', 'HEAD'), 'the head is pushed');
+});
+
+test('done says plainly that only secrets were checked when Vortex answers 403, without the login advice', t => {
+  const verdict = localVerdict({ secrets: { summary: { totalIssues: 0 } }, agentic: { summary: { totalIssues: 0 }, globalError: { kind: 'forbidden', message: 'Vortex analysis is not available on this connection (403 Forbidden).' } } });
+  assert.equal(verdict.status, 'secrets-only');
+  const d = sonarDelivery(t, handoffFixture, verdict);
+  const output = d.run('done', '1', 'result.md');
+  assert.match(output.stdout + output.stderr, /Code-Regeln lokal nicht verfügbar \(Vortex 403\), nur Secrets geprüft/);
+  assert.doesNotMatch(output.stdout + output.stderr, /sonar auth login/);
   assert.equal(pushed(d), d.git('rev-parse', 'HEAD'), 'the head is pushed');
 });
 
