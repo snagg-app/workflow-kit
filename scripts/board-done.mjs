@@ -58,7 +58,7 @@ async function done() {
   assert.ok(!words.length, 'done takes ISSUE [PR] [FILE]');
   const issue = readIssue(), found = currentIssuePr(issue);
   let prNumber = given ?? found.number;
-  if (prNumber === undefined && !found.unknown && !args.flag('--refs')) prNumber = openFirstPr(issue);
+  if (prNumber === undefined && !found.unknown) prNumber = openFirstPr(issue, args.flag('--refs'));
   // #646: nothing `done` pushes may reach main or release/** (private repos have no branch protection). The first push has just moved the work onto its own branch; the later push names that branch, so an upstream on the base is harmless (#651).
   const early = prNumber === undefined ? {} : pushPlan({ stand: checkout.stand(), number });
   if (early.refuse) return failed(early.refuse);
