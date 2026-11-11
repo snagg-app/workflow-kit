@@ -233,10 +233,21 @@ async function done() {
     if (written.exitCode) return written;
     step(written);
   }
+  const skipNoteText = () => skipReason && !isTested() ? texts.skipNote(skipReason) : '';
+  // Ein schon vorhandener Kommentar für diesen Head bekommt den Hinweis nachgetragen (CodeRabbit #1084).
+  if (ownHandoff?.id && skipNoteText() && !ownHandoff.body.includes(texts.skipNote(skipReason))) {
+    github.write('PATCH', `repos/${project.repository}/issues/comments/${ownHandoff.id}`, { body: `${ownHandoff.body.trimEnd()}
+
+${skipNoteText()}
+` });
+  }
   if (file && !findHandoffComment(polled.comments, issue.viewer, head)) {
     // #1052: tests that were red on the base too did not block; the comment lists them with their issue.
     const baseRed = (skipReason && !isTested()) || !existsSync(steps) ? '' : baseRedHandoff(baseRedTests(readFileSync(steps, 'utf8')), `origin/${pull.base.ref}`);
-    const body = baseRed ? withBaseRed(lines(file), baseRed) : lines(file);
+    const main = baseRed ? withBaseRed(lines(file), baseRed) : lines(file);
+    const body = skipNoteText() ? `${skipNoteText()}
+
+${main}` : main;
     github.write('POST', `repos/${project.repository}/issues/${prNumber}/comments`, { body: `## ${texts.handoff}\n\n${handoffHeadLine(head)}\n\n${body}\n` });
   }
   return handoff();
