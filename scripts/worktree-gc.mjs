@@ -70,6 +70,8 @@ export function keepReason(w, { minAge = 120, explicit = false } = {}) {
   if (w.unpushed !== 0) return 'commits not on the remote';
   if (w.busy) return 'running process';
   if (explicit) return null;
+  // A desktop session works for hours without touching files and Windows hides its cwd (#1096): the app removes it when the session is archived.
+  if (/\/\.claude\/worktrees\/(?!agent-)[^/]+$/.test(norm(w.path ?? ''))) return 'session worktree';
   // The Claude app locks every subagent worktree with its own long-lived pid and never unlocks (#1091): that pid proves nothing,
   // so such a lock does not count. Idle, clean, pushed and old are checked above and below.
   if (w.locked != null && w.lockAlive !== false && !/^claude agent agent-/.test(w.locked)) return 'locked by a living session';
